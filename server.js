@@ -8,12 +8,14 @@ const vm = require("node:vm");
 const { DatabaseSync } = require("node:sqlite");
 const express = require("express");
 const nodemailer = require("nodemailer");
+const Stripe = require("stripe");
 const { buildRevisionRecommendations, calculateConfidenceSummary } = require("./backend/services/learningAnalytics");
 
 const app = express();
 const PORT = Number(process.env.PORT || 4173);
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const SESSION_COOKIE = "nn_session";
+const FREE_REVISION_TOPIC_LIMIT = Number(process.env.FREE_REVISION_TOPIC_LIMIT || 3);
 const DATA_DIR = path.join(__dirname, "data");
 const REQUESTED_DB_PATH = process.env.DATABASE_PATH || path.join(DATA_DIR, "neat-notes.sqlite");
 const DATABASE_CONFIG = prepareDatabasePath(REQUESTED_DB_PATH);
@@ -27,6 +29,13 @@ const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: Number(process.env.AUTH_RATE_LIMIT || 25),
 });
+const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
+const STRIPE_PRICE_IDS = {
+  pro: process.env.STRIPE_PRICE_PRO || process.env.STRIPE_PRICE_PLUS || "",
+  teacher: process.env.STRIPE_PRICE_TEACHER || "",
+  institution: process.env.STRIPE_PRICE_INSTITUTION || "",
+};
 const PLAN_CATALOG = {
   free: {
     id: "free",
@@ -41,10 +50,13 @@ const PLAN_CATALOG = {
       versionHistory: false,
       studyPack: false,
       teacherDashboard: false,
+      fullRevisionLibrary: false,
+      quickPractice: false,
+      billingPortal: false,
     },
   },
-  plus: {
-    id: "plus",
+  pro: {
+    id: "pro",
     name: "Student Pro",
     price: "£3.99/mo",
     noteLimit: null,
@@ -56,6 +68,9 @@ const PLAN_CATALOG = {
       versionHistory: true,
       studyPack: true,
       teacherDashboard: false,
+      fullRevisionLibrary: true,
+      quickPractice: true,
+      billingPortal: true,
     },
   },
   teacher: {
@@ -71,6 +86,9 @@ const PLAN_CATALOG = {
       versionHistory: true,
       studyPack: true,
       teacherDashboard: true,
+      fullRevisionLibrary: true,
+      quickPractice: true,
+      billingPortal: true,
     },
   },
   institution: {
@@ -86,6 +104,9 @@ const PLAN_CATALOG = {
       versionHistory: true,
       studyPack: true,
       teacherDashboard: true,
+      fullRevisionLibrary: true,
+      quickPractice: true,
+      billingPortal: true,
     },
   },
 };
@@ -105,6 +126,10 @@ db.exec(`
     email_verified INTEGER NOT NULL DEFAULT 0,
     google_id TEXT UNIQUE,
     last_accessed_at TEXT,
+    stripe_customer_id TEXT UNIQUE,
+    stripe_subscription_id TEXT UNIQUE,
+    subscription_status TEXT,
+    subscription_current_period_end TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -172,6 +197,12 @@ db.exec(`
     provider TEXT NOT NULL,
     status TEXT NOT NULL,
     created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS stripe_events (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    processed_at TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS student_profiles (
@@ -315,6 +346,7 @@ seedRevisionDecks();
 app.set("trust proxy", 1);
 app.use(securityHeaders);
 app.use(corsMiddleware);
+app.post("/api/billing/stripe/webhook", express.raw({ type: "application/json" }), asyncHandler(handleStripeWebhook));
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "1mb" }));
 app.use(express.static(__dirname));
 
@@ -323,11 +355,12 @@ app.get("/api/session", requireUser, (req, res) => {
     user: publicUser(req.user),
     plans: PLAN_CATALOG,
     googleConfigured: isGoogleConfigured(),
+    stripeConfigured: isStripeConfigured(),
   });
 });
 
 app.get("/api/plans", (req, res) => {
-  res.json({ plans: PLAN_CATALOG });
+  res.json({ plans: PLAN_CATALOG, stripeConfigured: isStripeConfigured() });
 });
 
 app.get("/api/health", (req, res) => {
@@ -344,23 +377,79 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+app.post("/api/billing/checkout-session", requireUser, asyncHandler(async (req, res) => {
+  const plan = normalizePlanId(req.body.plan);
+  if (!["pro", "teacher"].includes(plan)) {
+    return res.status(400).json({ error: "Choose Pro or Teacher to start checkout." });
+  }
+
+  if (!stripe) {
+    return res.status(503).json({ error: "Stripe is not configured yet. Add STRIPE_SECRET_KEY and price IDs in Render." });
+  }
+
+  const price = STRIPE_PRICE_IDS[plan];
+  if (!price) {
+    return res.status(503).json({ error: `Stripe price for ${PLAN_CATALOG[plan].name} is not configured yet.` });
+  }
+
+  const user = await ensureStripeCustomer(req.user);
+  const session = await stripe.checkout.sessions.create({
+    mode: "subscription",
+    customer: user.stripe_customer_id,
+    client_reference_id: user.id,
+    line_items: [{ price, quantity: 1 }],
+    allow_promotion_codes: true,
+    success_url: `${BASE_URL}/?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${BASE_URL}/?checkout=cancelled`,
+    metadata: {
+      userId: user.id,
+      plan,
+    },
+    subscription_data: {
+      metadata: {
+        userId: user.id,
+        plan,
+      },
+    },
+  });
+
+  db.prepare("INSERT INTO billing_events (id, user_id, plan, provider, status, created_at) VALUES (?, ?, ?, 'stripe', 'checkout_started', ?)")
+    .run(crypto.randomUUID(), user.id, plan, new Date().toISOString());
+
+  res.json({ url: session.url });
+}));
+
+app.post("/api/billing/customer-portal", requireUser, asyncHandler(async (req, res) => {
+  if (!stripe) {
+    return res.status(503).json({ error: "Stripe is not configured yet." });
+  }
+
+  const user = await ensureStripeCustomer(req.user);
+  const session = await stripe.billingPortal.sessions.create({
+    customer: user.stripe_customer_id,
+    return_url: `${BASE_URL}/?billing=returned`,
+  });
+
+  res.json({ url: session.url });
+}));
+
 app.post("/api/billing/mock-upgrade", requireUser, (req, res) => {
-  const plan = String(req.body.plan || "").toLowerCase();
+  if (process.env.ALLOW_MOCK_BILLING !== "true" || process.env.NODE_ENV === "production") {
+    return res.status(403).json({ error: "Mock billing is disabled. Use Stripe Checkout." });
+  }
+
+  const plan = normalizePlanId(req.body.plan);
   if (!PLAN_CATALOG[plan] || plan === "free") {
     return res.status(400).json({ error: "Choose Pro, Teacher, or Institution." });
   }
 
-  const now = new Date().toISOString();
-  const role = ["teacher", "institution"].includes(plan) ? "teacher" : req.user.role || "student";
-  db.prepare("UPDATE users SET plan = ?, plan_status = 'active', plan_updated_at = ?, role = ?, updated_at = ? WHERE id = ?")
-    .run(plan, now, role, now, req.user.id);
+  const updatedUser = applyUserPlan(req.user.id, plan, "active", null, null);
   db.prepare("INSERT INTO billing_events (id, user_id, plan, provider, status, created_at) VALUES (?, ?, ?, 'mock', 'complete', ?)")
-    .run(crypto.randomUUID(), req.user.id, plan, now);
-  ensureAccountProfiles({ ...req.user, role });
+    .run(crypto.randomUUID(), req.user.id, plan, new Date().toISOString());
 
   res.json({
-    user: publicUser({ ...req.user, plan, role, plan_status: "active", plan_updated_at: now }),
-    message: `Mock upgraded to ${PLAN_CATALOG[plan].name}. Stripe can replace this endpoint later.`,
+    user: publicUser(updatedUser),
+    message: `Dev-only mock upgrade applied to ${PLAN_CATALOG[plan].name}.`,
   });
 });
 
@@ -980,7 +1069,7 @@ app.get("/api/revision/decks", requireUser, (req, res) => {
     return res.status(403).json({ error: "You do not have access to that class context." });
   }
 
-  const decks = listRevisionDecks(req.user.id, classId);
+  const decks = listRevisionDecks(req.user, classId);
   res.json({ decks });
 });
 
@@ -990,8 +1079,9 @@ app.get("/api/revision/decks/:id", requireUser, (req, res) => {
     return res.status(403).json({ error: "You do not have access to that class context." });
   }
 
-  const deck = getRevisionDeck(req.params.id, req.user.id, classId);
+  const deck = getRevisionDeck(req.params.id, req.user, classId);
   if (!deck) return res.status(404).json({ error: "Deck not found." });
+  if (deck.locked) return res.status(402).json({ error: "Upgrade to Pro to unlock this OCR revision deck." });
   res.json({ deck });
 });
 
@@ -1008,6 +1098,9 @@ app.post("/api/revision/attempts", requireUser, (req, res) => {
 
   const card = db.prepare("SELECT * FROM flashcards WHERE id = ? AND deck_id = ?").get(cardId, deckId);
   if (!card) return res.status(404).json({ error: "Flashcard not found." });
+  if (!canAccessRevisionDeck(req.user, deckId)) {
+    return res.status(402).json({ error: "Upgrade to Pro to save progress on this OCR revision deck." });
+  }
   if (classId && !isActiveClassStudent(classId, req.user.id)) {
     return res.status(403).json({ error: "You are not joined to that class." });
   }
@@ -1104,6 +1197,75 @@ function asyncHandler(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 }
 
+async function handleStripeWebhook(req, res) {
+  if (!stripe || !STRIPE_WEBHOOK_SECRET) {
+    return res.status(503).json({ error: "Stripe webhook is not configured." });
+  }
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, req.headers["stripe-signature"], STRIPE_WEBHOOK_SECRET);
+  } catch (error) {
+    return res.status(400).send(`Webhook signature verification failed: ${error.message}`);
+  }
+
+  const existing = db.prepare("SELECT 1 FROM stripe_events WHERE id = ?").get(event.id);
+  if (existing) return res.json({ received: true, duplicate: true });
+
+  switch (event.type) {
+    case "checkout.session.completed":
+      await handleCheckoutCompleted(event.data.object);
+      break;
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted":
+      await handleSubscriptionChanged(event.data.object);
+      break;
+    default:
+      break;
+  }
+
+  db.prepare("INSERT INTO stripe_events (id, type, processed_at) VALUES (?, ?, ?)")
+    .run(event.id, event.type, new Date().toISOString());
+  res.json({ received: true });
+}
+
+async function handleCheckoutCompleted(session) {
+  const userId = session.metadata?.userId || session.client_reference_id;
+  const plan = normalizePlanId(session.metadata?.plan);
+  if (!userId || !PLAN_CATALOG[plan]) return;
+
+  const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+  let subscription = null;
+  if (subscriptionId && stripe) {
+    subscription = await stripe.subscriptions.retrieve(subscriptionId);
+  }
+
+  const status = subscription?.status || "active";
+  const currentPeriodEnd = subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null;
+  applyUserPlan(userId, plan, status, subscriptionId, currentPeriodEnd);
+  db.prepare("INSERT INTO billing_events (id, user_id, plan, provider, status, created_at) VALUES (?, ?, ?, 'stripe', ?, ?)")
+    .run(crypto.randomUUID(), userId, plan, "checkout_completed", new Date().toISOString());
+}
+
+async function handleSubscriptionChanged(subscription) {
+  const subscriptionId = subscription.id;
+  const user = db.prepare("SELECT * FROM users WHERE stripe_subscription_id = ? OR stripe_customer_id = ?")
+    .get(subscriptionId, subscription.customer);
+  const metadataPlan = normalizePlanId(subscription.metadata?.plan);
+  const priceId = subscription.items?.data?.[0]?.price?.id || "";
+  const plan = metadataPlan !== "free" ? metadataPlan : getPlanFromStripePrice(priceId);
+  if (!user || !PLAN_CATALOG[plan]) return;
+
+  const status = subscription.status || "inactive";
+  const activeStatuses = new Set(["active", "trialing"]);
+  const effectivePlan = activeStatuses.has(status) ? plan : "free";
+  const currentPeriodEnd = subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null;
+  applyUserPlan(user.id, effectivePlan, status, subscriptionId, currentPeriodEnd);
+  db.prepare("INSERT INTO billing_events (id, user_id, plan, provider, status, created_at) VALUES (?, ?, ?, 'stripe', ?, ?)")
+    .run(crypto.randomUUID(), user.id, effectivePlan, `subscription_${status}`, new Date().toISOString());
+}
+
 function prepareDatabasePath(requestedPath) {
   const requestedDir = path.dirname(requestedPath);
 
@@ -1183,11 +1345,16 @@ function createRateLimiter({ windowMs, max }) {
 function migrateSchema() {
   addColumnIfMissing("users", "role", "TEXT NOT NULL DEFAULT 'student'");
   addColumnIfMissing("users", "last_accessed_at", "TEXT");
+  addColumnIfMissing("users", "stripe_customer_id", "TEXT");
+  addColumnIfMissing("users", "stripe_subscription_id", "TEXT");
+  addColumnIfMissing("users", "subscription_status", "TEXT");
+  addColumnIfMissing("users", "subscription_current_period_end", "TEXT");
   addColumnIfMissing("users", "plan", "TEXT NOT NULL DEFAULT 'free'");
   addColumnIfMissing("users", "plan_status", "TEXT NOT NULL DEFAULT 'active'");
   addColumnIfMissing("users", "plan_updated_at", "TEXT");
   addColumnIfMissing("workspaces", "kind", "TEXT NOT NULL DEFAULT 'project'");
   db.prepare("UPDATE workspaces SET kind = 'personal' WHERE kind = 'project' AND name LIKE ?").run("%'s Notes");
+  db.prepare("UPDATE users SET plan = 'pro' WHERE plan = 'plus'").run();
   db.prepare("UPDATE users SET role = 'teacher' WHERE role = 'student' AND plan IN ('teacher', 'institution')").run();
 }
 
@@ -1473,10 +1640,18 @@ function getClassStudents(classId) {
   `).all(classId);
 }
 
-function listRevisionDecks(userId, classId = null) {
+function canAccessRevisionDeck(user, deckId) {
+  if (hasFeature(user, "fullRevisionLibrary")) return true;
+
+  const unlockedDecks = db.prepare("SELECT id FROM flashcard_decks ORDER BY code LIMIT ?").all(FREE_REVISION_TOPIC_LIMIT);
+  return unlockedDecks.some((deck) => deck.id === deckId);
+}
+
+function listRevisionDecks(user, classId = null) {
   return db.prepare("SELECT * FROM flashcard_decks ORDER BY code").all().map((deck) => {
-    const attempts = getDeckAttempts(deck.id, userId, classId);
+    const attempts = getDeckAttempts(deck.id, user.id, classId);
     const summary = calculateConfidenceSummary(attempts);
+    const locked = !canAccessRevisionDeck(user, deck.id);
     return {
       id: deck.id,
       topicId: deck.topic_id,
@@ -1487,18 +1662,21 @@ function listRevisionDecks(userId, classId = null) {
       summary: deck.summary,
       cardCount: deck.card_count,
       source: deck.source,
+      locked,
+      requiredPlan: locked ? "pro" : null,
       confidence: summary,
       lastAttemptAt: attempts[0]?.created_at || null,
     };
   });
 }
 
-function getRevisionDeck(deckId, userId, classId = null) {
+function getRevisionDeck(deckId, user, classId = null) {
   const deck = db.prepare("SELECT * FROM flashcard_decks WHERE id = ? OR topic_id = ?").get(deckId, deckId);
   if (!deck) return null;
+  const locked = !canAccessRevisionDeck(user, deck.id);
 
   const cards = db.prepare("SELECT * FROM flashcards WHERE deck_id = ? ORDER BY position").all(deck.id);
-  const attempts = getDeckAttempts(deck.id, userId, classId);
+  const attempts = getDeckAttempts(deck.id, user.id, classId);
   const latestByCard = new Map();
   attempts.forEach((attempt) => {
     if (!latestByCard.has(attempt.card_id)) latestByCard.set(attempt.card_id, attempt);
@@ -1513,6 +1691,8 @@ function getRevisionDeck(deckId, userId, classId = null) {
     examBoard: deck.exam_board,
     summary: deck.summary,
     cardCount: deck.card_count,
+    locked,
+    requiredPlan: locked ? "pro" : null,
     confidence: calculateConfidenceSummary(attempts),
     cards: cards.map((card) => ({
       id: card.id,
@@ -1596,7 +1776,9 @@ function recordStudentActivity(userId, classId, deckId, type, metadata = {}) {
 }
 
 function getRevisionRecommendations(userId, classId = null) {
-  const deckSummaries = listRevisionDecks(userId, classId);
+  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+  if (!user) return [];
+  const deckSummaries = listRevisionDecks(user, classId).filter((deck) => !deck.locked);
   return buildRevisionRecommendations(deckSummaries).map((recommendation) => ({
     deckId: recommendation.id,
     topicId: recommendation.topicId,
@@ -1894,12 +2076,62 @@ function countOwnedWorkspaces(userId) {
   return db.prepare("SELECT COUNT(*) AS count FROM workspaces WHERE owner_id = ?").get(userId).count;
 }
 
+function normalizePlanId(plan) {
+  const normalized = String(plan || "").trim().toLowerCase();
+  if (normalized === "plus") return "pro";
+  return PLAN_CATALOG[normalized] ? normalized : "free";
+}
+
 function getPlan(user) {
-  return PLAN_CATALOG[user?.plan] || PLAN_CATALOG.free;
+  return PLAN_CATALOG[normalizePlanId(user?.plan)] || PLAN_CATALOG.free;
 }
 
 function hasFeature(user, feature) {
   return Boolean(getPlan(user).features[feature]);
+}
+
+function getPlanFromStripePrice(priceId) {
+  return Object.entries(STRIPE_PRICE_IDS).find(([, value]) => value && value === priceId)?.[0] || "free";
+}
+
+async function ensureStripeCustomer(user) {
+  if (user.stripe_customer_id) return user;
+  if (!stripe) throw new Error("Stripe is not configured.");
+
+  const customer = await stripe.customers.create({
+    email: user.email,
+    name: user.name,
+    metadata: {
+      userId: user.id,
+    },
+  });
+  db.prepare("UPDATE users SET stripe_customer_id = ?, updated_at = ? WHERE id = ?")
+    .run(customer.id, new Date().toISOString(), user.id);
+  return { ...user, stripe_customer_id: customer.id };
+}
+
+function applyUserPlan(userId, plan, subscriptionStatus = "active", subscriptionId = null, currentPeriodEnd = null) {
+  const planId = normalizePlanId(plan);
+  const now = new Date().toISOString();
+  const role = ["teacher", "institution"].includes(planId) ? "teacher" : "student";
+  const planStatus = ["active", "trialing"].includes(subscriptionStatus) ? "active" : subscriptionStatus || "inactive";
+
+  db.prepare(`
+    UPDATE users
+    SET plan = ?,
+      plan_status = ?,
+      plan_updated_at = ?,
+      role = ?,
+      stripe_subscription_id = COALESCE(?, stripe_subscription_id),
+      subscription_status = ?,
+      subscription_current_period_end = ?,
+      updated_at = ?
+    WHERE id = ?
+  `).run(planId, planStatus, now, role, subscriptionId, subscriptionStatus, currentPeriodEnd, now, userId);
+
+  const updatedUser = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
+  ensureAccountProfiles(updatedUser);
+  return updatedUser;
 }
 
 function normalizeWorkspaceKind(kind) {
@@ -1967,6 +2199,9 @@ function publicUser(user) {
     plan: plan.id,
     planName: plan.name,
     planStatus: user.plan_status || "active",
+    subscriptionStatus: user.subscription_status || null,
+    subscriptionCurrentPeriodEnd: user.subscription_current_period_end || null,
+    billingPortalReady: Boolean(user.stripe_customer_id && stripe),
     entitlements: plan,
     emailVerified: Boolean(user.email_verified),
   };
@@ -1978,6 +2213,10 @@ function hasSmtpConfig() {
 
 function isGoogleConfigured() {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+}
+
+function isStripeConfigured() {
+  return Boolean(stripe && STRIPE_PRICE_IDS.pro && STRIPE_PRICE_IDS.teacher);
 }
 
 function googleRedirectUri() {

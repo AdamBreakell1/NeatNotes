@@ -14,6 +14,8 @@ Open `http://localhost:4173`.
 
 For a beginner-friendly online deployment walkthrough, use `DEPLOYMENT_STEP_BY_STEP.md`.
 
+For Stripe products, checkout, webhooks and paywall setup, use `STRIPE_MONETISATION_SETUP.md`.
+
 For development reloads:
 
 ```bash
@@ -34,6 +36,7 @@ Optional production integrations:
 
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` for verification email delivery.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` for Google sign-in.
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_TEACHER` for live subscription billing.
 
 Without SMTP, local verification links are printed to the server console and returned in development API responses.
 

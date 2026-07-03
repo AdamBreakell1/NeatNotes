@@ -35,6 +35,20 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_PRO
+        sync: false
+      - key: STRIPE_PRICE_TEACHER
+        sync: false
+      - key: STRIPE_PRICE_INSTITUTION
+        sync: false
+      - key: ALLOW_MOCK_BILLING
+        value: "false"
+      - key: FREE_REVISION_TOPIC_LIMIT
+        value: "3"
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET

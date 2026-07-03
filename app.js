@@ -13,6 +13,7 @@ const CENTRES_KEY = "neat-notes-centres";
 const LEARNING_MODE_KEY = "neat-notes-learning-mode";
 const CONTACT_EMAIL = "hello@breakellsystems.co.uk";
 const DAILY_REVIEW_GOAL = 10;
+const FREE_REVISION_TOPIC_LIMIT = 3;
 const MIN_LAUNCH_OVERLAY_MS = 2100;
 const launchOverlayStartedAt = performance.now();
 const TOPBAR_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
@@ -1120,7 +1121,9 @@ function switchSettingsTab(event) {
 async function boot() {
   const params = new URLSearchParams(location.search);
   const emailWasVerified = params.get("verified") === "1";
-  if (emailWasVerified) {
+  const checkoutStatus = params.get("checkout");
+  const billingReturned = params.get("billing") === "returned";
+  if (emailWasVerified || checkoutStatus || billingReturned) {
     history.replaceState({}, "", "/");
   }
 
@@ -1130,6 +1133,16 @@ async function boot() {
     plans = session.plans || {};
     isGuestMode = false;
     await loadApp();
+    if (checkoutStatus === "success") {
+      elements.upgradeMessage.textContent = "Payment received. Your subscription will unlock as soon as Stripe confirms it.";
+      elements.upgradeMessage.className = "topbar-plan-message success";
+    } else if (checkoutStatus === "cancelled") {
+      elements.upgradeMessage.textContent = "Checkout cancelled. You can choose a plan when you are ready.";
+      elements.upgradeMessage.className = "topbar-plan-message";
+    } else if (billingReturned) {
+      elements.upgradeMessage.textContent = "Billing portal closed. Your account is up to date.";
+      elements.upgradeMessage.className = "topbar-plan-message success";
+    }
   } catch {
     loadGuestApp();
     if (emailWasVerified) {
@@ -1359,6 +1372,8 @@ function loadGuestApp() {
         studyPack: false,
         teacherDashboard: false,
         versionHistory: false,
+        fullRevisionLibrary: false,
+        quickPractice: false,
       },
     },
   };
@@ -1655,9 +1670,41 @@ async function deleteSelectedNote() {
   render();
 }
 
-async function mockUpgrade(event) {
+async function handleBillingAction(event) {
+  const portalButton = event.target.closest("[data-billing-portal]");
+  if (portalButton) {
+    if (isGuestMode) {
+      closePlansModal();
+      openAuthModal("login");
+      showAuthMessage("Log in first, then you can manage billing.", "success");
+      return;
+    }
+
+    try {
+      portalButton.disabled = true;
+      portalButton.textContent = "Opening...";
+      const response = await api("/api/billing/customer-portal", { method: "POST" });
+      window.location.href = response.url;
+    } catch (error) {
+      elements.upgradeMessage.textContent = error.message;
+      elements.upgradeMessage.className = "topbar-plan-message error";
+      portalButton.disabled = false;
+      portalButton.textContent = "Manage billing";
+    }
+    return;
+  }
+
   const button = event.target.closest("[data-plan]");
   if (!button) return;
+  const plan = button.dataset.plan;
+
+  if (plan === "institution") {
+    closePlansModal();
+    setAppSection("contact");
+    elements.upgradeMessage.textContent = "Institution plans are handled as school partnership enquiries.";
+    elements.upgradeMessage.className = "topbar-plan-message success";
+    return;
+  }
 
   if (isGuestMode) {
     closePlansModal();
@@ -1667,18 +1714,18 @@ async function mockUpgrade(event) {
   }
 
   try {
-    const response = await api("/api/billing/mock-upgrade", {
+    button.disabled = true;
+    button.textContent = "Opening checkout...";
+    const response = await api("/api/billing/checkout-session", {
       method: "POST",
-      body: { plan: button.dataset.plan },
+      body: { plan },
     });
-    currentUser = response.user;
-    elements.upgradeMessage.textContent = response.message;
-    elements.upgradeMessage.className = "topbar-plan-message success";
-    closePlansModal();
-    render();
+    window.location.href = response.url;
   } catch (error) {
     elements.upgradeMessage.textContent = error.message;
     elements.upgradeMessage.className = "topbar-plan-message error";
+    button.disabled = false;
+    button.textContent = plan === "teacher" ? "Start Teacher plan" : "Upgrade to Pro";
   }
 }
 
@@ -1698,7 +1745,7 @@ function handlePricingModalClick(event) {
     return;
   }
 
-  mockUpgrade(event);
+  handleBillingAction(event);
 }
 
 function handleGlobalKeydown(event) {
@@ -2777,14 +2824,17 @@ function renderRevisionPage() {
   elements.revisionTopicList.innerHTML = REVISION_TOPICS.map((revisionTopic, index) => {
     const activeClass = revisionTopic.id === activeRevisionTopicId ? " active" : "";
     const earnedClass = earnedRevisionBadges[revisionTopic.id] ? " earned" : "";
+    const locked = !canAccessRevisionTopic(revisionTopic.id);
+    const lockedClass = locked ? " locked" : "";
     const badgeLabel = earnedRevisionBadges[revisionTopic.id] ? `<span class="revision-topic-badge">Badge</span>` : "";
-    return `<button class="revision-topic-button${activeClass}${earnedClass}" type="button" data-topic-id="${escapeHtml(revisionTopic.id)}">
+    const accessLabel = locked ? `<span class="revision-topic-badge pro">Pro</span>` : badgeLabel;
+    return `<button class="revision-topic-button${activeClass}${earnedClass}${lockedClass}" type="button" data-topic-id="${escapeHtml(revisionTopic.id)}">
       <span class="revision-topic-index">${String(index + 1).padStart(2, "0")}</span>
       <span class="revision-topic-meta">
         <span class="revision-topic-code">${escapeHtml(revisionTopic.code)}</span>
         <strong>${escapeHtml(revisionTopic.title)}</strong>
       </span>
-      <span class="revision-topic-count">${revisionTopic.cards.length} cards${badgeLabel}</span>
+      <span class="revision-topic-count">${revisionTopic.cards.length} cards${accessLabel}</span>
     </button>`;
   }).join("");
 
@@ -2972,6 +3022,11 @@ function handleMasteryMapClick(event) {
   const button = event.target.closest("[data-jump-topic]");
   if (!button) return;
 
+  if (!canAccessRevisionTopic(button.dataset.jumpTopic)) {
+    promptRevisionUpgrade();
+    return;
+  }
+
   activeRevisionTopicId = button.dataset.jumpTopic;
   neatQuizState = createEmptyNeatQuizState();
   clearRevisionAutoReset();
@@ -2991,6 +3046,8 @@ function renderNeatQuestions() {
   elements.neatQuestionsGrid.innerHTML = catalog.map((quiz) => {
     const isActive = quiz.topic.id === activeTopic?.id;
     const isRunning = quiz.topic.id === neatQuizState.quizId && !neatQuizState.completed;
+    const locked = !canAccessRevisionTopic(quiz.topic.id);
+    const quizLocked = locked || !hasFeature("quickPractice");
     const quizProgress = neatQuizProgress[quiz.topic.id] || {};
     const completedCards = getCompletedRevisionCount(quiz.topic);
     const topicPercent = earnedRevisionBadges[quiz.topic.id]
@@ -3002,12 +3059,13 @@ function renderNeatQuestions() {
     const sourceLabel = quiz.sourceCount ? `${quiz.sourceCount} Forms reference${quiz.sourceCount === 1 ? "" : "s"}` : "Native Neat Notes quiz";
     const activeLabel = isActive ? `<span class="question-current">Current topic</span>` : "";
     const runningLabel = isRunning ? `<span class="question-variant">In progress</span>` : "";
-    const actionLabel = isRunning ? "Continue" : quizProgress.attempts ? "Retry quiz" : "Start quiz";
+    const lockLabel = locked ? `<span class="question-variant pro">Pro library</span>` : !hasFeature("quickPractice") ? `<span class="question-variant pro">Pro quiz</span>` : "";
+    const actionLabel = quizLocked ? "Unlock Pro" : isRunning ? "Continue" : quizProgress.attempts ? "Retry quiz" : "Start quiz";
 
-    return `<article class="neat-question-card${isActive ? " active" : ""}${isRunning ? " running" : ""}">
+    return `<article class="neat-question-card${isActive ? " active" : ""}${isRunning ? " running" : ""}${locked ? " locked" : ""}">
       <div class="question-card-topline">
         <span class="question-code">${escapeHtml(quiz.topic.code)}</span>
-        ${runningLabel || activeLabel}
+        ${lockLabel || runningLabel || activeLabel}
       </div>
       <div class="neat-question-card-copy">
         <strong>${escapeHtml(quiz.topic.title)}</strong>
@@ -3021,7 +3079,7 @@ function renderNeatQuestions() {
         <span>${escapeHtml(progressLabel)}</span>
       </div>
       <div class="topic-card-actions">
-        <button type="button" data-topic-id="${escapeHtml(quiz.topic.id)}">Open deck</button>
+        <button type="button" data-topic-id="${escapeHtml(quiz.topic.id)}">${locked ? "Preview plan" : "Open deck"}</button>
         <button type="button" data-start-quiz="${escapeHtml(quiz.topic.id)}">${actionLabel}</button>
       </div>
     </article>`;
@@ -3163,6 +3221,11 @@ function renderNeatQuizComplete(topic) {
 function handleNeatQuestionsClick(event) {
   const topicButton = event.target.closest("[data-topic-id]");
   if (topicButton) {
+    if (!canAccessRevisionTopic(topicButton.dataset.topicId)) {
+      promptRevisionUpgrade();
+      return;
+    }
+
     activeRevisionTopicId = topicButton.dataset.topicId;
     neatQuizState = createEmptyNeatQuizState();
     clearRevisionAutoReset();
@@ -3206,6 +3269,10 @@ function startActiveTopicQuiz() {
 function startNeatQuiz(topicId) {
   const topic = getQuizTopicById(topicId) || getActiveRevisionTopic();
   if (!topic) return;
+  if (!canAccessRevisionTopic(topic.id) || !hasFeature("quickPractice")) {
+    promptRevisionUpgrade();
+    return;
+  }
 
   activeRevisionTopicId = topic.id;
   const questions = buildNativeQuizQuestions(topic);
@@ -3452,6 +3519,11 @@ function getQuizTopicById(topicId) {
 function selectRevisionTopic(event) {
   const button = event.target.closest("[data-topic-id]");
   if (!button) return;
+
+  if (!canAccessRevisionTopic(button.dataset.topicId)) {
+    promptRevisionUpgrade();
+    return;
+  }
 
   activeRevisionTopicId = button.dataset.topicId;
   neatQuizState = createEmptyNeatQuizState();
@@ -4252,6 +4324,18 @@ function getVisibleNotes() {
 function hasFeature(feature) {
   const plan = currentUser?.entitlements || plans[currentUser?.plan] || plans.free || {};
   return Boolean(plan.features?.[feature]);
+}
+
+function canAccessRevisionTopic(topicId) {
+  const index = REVISION_TOPICS.findIndex((topic) => topic.id === topicId);
+  if (index === -1) return false;
+  return index < FREE_REVISION_TOPIC_LIMIT || hasFeature("fullRevisionLibrary");
+}
+
+function promptRevisionUpgrade() {
+  elements.upgradeMessage.textContent = "Upgrade to Pro to unlock the full OCR revision library and Quick Practice.";
+  elements.upgradeMessage.className = "topbar-plan-message error";
+  openPlansModal();
 }
 
 function showWorkspaceMessage(message, type = "") {

@@ -233,11 +233,23 @@ GOOGLE_CLIENT_SECRET=your_client_secret
 
 ## Step 10: What Is Still Mock / Not Production-Final
 
-This version is good for an MVP or pilot.
+Stripe subscriptions are now supported. Use `STRIPE_MONETISATION_SETUP.md` to create Products, Prices, and the webhook.
+
+For production payments, add these Render variables:
+
+```text
+STRIPE_SECRET_KEY=sk_live_or_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_PRO=price_...
+STRIPE_PRICE_TEACHER=price_...
+ALLOW_MOCK_BILLING=false
+FREE_REVISION_TOPIC_LIMIT=3
+```
+
+This version is good for an MVP or pilot once Stripe webhooks and a persistent database are active.
 
 Before charging real schools at scale, still add:
 
-- Stripe payments instead of mock upgrades
 - PostgreSQL instead of SQLite for long-term scale
 - automated database backups
 - CSRF protection
