@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neat Notes | A BreakellSystems product</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <script>
+      (() => {
+        const storedTheme = localStorage.getItem("neat-notes-theme");
+        const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+        document.documentElement.dataset.theme =
+          storedTheme && storedTheme !== "system" ? storedTheme : prefersDark ? "dark" : "light";
+      })();
+    </script>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="launch-overlay" class="launch-overlay" role="status" aria-live="polite" aria-label="Loading Neat Notes">
+      <div class="launch-product" aria-hidden="true">
+        <span class="brand-mark">NN</span>
+        <div>
+          <strong>Neat Notes</strong>
+          <span>A BreakellSystems product</span>
+        </div>
+      </div>
+    </div>
+
+    <main id="auth-view" class="auth-page auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-card-title" hidden>
+      <div class="auth-backdrop" data-close-auth></div>
+      <section class="auth-shell">
+        <div class="auth-product-panel">
+          <div class="brand-lockup">
+            <span class="brand-mark">NN</span>
+            <div>
+              <p class="eyebrow">BreakellSystems</p>
+              <strong>Neat Notes</strong>
+              <span class="product-signature">A BreakellSystems product</span>
+            </div>
+          </div>
+          <h1>Turn lesson notes into exam-ready revision.</h1>
+          <p class="auth-copy">
+            Create a Neat Notes workspace to organise notes, generate revision materials, and keep your study
+            progress in one place.
+          </p>
+          <dl class="auth-proof">
+            <div>
+              <dt>Write once</dt>
+              <dd>Capture lesson notes in a clean study workspace.</dd>
+            </div>
+            <div>
+              <dt>Generate revision</dt>
+              <dd>Turn notes into flashcards, summaries, and study packs.</dd>
+            </div>
+            <div>
+              <dt>Track progress</dt>
+              <dd>Build streaks, master cards, and see what to revise next.</dd>
+            </div>
+          </dl>
+        </div>
+
+        <section class="auth-card">
+          <button id="close-auth-button" class="modal-close-button auth-close-button" type="button" aria-label="Close account access">×</button>
+          <p class="eyebrow">Account access</p>
+          <h2 id="auth-card-title">Welcome back</h2>
+
+          <div class="auth-tabs" role="tablist" aria-label="Authentication mode">
+            <button id="show-login" class="active" type="button" role="tab" aria-selected="true" aria-controls="login-form">Log in</button>
+            <button id="show-signup" type="button" role="tab" aria-selected="false" aria-controls="signup-form">Sign up</button>
+          </div>
+
+          <form id="login-form" class="auth-form" role="tabpanel" aria-labelledby="show-login">
+            <label for="login-email">Email</label>
+            <input id="login-email" type="email" autocomplete="email" required />
+
+            <label for="login-password">Password</label>
+            <div class="password-field">
+              <input id="login-password" type="password" autocomplete="current-password" required aria-describedby="login-caps-warning" />
+              <button class="password-toggle" type="button" data-toggle-password="login-password" aria-label="Show password">Show</button>
+            </div>
+            <p id="login-caps-warning" class="field-message warning" hidden>Caps Lock is on.</p>
+
+            <button id="login-submit-button" class="primary-button" type="submit" aria-label="Log in to account">Log in</button>
+            <p class="auth-trust-note">Free to start. Your notes stay in your workspace.</p>
+          </form>
+
+          <form id="signup-form" class="auth-form" role="tabpanel" aria-labelledby="show-signup" hidden>
+            <label for="signup-name">Name</label>
+            <input id="signup-name" type="text" autocomplete="name" required />
+
+            <label for="signup-email">Email</label>
+            <input id="signup-email" type="email" autocomplete="email" required />
+
+            <label for="signup-password">Password</label>
+            <div class="password-field">
+              <input
+                id="signup-password"
+                type="password"
+                autocomplete="new-password"
+                required
+                aria-describedby="signup-password-help signup-password-error signup-caps-warning"
+              />
+              <button class="password-toggle" type="button" data-toggle-password="signup-password" aria-label="Show password">Show</button>
+            </div>
+            <p id="signup-password-help" class="field-message">Use at least 8 characters.</p>
+            <p id="signup-password-error" class="field-message error" role="alert" hidden>Password must be at least 8 characters.</p>
+            <p id="signup-caps-warning" class="field-message warning" hidden>Caps Lock is on.</p>
+
+            <button id="signup-submit-button" class="primary-button" type="submit">Create account</button>
+            <p class="auth-trust-note">Free to start. Your notes stay in your workspace.</p>
+          </form>
+
+          <div class="auth-provider-list">
+            <a class="google-button" href="/api/auth/google">Continue with Google</a>
+            <!-- Future provider hook: add a Microsoft sign-in button here once OAuth support exists. -->
+          </div>
+          <p id="auth-message" class="status-message auth-message" role="status" aria-live="polite"></p>
+        </section>
+      </section>
+    </main>
+
+    <main id="app-view" class="app-shell" hidden>
+      <header class="app-topbar">
+        <div class="topbar-center">
+          <div class="topbar-product">
+            <span class="brand-mark">NN</span>
+            <div>
+              <strong>Neat Notes</strong>
+              <span>A BreakellSystems product</span>
+            </div>
+          </div>
+        </div>
+        <div class="topbar-context" aria-label="Workspace status, time and date">
+          <div class="topbar-clock" aria-live="polite">
+            <time id="topbar-time" class="topbar-time" datetime=""></time>
+            <time id="topbar-date" class="topbar-date" datetime=""></time>
+          </div>
+          <p id="account-status" class="account-status">Using a local guest workspace</p>
+        </div>
+        <div class="topbar-utilities">
+          <button class="theme-toggle topbar-theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">
+            <span class="theme-toggle-track" aria-hidden="true">
+              <span class="theme-toggle-knob"></span>
+            </span>
+          </button>
+          <button id="open-plans-button" class="topbar-utility-button" type="button">Plans</button>
+          <span id="upgrade-message" class="topbar-plan-message" role="status"></span>
+          <button class="topbar-utility-button" type="button" data-app-section="contact">Contact</button>
+          <button class="topbar-utility-button" id="settings-button" type="button">Settings</button>
+          <div id="guest-account-actions" class="account-actions">
+            <button id="topbar-login-button" class="secondary-account-button" type="button">Login</button>
+            <button id="topbar-signup-button" class="primary-account-button" type="button">Create an account</button>
+          </div>
+          <div id="signed-in-account-actions" class="account-actions" hidden>
+            <span id="topbar-user-label"></span>
+            <button id="topbar-logout-button" class="secondary-account-button" type="button">Log out</button>
+          </div>
+        </div>
+        <nav class="topbar-section-switch" aria-label="Main app sections">
+          <button class="active" type="button" data-app-section="notes">Notes</button>
+          <button type="button" data-app-section="revision">Revision</button>
+        </nav>
+      </header>
+
+      <aside class="sidebar" aria-label="Workspaces and note folders">
+        <div class="sidebar-tools" aria-label="Quick actions">
+          <div class="brand-controls">
+            <button class="icon-button" id="new-note-button" title="New note" aria-label="New note">+</button>
+          </div>
+        </div>
+
+        <div id="notes-sidebar-context" class="notes-sidebar-context">
+          <section class="user-panel workspace-panel" aria-label="Workspace account">
+            <div>
+              <span class="panel-kicker">Workspace</span>
+              <strong id="user-name">You</strong>
+              <span id="user-email"></span>
+              <span id="user-plan-label">Guest</span>
+            </div>
+            <button id="logout-button" class="text-button" type="button">Log out</button>
+          </section>
+
+          <section class="panel search-panel">
+            <label for="search-input">Search notes</label>
+            <input id="search-input" type="search" placeholder="Search title, tag, or note" />
+          </section>
+
+          <section class="panel spaces-panel">
+            <div class="section-title">
+              <span>Spaces</span>
+              <span id="workspace-count">0</span>
+            </div>
+            <div id="workspace-list" class="workspace-list"></div>
+            <form id="workspace-form" class="inline-form">
+              <input id="workspace-name" type="text" placeholder="New collaboration space" />
+              <select id="workspace-kind" aria-label="Workspace type">
+                <option value="project">Project</option>
+                <option value="classroom">Classroom</option>
+              </select>
+              <button type="submit" title="Create workspace" aria-label="Create workspace">+</button>
+            </form>
+            <p id="workspace-message" class="status-message"></p>
+          </section>
+
+          <section class="folders folder-panel">
+            <div class="section-title">
+              <span>Folders</span>
+              <span id="note-count">0</span>
+            </div>
+            <button class="folder-button active" data-tag="all">
+              <span>All notes</span>
+              <span class="folder-count" id="all-count">0</span>
+            </button>
+            <div id="tag-list"></div>
+          </section>
+
+          <section class="panel recent-notes-panel" aria-label="Recent notes">
+            <div class="section-title">
+              <span>Recent notes</span>
+              <span>Edited</span>
+            </div>
+            <div id="recent-note-list" class="recent-note-list"></div>
+          </section>
+
+          <section class="today-panel" aria-label="Today’s revision">
+            <div class="section-title">
+              <span>Today’s revision</span>
+              <span id="daily-streak-label">0 day streak</span>
+            </div>
+            <div class="today-score">
+              <strong id="daily-goal-count">0 / 10</strong>
+              <span>cards today</span>
+            </div>
+            <div class="today-meter" aria-hidden="true">
+              <span id="daily-goal-bar"></span>
+            </div>
+            <p id="daily-mission-copy">Complete 10 cards to build a study streak.</p>
+            <button id="start-daily-review-button" type="button">Start today’s review</button>
+          </section>
+
+          <section class="achievement-panel" aria-label="Flashcard achievements">
+            <div class="section-title">
+              <span>Achievements</span>
+              <span id="badge-count">0 / 0</span>
+            </div>
+            <div class="achievement-meter" aria-hidden="true">
+              <span id="badge-progress-bar"></span>
+            </div>
+            <p>
+              <strong id="badge-progress-percent">0%</strong>
+              <span id="badge-progress-label">Computer Science mastery</span>
+            </p>
+            <button id="open-badges-button" class="badge-collection-button" type="button">View badge collection</button>
+          </section>
+
+          <section class="panel collaboration-panel">
+            <label for="share-email">Collaboration</label>
+            <form id="share-form" class="inline-form">
+              <input id="share-email" type="email" placeholder="teammate@example.com" />
+              <button type="submit">Invite</button>
+            </form>
+            <div id="member-list" class="member-list"></div>
+          </section>
+
+          <section class="panel sidebar-settings-panel">
+            <div>
+              <span class="panel-kicker">Settings</span>
+              <strong>Personalise writing</strong>
+              <p>Theme, density, default folders, and editor comfort.</p>
+            </div>
+            <button type="button" data-open-sidebar-settings>Open settings</button>
+          </section>
+        </div>
+      </aside>
+
+      <section class="notes-column" aria-label="Notes list">
+        <div class="column-header">
+          <div>
+            <p class="eyebrow" id="active-folder-label">All notes</p>
+            <h2 id="workspace-title">Your notes</h2>
+          </div>
+          <button id="delete-note-button" class="danger-button" type="button">Delete</button>
+        </div>
+        <div id="notes-list" class="notes-list"></div>
+      </section>
+
+      <section class="editor" aria-label="Note editor">
+        <header class="editor-masthead">
+          <div class="note-identity">
+            <p id="note-date" class="eyebrow">New note</p>
+            <h2 id="auto-title">Untitled note</h2>
+          </div>
+          <div class="editor-actions">
+            <label for="tag-input">Folder</label>
+            <input id="tag-input" type="text" placeholder="ideas" />
+          </div>
+        </header>
+
+        <div class="editor-actionbar">
+          <div class="format-toolbar" aria-label="Formatting tools">
+            <button type="button" data-format="heading">Topic</button>
+            <button type="button" data-format="subheading">Key point</button>
+            <button type="button" data-format="bullet">Bullet</button>
+            <button type="button" data-format="numbered">Steps</button>
+            <button type="button" data-format="check">Revision task</button>
+            <button type="button" data-format="quote">Definition</button>
+            <button type="button" data-format="divider">Divider</button>
+          </div>
+          <div class="editor-toolbar">
+            <button id="instant-cards-button" class="revision-action-primary" type="button">Instant Cards</button>
+            <button id="study-pack-button" class="revision-action-primary" type="button">Study Pack</button>
+            <button id="export-pdf-button" type="button">Export PDF</button>
+            <button id="history-button" type="button">History</button>
+            <button id="dashboard-button" type="button">Dashboard</button>
+          </div>
+        </div>
+
+        <section class="learning-flow" aria-label="Notes learning workflow">
+          <span class="active">Write</span>
+          <span>Summarise</span>
+          <span>Generate Revision</span>
+          <span>Master Topics</span>
+        </section>
+
+        <div class="editor-workbench">
+          <section class="writing-pane">
+            <div class="writing-head">
+              <div>
+                <p class="eyebrow">Write</p>
+                <h3>Structured note</h3>
+              </div>
+              <span id="save-state">Saved</span>
+            </div>
+            <textarea
+              id="note-body"
+              spellcheck="true"
+              placeholder="# Topic title&#10;&#10;## Key points&#10;- Add a bullet&#10;- Press Enter to continue lists&#10;- Use ☐ tasks for revision actions"
+            ></textarea>
+            <p class="editor-hint">
+              Use Markdown-style notes. Toolbar buttons insert structure; Enter continues lists and tasks automatically.
+            </p>
+          </section>
+
+          <aside class="study-pane" aria-label="Study output">
+            <div class="summary-box">
+              <span>Auto summary</span>
+              <div id="summary-text" class="summary-text">Start writing and a tidy summary will appear here.</div>
+            </div>
+
+            <section id="insights-panel" class="insights-panel" hidden></section>
+
+            <section class="revision-generator-panel" aria-label="Revision generators">
+              <div class="section-title">
+                <span>Generate revision</span>
+                <span>Teacher-led</span>
+              </div>
+              <div class="revision-generator-grid">
+                <button type="button" data-generator-action="flashcards">Flashcards</button>
+                <button type="button" data-generator-action="quiz" class="premium-ready">Quiz <span>Pro</span></button>
+                <button type="button" data-generator-action="exam" class="premium-ready">Exam questions <span>Pro</span></button>
+                <button type="button" data-generator-action="organiser" class="premium-ready">Knowledge organiser <span>Pro</span></button>
+                <button type="button" data-generator-action="mind-map" class="premium-ready">Mind map <span>Pro</span></button>
+                <button type="button" data-generator-action="summary">Summary</button>
+              </div>
+            </section>
+
+            <section class="note-intelligence-panel" aria-label="Future note intelligence">
+              <div class="section-title">
+                <span>Learning intelligence</span>
+                <span>Prepared</span>
+              </div>
+              <div class="intelligence-grid">
+                <article>
+                  <span>OCR coverage</span>
+                  <strong>Ready for spec checks</strong>
+                </article>
+                <article>
+                  <span>Quality score</span>
+                  <strong>Awaiting note depth</strong>
+                </article>
+                <article>
+                  <span>Knowledge gaps</span>
+                  <strong>Generated from weak topics</strong>
+                </article>
+                <article>
+                  <span>Teacher comments</span>
+                  <strong>Collaboration-ready</strong>
+                </article>
+              </div>
+            </section>
+
+            <div class="preview-wrap">
+              <div class="section-title">
+                <span>Formatted note</span>
+                <span>Live</span>
+              </div>
+              <article id="formatted-preview" class="formatted-preview"></article>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="revision-view" class="revision-view" aria-label="Revision flashcards" hidden>
+        <div class="learning-mode-bar" aria-label="Student and teacher mode">
+          <span>Viewing as:</span>
+          <div id="learning-mode-switch" class="learning-mode-switch" role="tablist" aria-label="Learning mode">
+            <button class="active" type="button" role="tab" aria-selected="true" data-learning-mode="student">Student</button>
+            <button type="button" role="tab" aria-selected="false" data-learning-mode="teacher">Teacher</button>
+          </div>
+        </div>
+
+        <header class="revision-hero student-revision-section">
+          <div class="revision-hero-copy">
+            <p class="eyebrow">OCR A-Level Computer Science</p>
+            <h2>OCR Computer Science Revision</h2>
+            <p>
+              Master every OCR A-Level Computer Science topic through smart quizzes, flashcards and progress tracking.
+            </p>
+            <div class="revision-hero-actions">
+              <button id="revision-continue-button" class="revision-primary-action" type="button">Continue revision</button>
+              <button id="revision-progress-jump-button" class="revision-secondary-action" type="button">View progress</button>
+            </div>
+            <div class="revision-tier-strip" aria-label="Future subscription tiers">
+              <span class="tier-chip tier-free">Free starter</span>
+              <span class="tier-chip tier-pro">Student Pro ready</span>
+              <span class="tier-chip tier-teacher">Teacher and college tools planned</span>
+            </div>
+          </div>
+          <div class="revision-summary-grid" aria-label="Revision summary">
+            <article class="revision-summary-card">
+              <span>Today</span>
+              <strong id="revision-today-stat">0/10</strong>
+              <p id="revision-today-copy">Daily study mission</p>
+            </article>
+            <article class="revision-summary-card">
+              <span>Mastery</span>
+              <strong id="revision-mastery-stat">0/316</strong>
+              <p id="revision-mastery-copy">Cards mastered</p>
+            </article>
+            <article class="revision-summary-card recommended">
+              <span>Recommended next</span>
+              <strong id="revision-recommended-next">1.1.1 Structure of the processor</strong>
+              <p id="revision-recommended-meta">Start here</p>
+            </article>
+          </div>
+        </header>
+
+        <section id="student-class-panel" class="student-class-panel student-revision-section" aria-label="Student class membership"></section>
+
+        <section id="quick-practice-section" class="neat-questions-section student-revision-section" aria-labelledby="neat-questions-title">
+          <div class="neat-questions-head">
+            <div class="neat-questions-brand">
+              <span class="brand-mark">QP</span>
+              <div>
+                <p class="eyebrow">Quick Practice</p>
+                <h3 id="neat-questions-title">Answer one question at a time</h3>
+                <p>Answer one question at a time with instant marking, corrections and streak tracking.</p>
+              </div>
+            </div>
+            <div class="neat-questions-actions">
+              <span id="neat-questions-count">0 quizzes</span>
+              <button id="neat-questions-current-link" type="button">Start quick practice</button>
+            </div>
+          </div>
+          <div id="neat-quiz-panel" class="neat-quiz-panel" aria-live="polite"></div>
+          <div class="topic-packs-head">
+            <div>
+              <p class="eyebrow">Topic packs</p>
+              <h3>Choose a focused OCR revision pack</h3>
+            </div>
+            <p>Each pack combines self-marking quizzes, flashcards, Forms references and progress tracking.</p>
+          </div>
+          <div id="neat-questions-grid" class="neat-questions-grid"></div>
+        </section>
+
+        <section class="revision-stage student-revision-section" aria-label="Current flashcard deck">
+          <div class="revision-stage-head">
+            <div>
+              <p class="eyebrow" id="revision-topic-code">1.1.1</p>
+              <h3 id="revision-topic-title">Structure of the processor</h3>
+              <p id="revision-topic-summary">CPU components, registers and the fetch-decode-execute cycle.</p>
+            </div>
+            <div class="revision-actions">
+              <button id="shuffle-revision-button" type="button">Shuffle</button>
+              <button id="reset-revision-button" type="button">Reset progress</button>
+            </div>
+          </div>
+
+          <div id="revision-card-grid" class="revision-card-grid"></div>
+        </section>
+
+        <section id="revision-progress-section" class="revision-progress-section student-revision-section" aria-label="Progress and mastery">
+          <div class="revision-progress-stack">
+            <div class="revision-progress-card">
+              <div class="revision-progress" aria-label="Current topic progress">
+                <svg class="revision-progress-ring" viewBox="0 0 100 100" aria-hidden="true">
+                  <circle class="revision-progress-track" cx="50" cy="50" r="45"></circle>
+                  <circle id="revision-progress-ring" class="revision-progress-value" cx="50" cy="50" r="45"></circle>
+                </svg>
+                <div class="revision-progress-text">
+                  <strong id="revision-progress-percent">0%</strong>
+                  <span id="revision-progress-label">0 of 0 done</span>
+                </div>
+              </div>
+              <div class="revision-course-progress" aria-label="Total Computer Science flashcard completion">
+                <span>Total Computer Science</span>
+                <strong id="revision-course-percent">0%</strong>
+                <p id="revision-course-label">0 / 0 cards mastered</p>
+                <div class="revision-course-meter" aria-hidden="true">
+                  <span id="revision-course-bar"></span>
+                </div>
+                <button id="revision-badges-button" type="button">View badges</button>
+              </div>
+            </div>
+
+            <div class="revision-mastery-panel">
+              <div class="section-title">
+                <span>Progress map</span>
+                <span>OCR Component 1</span>
+              </div>
+              <div id="revision-mastery-map" class="revision-mastery-map"></div>
+              <div id="revision-topic-list" class="revision-topic-list" hidden></div>
+            </div>
+          </div>
+
+          <div class="revision-retention-grid" aria-label="Future study pathways">
+            <article class="retention-card" data-tier="free">
+              <span>Continue where you left off</span>
+              <strong id="revision-weak-topic">Recommended topic will appear here</strong>
+              <p>Neat Notes can steer students back into the weakest or next incomplete pack.</p>
+            </article>
+            <article class="retention-card premium-ready" data-tier="student-pro">
+              <span>Weekly revision missions</span>
+              <strong>Mission engine ready</strong>
+              <p>Future Student Pro plans can add weekly targets, streak rewards and revision calendars.</p>
+            </article>
+            <article class="retention-card premium-ready" data-tier="teacher-college">
+              <span>Exam mode and assignments</span>
+              <strong>Teacher/College pathway</strong>
+              <p>Future teacher tools can set class tasks, exam-mode quizzes and completion dashboards.</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="teacher-mode-panel" class="teacher-mode-panel" aria-label="Teacher learning intelligence" hidden></section>
+      </section>
+
+      <section id="contact-view" class="contact-view" aria-label="Contact BreakellSystems" hidden>
+        <header class="contact-hero">
+          <div>
+            <p class="eyebrow">Contact</p>
+            <h2>Talk to BreakellSystems</h2>
+            <p>
+              Neat Notes is built by teachers for classrooms, independent study and modern OCR Computer Science
+              revision. Use this page for product questions, school conversations, subject requests, or feedback that
+              helps shape what improves next.
+            </p>
+            <div class="contact-trust-grid" aria-label="BreakellSystems contact commitments">
+              <article>
+                <span>Typical response</span>
+                <strong>1-2 working days</strong>
+              </article>
+              <article>
+                <span>Privacy respected</span>
+                <strong>Used only to reply</strong>
+              </article>
+              <article>
+                <span>Built by teachers</span>
+                <strong>UK education focus</strong>
+              </article>
+            </div>
+          </div>
+          <a class="contact-email-pill" href="mailto:hello@breakellsystems.co.uk">hello@breakellsystems.co.uk</a>
+        </header>
+
+        <div class="contact-layout">
+          <section class="contact-card contact-form-card">
+            <p class="eyebrow">Enquiry</p>
+            <h3>Send an enquiry</h3>
+            <p>
+              Tell us what you need and we will route the message to the right BreakellSystems pathway. This local
+              prototype opens your email app; the structure is ready for a future support inbox or ticket system.
+            </p>
+            <form id="contact-form" class="contact-form" novalidate>
+              <label for="contact-name">Name</label>
+              <input id="contact-name" type="text" autocomplete="name" placeholder="Your name" />
+
+              <label for="contact-email">Email</label>
+              <input id="contact-email" type="email" autocomplete="email" placeholder="you@example.com" />
+
+              <label for="contact-reason">Reason</label>
+              <select id="contact-reason">
+                <option value="Product support">Product support</option>
+                <option value="Schools and colleges">Schools and colleges</option>
+                <option value="Subject pack request">Subject pack request</option>
+                <option value="General question">General question</option>
+                <option value="Feature request">Feature request</option>
+                <option value="Enterprise demo">Enterprise demo</option>
+                <option value="Product feedback">Product feedback</option>
+                <option value="Classroom setup">Classroom setup</option>
+                <option value="Pricing or school licence">Pricing or school licence</option>
+                <option value="Technical support">Technical support</option>
+              </select>
+
+              <label for="contact-message">Message</label>
+              <textarea
+                id="contact-message"
+                rows="7"
+                maxlength="1000"
+                aria-describedby="contact-message-counter contact-privacy-note contact-status"
+                placeholder="Tell us what you need help with."
+              ></textarea>
+              <div class="contact-form-meta">
+                <p id="contact-privacy-note">Your details are only used to respond to this enquiry.</p>
+                <span id="contact-message-counter">0 / 1000</span>
+              </div>
+
+              <button class="contact-submit-button" type="submit">Send enquiry</button>
+              <p id="contact-status" class="status-message" role="status" aria-live="polite"></p>
+            </form>
+          </section>
+
+          <aside class="contact-aside" aria-label="Contact routes">
+            <article class="contact-card contact-route-card">
+              <p class="eyebrow">Support</p>
+              <h3>Product help</h3>
+              <p>Get help with accounts, notes, revision cards, quizzes, or access issues.</p>
+              <button type="button" data-contact-route="Product support">Start support enquiry</button>
+            </article>
+            <article class="contact-card contact-route-card featured-contact-card">
+              <p class="eyebrow">Schools & Colleges</p>
+              <h3>Classroom rollouts</h3>
+              <p>Discuss teacher dashboards, shared class spaces, safeguarding expectations, or licences.</p>
+              <button type="button" data-contact-route="Schools and colleges">Discuss school use</button>
+            </article>
+            <article class="contact-card contact-route-card">
+              <p class="eyebrow">Roadmap</p>
+              <h3>Suggest a subject pack</h3>
+              <p>Request future A-Level subjects, exam boards, or interactive revision formats.</p>
+              <button type="button" data-contact-route="Subject pack request">Suggest a pack</button>
+            </article>
+            <article class="contact-card contact-route-card">
+              <p class="eyebrow">Questions</p>
+              <h3>General questions</h3>
+              <p>Ask about BreakellSystems, Neat Notes, partnerships, beta access, or the product roadmap.</p>
+              <button type="button" data-contact-route="General question">Ask a question</button>
+            </article>
+          </aside>
+        </div>
+
+        <section class="contact-credibility-band" aria-label="BreakellSystems trust signals">
+          <article>
+            <span>Teacher-led</span>
+            <p>Built from real Computer Science teaching practice and classroom revision needs.</p>
+          </article>
+          <article>
+            <span>UK-based</span>
+            <p>Designed around UK education workflows, OCR Computer Science and school deployment conversations.</p>
+          </article>
+          <article>
+            <span>GDPR-conscious</span>
+            <p>Future hosted contact flows can connect to proper consent, ticketing and data retention controls.</p>
+          </article>
+          <article>
+            <span>Classroom-ready</span>
+            <p>Roadmap support for teacher assignments, institution demos and school partnership enquiries.</p>
+          </article>
+        </section>
+
+        <section class="contact-future-grid" aria-label="Future help channels">
+          <div>
+            <p class="eyebrow">Additional help</p>
+            <h3>Support channels ready to scale</h3>
+            <p>
+              These placeholders prepare BreakellSystems for future knowledge base, status, live chat and enterprise
+              support workflows without changing the current local prototype behaviour.
+            </p>
+          </div>
+          <div class="future-support-grid">
+            <button type="button" disabled>
+              <span>FAQ accordion</span>
+              <strong>Coming later</strong>
+            </button>
+            <button type="button" disabled>
+              <span>Knowledge base</span>
+              <strong>Articles and guides</strong>
+            </button>
+            <button type="button" disabled>
+              <span>Status page</span>
+              <strong>Service health</strong>
+            </button>
+            <button type="button" disabled>
+              <span>Enterprise demos</span>
+              <strong>School partnerships</strong>
+            </button>
+            <button type="button" disabled>
+              <span>Beta programme</span>
+              <strong>Early feature access</strong>
+            </button>
+            <button type="button" disabled>
+              <span>Feature requests</span>
+              <strong>Roadmap signals</strong>
+            </button>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div id="pricing-modal" class="pricing-modal" hidden>
+      <div class="pricing-backdrop" data-close-pricing></div>
+      <section class="pricing-dialog" aria-labelledby="pricing-title" aria-modal="true" role="dialog">
+        <div class="pricing-head">
+          <div>
+            <p class="eyebrow">Plans</p>
+            <h2 id="pricing-title">Choose the workspace that matches your study load.</h2>
+            <p>
+              Start free, then unlock collaboration, exports, version history, and classroom management as your notes
+              become part of a wider revision system.
+            </p>
+          </div>
+          <button id="close-plans-button" class="modal-close-button" type="button" aria-label="Close plans">×</button>
+        </div>
+
+        <div class="pricing-grid">
+          <article class="pricing-card pricing-card-free">
+            <p class="plan-kicker">Individual start</p>
+            <h3>Free</h3>
+            <p class="plan-price">£0</p>
+            <p class="plan-copy">For trying the workflow and keeping a small personal study notebook.</p>
+            <ul>
+              <li>25 notes</li>
+              <li>2 spaces</li>
+              <li>Tags and folders</li>
+              <li>Basic note formatting</li>
+              <li>Read-only sharing foundation</li>
+            </ul>
+            <button class="plan-button subtle" type="button" disabled>Current baseline</button>
+          </article>
+
+          <article class="pricing-card pricing-card-plus">
+            <p class="plan-kicker">Student upgrade</p>
+            <h3>Pro</h3>
+            <p class="plan-price">£3.99<span>/month</span></p>
+            <p class="plan-copy">For students who want unlimited structured notes and revision-ready exports.</p>
+            <ul>
+              <li>Unlimited notes and spaces</li>
+              <li>Instant note-to-card lab</li>
+              <li>Daily review streaks</li>
+              <li>PDF export</li>
+              <li>Version history</li>
+              <li>Collaboration with peers</li>
+            </ul>
+            <button class="plan-button" type="button" data-plan="plus">Upgrade to Pro</button>
+          </article>
+
+          <article class="pricing-card pricing-card-teacher featured">
+            <div class="plan-badge">Best for classrooms</div>
+            <p class="plan-kicker">Teacher workspace</p>
+            <h3>Teacher</h3>
+            <p class="plan-price">£9.99<span>/month</span></p>
+            <p class="plan-copy">For managing class folders, shared notes, and independent revision activity.</p>
+            <ul>
+              <li>Everything in Pro</li>
+              <li>Classroom spaces</li>
+              <li>Teacher dashboard</li>
+              <li>Class mastery map</li>
+              <li>Class revision packs</li>
+              <li>Shared class folders</li>
+            </ul>
+            <button class="plan-button premium" type="button" data-plan="teacher">Start Teacher plan</button>
+          </article>
+
+          <article class="pricing-card pricing-card-institution">
+            <p class="plan-kicker">Department scale</p>
+            <h3>Institution</h3>
+            <p class="plan-price">Custom</p>
+            <p class="plan-copy">For departments and schools that need managed rollout and governance.</p>
+            <ul>
+              <li>Everything in Teacher</li>
+              <li>Department workspaces</li>
+              <li>Managed onboarding</li>
+              <li>Admin controls later</li>
+              <li>SSO-ready roadmap</li>
+            </ul>
+            <button class="plan-button institutional" type="button" data-plan="institution">Register interest</button>
+          </article>
+        </div>
+      </section>
+    </div>
+
+    <div id="badge-modal" class="badge-modal" hidden>
+      <div class="badge-backdrop" data-close-badges></div>
+      <section class="badge-dialog" aria-labelledby="badge-title" aria-modal="true" role="dialog">
+        <header class="badge-head">
+          <div>
+            <p class="eyebrow">Achievements</p>
+            <h2 id="badge-title">Computer Science badge collection</h2>
+            <p id="badge-collection-summary">Complete flashcard decks to unlock vibrant topic badges.</p>
+          </div>
+          <button id="close-badges-button" class="modal-close-button" type="button" aria-label="Close badges">×</button>
+        </header>
+        <div class="badge-overview">
+          <div>
+            <span>Total completion</span>
+            <strong id="badge-course-percent">0%</strong>
+          </div>
+          <div>
+            <span>Cards mastered</span>
+            <strong id="badge-course-count">0 / 0</strong>
+          </div>
+          <div class="badge-overview-meter" aria-hidden="true">
+            <span id="badge-course-bar"></span>
+          </div>
+        </div>
+        <div id="badge-collection-grid" class="badge-collection-grid"></div>
+      </section>
+    </div>
+
+    <div id="achievement-modal" class="achievement-modal" hidden>
+      <div class="achievement-backdrop" data-close-achievement></div>
+      <section class="achievement-dialog" aria-labelledby="achievement-title" aria-modal="true" role="dialog">
+        <p class="eyebrow">Badge acquired</p>
+        <div id="achievement-badge" class="badge-emblem"></div>
+        <h2 id="achievement-title">Deck complete</h2>
+        <p id="achievement-text">A new badge has joined your collection.</p>
+        <div class="achievement-actions">
+          <button id="achievement-view-badges-button" type="button">View collection</button>
+          <button id="close-achievement-button" class="text-button" type="button">Keep revising</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="settings-modal" class="settings-modal" hidden>
+      <div class="settings-backdrop" data-close-settings></div>
+      <section class="settings-dialog" aria-labelledby="settings-title" aria-modal="true" role="dialog">
+        <header class="settings-head">
+          <div>
+            <p class="eyebrow">Settings</p>
+            <h2 id="settings-title">Personalise the workspace</h2>
+          </div>
+          <button id="close-settings-button" class="modal-close-button" type="button" aria-label="Close settings">×</button>
+        </header>
+
+        <div class="settings-body">
+          <nav class="settings-tabs" aria-label="Settings sections">
+            <button class="active" type="button" data-settings-tab="general">General</button>
+            <button type="button" data-settings-tab="editor">Editor</button>
+            <button type="button" data-settings-tab="data">Data</button>
+          </nav>
+
+          <section class="settings-panel active" data-settings-panel="general">
+            <h3>Appearance</h3>
+            <p>Choose a theme and interface density for this device.</p>
+            <div class="settings-row">
+              <label>Theme</label>
+              <div class="segmented-control" id="theme-choice-group">
+                <button type="button" data-theme-choice="light">Light</button>
+                <button type="button" data-theme-choice="dark">Dark</button>
+                <button type="button" data-theme-choice="system">System</button>
+              </div>
+            </div>
+            <div class="settings-row">
+              <label for="settings-density">Density</label>
+              <select id="settings-density">
+                <option value="default">Default</option>
+                <option value="compact">Compact</option>
+              </select>
+            </div>
+          </section>
+
+          <section class="settings-panel" data-settings-panel="editor">
+            <h3>Writing</h3>
+            <p>Tune the editor for longer revision sessions or dense classroom work.</p>
+            <div class="settings-row">
+              <label for="settings-editor-font">Editor text size</label>
+              <select id="settings-editor-font">
+                <option value="15">Compact</option>
+                <option value="16">Default</option>
+                <option value="18">Large</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <label for="settings-default-tag">Default folder tag</label>
+              <input id="settings-default-tag" type="text" placeholder="inbox" />
+            </div>
+          </section>
+
+          <section class="settings-panel" data-settings-panel="data">
+            <h3>Local data tools</h3>
+            <p>Export the current workspace for review or clear local preferences on this device.</p>
+            <div class="settings-actions">
+              <button id="download-data-button" type="button">Download workspace JSON</button>
+              <button id="reset-preferences-button" class="secondary-danger" type="button">Reset local preferences</button>
+            </div>
+            <p id="settings-message" class="status-message"></p>
+          </section>
+        </div>
+      </section>
+    </div>
+
+    <script src="revision-topics.js"></script>
+    <script src="neat-questions.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
