@@ -4,6 +4,7 @@ const GUEST_WORKSPACE_KEY = "neat-notes-guest-workspace";
 const REVISION_BADGES_KEY = "neat-notes-revision-badges";
 const STUDY_HISTORY_KEY = "neat-notes-study-history";
 const NEAT_QUIZ_PROGRESS_KEY = "neat-notes-quiz-progress";
+const FREE_REVISION_DECK_KEY = "neat-notes-free-revision-deck";
 const CARD_ATTEMPTS_KEY = "neat-notes-card-attempts";
 const ACTIVITY_EVENTS_KEY = "neat-notes-activity-events";
 const CLASS_GROUPS_KEY = "neat-notes-class-groups";
@@ -12,7 +13,6 @@ const ACTIVE_STUDENT_CLASS_KEY = "neat-notes-active-student-class";
 const CENTRES_KEY = "neat-notes-centres";
 const LEARNING_MODE_KEY = "neat-notes-learning-mode";
 const DAILY_REVIEW_GOAL = 10;
-const FREE_REVISION_TOPIC_LIMIT = 3;
 const MIN_LAUNCH_OVERLAY_MS = 2100;
 const launchOverlayStartedAt = performance.now();
 const TOPBAR_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
@@ -65,6 +65,7 @@ let activeRevisionTopicId = "cs-1-1-1";
 let revisionCardOrder = {};
 let earnedRevisionBadges = loadRevisionBadges();
 let studyHistory = loadStudyHistory();
+let freeRevisionTopicId = loadFreeRevisionTopicId();
 const flippedRevisionCards = new Set();
 const completedRevisionCards = new Set();
 const generatedCardFlips = new Set();
@@ -440,6 +441,19 @@ function saveNeatQuizProgress() {
   localStorage.setItem(NEAT_QUIZ_PROGRESS_KEY, JSON.stringify(neatQuizProgress));
 }
 
+function loadFreeRevisionTopicId() {
+  return localStorage.getItem(FREE_REVISION_DECK_KEY) || "";
+}
+
+function saveFreeRevisionTopicId(topicId) {
+  freeRevisionTopicId = topicId || "";
+  if (freeRevisionTopicId) {
+    localStorage.setItem(FREE_REVISION_DECK_KEY, freeRevisionTopicId);
+  } else {
+    localStorage.removeItem(FREE_REVISION_DECK_KEY);
+  }
+}
+
 function loadLocalArray(key) {
   try {
     const value = JSON.parse(localStorage.getItem(key) || "[]");
@@ -741,11 +755,12 @@ function getRecommendedRevisionTopic() {
   const recommendation = generateRevisionRecommendation(activeRevisionTopicId);
   if (recommendation.topicId) {
     const recommendedTopic = getQuizTopicById(recommendation.topicId);
-    if (recommendedTopic) return recommendedTopic;
+    if (recommendedTopic && isRevisionTopicRecommendable(recommendedTopic.id)) return recommendedTopic;
   }
 
-  const candidates = REVISION_TOPICS.filter((topic) => !earnedRevisionBadges[topic.id]);
-  const topicPool = candidates.length ? candidates : REVISION_TOPICS;
+  const availableTopics = REVISION_TOPICS.filter((topic) => isRevisionTopicRecommendable(topic.id));
+  const candidates = availableTopics.filter((topic) => !earnedRevisionBadges[topic.id]);
+  const topicPool = candidates.length ? candidates : availableTopics;
 
   return topicPool
     .map((topic, index) => ({
@@ -756,11 +771,17 @@ function getRecommendedRevisionTopic() {
     .sort((a, b) => a.progress - b.progress || a.index - b.index)[0]?.topic;
 }
 
+function isRevisionTopicRecommendable(topicId) {
+  return canAccessRevisionTopic(topicId) || canClaimFreeRevisionTopic(topicId);
+}
+
 function startDailyReview() {
   const topic = getRecommendedRevisionTopic();
   if (topic) {
     activeRevisionTopicId = topic.id;
-    startRevisionSession(topic.id);
+    if (canAccessRevisionTopic(topic.id)) {
+      startRevisionSession(topic.id);
+    }
   }
 
   setAppSection("revision");
@@ -769,18 +790,20 @@ function startDailyReview() {
   }, 0);
 }
 
-function continueRevisionJourney() {
+async function continueRevisionJourney() {
   const runningTopic = getQuizTopicById(neatQuizState.quizId);
   const recommendedTopic = getRecommendedRevisionTopic();
   const nextTopic = runningTopic && !neatQuizState.completed ? runningTopic : recommendedTopic || getActiveRevisionTopic();
 
   if (nextTopic?.id) {
     activeRevisionTopicId = nextTopic.id;
-    startRevisionSession(nextTopic.id);
+    if (canAccessRevisionTopic(nextTopic.id)) {
+      startRevisionSession(nextTopic.id);
+    }
   }
 
   if (!runningTopic || neatQuizState.completed) {
-    startNeatQuiz(nextTopic?.id);
+    await startNeatQuiz(nextTopic?.id);
   } else {
     renderRevisionPage();
   }
@@ -1391,7 +1414,7 @@ function loadGuestApp() {
         teacherDashboard: false,
         versionHistory: false,
         fullRevisionLibrary: false,
-        quickPractice: false,
+        quickPractice: true,
       },
     },
   };
@@ -1957,7 +1980,9 @@ function renderAccountChrome() {
     elements.topbarUserLabel.textContent = currentUser.email;
     elements.userName.textContent = currentUser.name;
     elements.userEmail.textContent = currentUser.email;
-    elements.userPlanLabel.textContent = currentUser.planName || "Account workspace";
+    const freeDeck = getSelectedFreeRevisionTopicId();
+    const planSuffix = !hasFeature("fullRevisionLibrary") && freeDeck ? " · 1 deck" : "";
+    elements.userPlanLabel.textContent = `${currentUser.planName || "Account workspace"}${planSuffix}`;
     elements.logoutButton.hidden = false;
     return;
   }
@@ -1992,8 +2017,11 @@ function renderRevisionMasteryMap() {
         const percent = earned ? 100 : topic.cards.length ? Math.round((completed / topic.cards.length) * 100) : 0;
         const activeClass = topic.id === activeRevisionTopicId ? " active" : "";
         const earnedClass = earned ? " earned" : "";
+        const access = getRevisionTopicAccessState(topic.id);
+        const accessClass = access.locked ? " locked" : access.canClaim ? " claimable" : access.selectedFreeDeck ? " free-selected" : "";
+        const title = `${topic.code} ${topic.title} · ${percent}% · ${access.label}`;
 
-        return `<button class="mastery-dot${activeClass}${earnedClass}" type="button" data-jump-topic="${escapeHtml(topic.id)}" title="${escapeHtml(topic.code)} ${escapeHtml(topic.title)} · ${percent}%">
+        return `<button class="mastery-dot${activeClass}${earnedClass}${accessClass}" type="button" data-jump-topic="${escapeHtml(topic.id)}" title="${escapeHtml(title)}">
           <span>${escapeHtml(topic.code)}</span>
           <small>${percent}%</small>
         </button>`;
@@ -2798,7 +2826,7 @@ function createInviteCode(prefix) {
 }
 
 function renderRevisionPage() {
-  const topic = getActiveRevisionTopic();
+  let topic = getActiveRevisionTopic();
   renderLearningMode();
 
   if (activeLearningMode === "teacher") {
@@ -2806,14 +2834,37 @@ function renderRevisionPage() {
     return;
   }
 
-  if (!revisionSession || revisionSession.topicId !== topic.id) {
-    startRevisionSession(topic.id);
+  const selectedFreeDeck = getSelectedFreeRevisionTopicId();
+  if (!canAccessRevisionTopic(topic.id) && selectedFreeDeck) {
+    activeRevisionTopicId = selectedFreeDeck;
+    topic = getActiveRevisionTopic();
   }
+
+  const access = getRevisionTopicAccessState(topic.id);
 
   renderAchievementSummary();
   renderDailyStudyPanel();
   renderRevisionDashboard(topic);
   renderStudentClassPanel();
+  elements.revisionTopicCode.textContent = topic.code;
+  elements.revisionTopicTitle.textContent = topic.title;
+  elements.revisionTopicSummary.textContent = topic.summary;
+  renderRevisionMasteryMap();
+  renderNeatQuestions();
+  renderRevisionTopicList();
+
+  if (!access.canAccess) {
+    elements.revisionProgressPercent.textContent = "0%";
+    elements.revisionProgressLabel.textContent = access.canClaim ? "Choose free deck" : "Pro required";
+    elements.revisionProgressRing.style.strokeDashoffset = "283";
+    elements.revisionCardGrid.innerHTML = renderRevisionAccessPanel(topic, access);
+    return;
+  }
+
+  if (!revisionSession || revisionSession.topicId !== topic.id) {
+    startRevisionSession(topic.id);
+  }
+
   const order = getRevisionCardOrder(topic);
   const sessionCardIds = revisionReviewMode?.topicId === topic.id ? new Set(revisionReviewMode.cardIds) : null;
   const deckOrder = sessionCardIds
@@ -2833,28 +2884,6 @@ function renderRevisionPage() {
       ? "Complete"
       : `${completedCount}/${deckTotal} done${sessionCardIds ? " · weak review" : ""}`;
   elements.revisionProgressRing.style.strokeDashoffset = String(283 - (283 * progress) / 100);
-  elements.revisionTopicCode.textContent = topic.code;
-  elements.revisionTopicTitle.textContent = topic.title;
-  elements.revisionTopicSummary.textContent = topic.summary;
-  renderRevisionMasteryMap();
-  renderNeatQuestions();
-
-  elements.revisionTopicList.innerHTML = REVISION_TOPICS.map((revisionTopic, index) => {
-    const activeClass = revisionTopic.id === activeRevisionTopicId ? " active" : "";
-    const earnedClass = earnedRevisionBadges[revisionTopic.id] ? " earned" : "";
-    const locked = !canAccessRevisionTopic(revisionTopic.id);
-    const lockedClass = locked ? " locked" : "";
-    const badgeLabel = earnedRevisionBadges[revisionTopic.id] ? `<span class="revision-topic-badge">Badge</span>` : "";
-    const accessLabel = locked ? `<span class="revision-topic-badge pro">Pro</span>` : badgeLabel;
-    return `<button class="revision-topic-button${activeClass}${earnedClass}${lockedClass}" type="button" data-topic-id="${escapeHtml(revisionTopic.id)}">
-      <span class="revision-topic-index">${String(index + 1).padStart(2, "0")}</span>
-      <span class="revision-topic-meta">
-        <span class="revision-topic-code">${escapeHtml(revisionTopic.code)}</span>
-        <strong>${escapeHtml(revisionTopic.title)}</strong>
-      </span>
-      <span class="revision-topic-count">${revisionTopic.cards.length} cards${accessLabel}</span>
-    </button>`;
-  }).join("");
 
   if (completedCount === deckTotal && deckTotal) {
     elements.revisionCardGrid.innerHTML = renderDeckSessionSummary(topic);
@@ -2894,6 +2923,61 @@ function renderRevisionPage() {
       </article>`;
     })
     .join("");
+}
+
+function renderRevisionTopicList() {
+  elements.revisionTopicList.innerHTML = REVISION_TOPICS.map((revisionTopic, index) => {
+    const activeClass = revisionTopic.id === activeRevisionTopicId ? " active" : "";
+    const earnedClass = earnedRevisionBadges[revisionTopic.id] ? " earned" : "";
+    const access = getRevisionTopicAccessState(revisionTopic.id);
+    const lockedClass = access.locked ? " locked" : access.canClaim ? " claimable" : "";
+    const badgeLabel = earnedRevisionBadges[revisionTopic.id] ? `<span class="revision-topic-badge">Badge</span>` : "";
+    const accessLabel = access.locked
+      ? `<span class="revision-topic-badge pro">Pro</span>`
+      : access.canClaim
+        ? `<span class="revision-topic-badge free">Free pick</span>`
+        : access.selectedFreeDeck
+          ? `<span class="revision-topic-badge free">Free deck</span>`
+          : badgeLabel;
+    return `<button class="revision-topic-button${activeClass}${earnedClass}${lockedClass}" type="button" data-topic-id="${escapeHtml(revisionTopic.id)}" aria-label="${escapeHtml(`${revisionTopic.code} ${revisionTopic.title}. ${access.label}.`)}">
+      <span class="revision-topic-index">${String(index + 1).padStart(2, "0")}</span>
+      <span class="revision-topic-meta">
+        <span class="revision-topic-code">${escapeHtml(revisionTopic.code)}</span>
+        <strong>${escapeHtml(revisionTopic.title)}</strong>
+      </span>
+      <span class="revision-topic-count">${revisionTopic.cards.length} cards${accessLabel}</span>
+    </button>`;
+  }).join("");
+}
+
+function renderRevisionAccessPanel(topic, access) {
+  const title = access.canClaim ? "Choose your free revision deck" : "This deck is part of Pro";
+  const copy = access.canClaim
+    ? "Free accounts can unlock one complete OCR topic deck with flashcards, instant marking and streak tracking. Pick carefully: Pro unlocks every deck."
+    : "Your free OCR deck is already selected. Upgrade to Pro for the full Computer Science library, Quick Practice across every topic and complete progress tracking.";
+  const button = access.canClaim
+    ? `<button type="button" data-claim-free-topic="${escapeHtml(topic.id)}">Use ${escapeHtml(topic.code)} as my free deck</button>`
+    : `<button type="button" data-upgrade-revision="${escapeHtml(topic.id)}">Unlock with Pro</button>`;
+  const secondary = access.canClaim
+    ? `<button class="secondary" type="button" data-summary-action="topic-list">Compare topics first</button>`
+    : `<button class="secondary" type="button" data-summary-action="topic-list">Back to topic packs</button>`;
+
+  return `<section class="revision-paywall-panel" aria-label="${escapeHtml(title)}">
+    <div>
+      <p class="eyebrow">${access.canClaim ? "Free starter" : "Pro library"}</p>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(copy)}</p>
+    </div>
+    <article>
+      <span>${escapeHtml(topic.code)}</span>
+      <strong>${escapeHtml(topic.title)}</strong>
+      <small>${topic.cards.length} cards · ${access.canClaim ? "available as your free pick" : "locked on Free"}</small>
+    </article>
+    <div class="revision-paywall-actions">
+      ${button}
+      ${secondary}
+    </div>
+  </section>`;
 }
 
 function renderDeckSessionSummary(topic) {
@@ -2947,7 +3031,7 @@ function renderDeckSessionSummary(topic) {
   </div>`;
 }
 
-function handleDeckSummaryAction(action) {
+async function handleDeckSummaryAction(action) {
   const topic = getActiveRevisionTopic();
   const recommendation = generateRevisionRecommendation(topic.id);
 
@@ -2973,12 +3057,16 @@ function handleDeckSummaryAction(action) {
     }
 
     if (recommendation.type === "quiz_mode") {
-      startNeatQuiz(recommendation.topicId || topic.id);
+      await startNeatQuiz(recommendation.topicId || topic.id);
       elements.quickPracticeSection.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
 
     if (recommendation.topicId) {
+      if (!canAccessRevisionTopic(recommendation.topicId)) {
+        promptRevisionUpgrade(getQuizTopicById(recommendation.topicId));
+        return;
+      }
       activeRevisionTopicId = recommendation.topicId;
       neatQuizState = createEmptyNeatQuizState();
       clearRevisionAutoReset();
@@ -3036,16 +3124,22 @@ function renderRevisionDashboard(topic) {
   }
 }
 
-function handleMasteryMapClick(event) {
+async function handleMasteryMapClick(event) {
   const button = event.target.closest("[data-jump-topic]");
   if (!button) return;
 
-  if (!canAccessRevisionTopic(button.dataset.jumpTopic)) {
-    promptRevisionUpgrade();
-    return;
+  const topicId = button.dataset.jumpTopic;
+  if (!canAccessRevisionTopic(topicId)) {
+    if (canClaimFreeRevisionTopic(topicId)) {
+      const claimed = await claimFreeRevisionTopic(topicId);
+      if (!claimed) return;
+    } else {
+      promptRevisionUpgrade(getQuizTopicById(topicId));
+      return;
+    }
   }
 
-  activeRevisionTopicId = button.dataset.jumpTopic;
+  activeRevisionTopicId = topicId;
   neatQuizState = createEmptyNeatQuizState();
   clearRevisionAutoReset();
   startRevisionSession(activeRevisionTopicId);
@@ -3064,8 +3158,9 @@ function renderNeatQuestions() {
   elements.neatQuestionsGrid.innerHTML = catalog.map((quiz) => {
     const isActive = quiz.topic.id === activeTopic?.id;
     const isRunning = quiz.topic.id === neatQuizState.quizId && !neatQuizState.completed;
-    const locked = !canAccessRevisionTopic(quiz.topic.id);
-    const quizLocked = locked || !hasFeature("quickPractice");
+    const access = getRevisionTopicAccessState(quiz.topic.id);
+    const locked = access.locked;
+    const quizLocked = !access.canAccess || !hasFeature("quickPractice");
     const quizProgress = neatQuizProgress[quiz.topic.id] || {};
     const completedCards = getCompletedRevisionCount(quiz.topic);
     const topicPercent = earnedRevisionBadges[quiz.topic.id]
@@ -3077,10 +3172,19 @@ function renderNeatQuestions() {
     const sourceLabel = quiz.sourceCount ? `${quiz.sourceCount} Forms reference${quiz.sourceCount === 1 ? "" : "s"}` : "Native Neat Notes quiz";
     const activeLabel = isActive ? `<span class="question-current">Current topic</span>` : "";
     const runningLabel = isRunning ? `<span class="question-variant">In progress</span>` : "";
-    const lockLabel = locked ? `<span class="question-variant pro">Pro library</span>` : !hasFeature("quickPractice") ? `<span class="question-variant pro">Pro quiz</span>` : "";
-    const actionLabel = quizLocked ? "Unlock Pro" : isRunning ? "Continue" : quizProgress.attempts ? "Retry quiz" : "Start quiz";
+    const lockLabel = locked
+      ? `<span class="question-variant pro">Pro library</span>`
+      : access.canClaim
+        ? `<span class="question-variant free">Free pick</span>`
+        : access.selectedFreeDeck
+          ? `<span class="question-variant free">Your free deck</span>`
+          : !hasFeature("quickPractice")
+            ? `<span class="question-variant pro">Pro quiz</span>`
+            : "";
+    const openLabel = access.canClaim ? "Choose deck" : locked ? "Preview plan" : "Open deck";
+    const actionLabel = access.canClaim ? "Choose + practise" : quizLocked ? "Unlock Pro" : isRunning ? "Continue" : quizProgress.attempts ? "Retry quiz" : "Start quiz";
 
-    return `<article class="neat-question-card${isActive ? " active" : ""}${isRunning ? " running" : ""}${locked ? " locked" : ""}">
+    return `<article class="neat-question-card${isActive ? " active" : ""}${isRunning ? " running" : ""}${locked ? " locked" : ""}${access.canClaim ? " claimable" : ""}">
       <div class="question-card-topline">
         <span class="question-code">${escapeHtml(quiz.topic.code)}</span>
         ${lockLabel || runningLabel || activeLabel}
@@ -3097,7 +3201,7 @@ function renderNeatQuestions() {
         <span>${escapeHtml(progressLabel)}</span>
       </div>
       <div class="topic-card-actions">
-        <button type="button" data-topic-id="${escapeHtml(quiz.topic.id)}">${locked ? "Preview plan" : "Open deck"}</button>
+        <button type="button" data-topic-id="${escapeHtml(quiz.topic.id)}">${openLabel}</button>
         <button type="button" data-start-quiz="${escapeHtml(quiz.topic.id)}">${actionLabel}</button>
       </div>
     </article>`;
@@ -3134,14 +3238,21 @@ function renderNeatQuizPanel() {
   if (!topic || !neatQuizState.questions.length) {
     const activeTopic = getActiveRevisionTopic();
     const activeQuestionCount = activeTopic?.cards?.length || 0;
+    const access = getRevisionTopicAccessState(activeTopic?.id);
+    const actionLabel = access.canClaim ? "Choose free deck" : access.locked ? "Unlock Pro" : "Start quick practice";
+    const description = access.canAccess
+      ? "Answer one question at a time with instant marking, corrections and streak tracking."
+      : access.canClaim
+        ? "Choose this as your one free deck to unlock flashcards and Quick Practice."
+        : "Upgrade to Pro to practise this deck and the full OCR Computer Science library.";
     elements.neatQuizPanel.innerHTML = `<div class="neat-quiz-empty">
       <div>
         <p class="eyebrow">Quick Practice</p>
         <h4>Practise ${escapeHtml(activeTopic?.code || "this topic")} one question at a time.</h4>
-        <p>Answer one question at a time with instant marking, corrections and streak tracking.</p>
+        <p>${escapeHtml(description)}</p>
       </div>
-      <button type="button" data-start-current-quiz>Start quick practice</button>
-      <span class="quick-practice-note">${activeQuestionCount} questions in this topic pack</span>
+      <button type="button" data-start-current-quiz>${escapeHtml(actionLabel)}</button>
+      <span class="quick-practice-note">${activeQuestionCount} questions in this topic pack${access.locked ? " · Pro" : ""}</span>
     </div>`;
     return;
   }
@@ -3236,17 +3347,24 @@ function renderNeatQuizComplete(topic) {
   </article>`;
 }
 
-function handleNeatQuestionsClick(event) {
+async function handleNeatQuestionsClick(event) {
   const topicButton = event.target.closest("[data-topic-id]");
   if (topicButton) {
-    if (!canAccessRevisionTopic(topicButton.dataset.topicId)) {
-      promptRevisionUpgrade();
-      return;
+    const topicId = topicButton.dataset.topicId;
+    if (!canAccessRevisionTopic(topicId)) {
+      if (canClaimFreeRevisionTopic(topicId)) {
+        const claimed = await claimFreeRevisionTopic(topicId);
+        if (!claimed) return;
+      } else {
+        promptRevisionUpgrade(getQuizTopicById(topicId));
+        return;
+      }
     }
 
-    activeRevisionTopicId = topicButton.dataset.topicId;
+    activeRevisionTopicId = topicId;
     neatQuizState = createEmptyNeatQuizState();
     clearRevisionAutoReset();
+    startRevisionSession(activeRevisionTopicId);
     renderRevisionPage();
     document.querySelector(".revision-stage")?.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
@@ -3255,17 +3373,17 @@ function handleNeatQuestionsClick(event) {
   const button = event.target.closest("[data-start-quiz]");
   if (!button) return;
 
-  startNeatQuiz(button.dataset.startQuiz);
+  await startNeatQuiz(button.dataset.startQuiz);
 }
 
-function handleNeatQuizPanelClick(event) {
+async function handleNeatQuizPanelClick(event) {
   if (event.target.closest("[data-start-current-quiz]")) {
-    startActiveTopicQuiz();
+    await startActiveTopicQuiz();
     return;
   }
 
   if (event.target.closest("[data-quiz-restart]")) {
-    startNeatQuiz(neatQuizState.quizId || getActiveRevisionTopic()?.id);
+    await startNeatQuiz(neatQuizState.quizId || getActiveRevisionTopic()?.id);
     return;
   }
 
@@ -3280,15 +3398,25 @@ function handleNeatQuizPanelClick(event) {
   }
 }
 
-function startActiveTopicQuiz() {
-  startNeatQuiz(getActiveRevisionTopic()?.id);
+async function startActiveTopicQuiz() {
+  await startNeatQuiz(getActiveRevisionTopic()?.id);
 }
 
-function startNeatQuiz(topicId) {
+async function startNeatQuiz(topicId) {
   const topic = getQuizTopicById(topicId) || getActiveRevisionTopic();
   if (!topic) return;
-  if (!canAccessRevisionTopic(topic.id) || !hasFeature("quickPractice")) {
-    promptRevisionUpgrade();
+  if (!canAccessRevisionTopic(topic.id)) {
+    if (canClaimFreeRevisionTopic(topic.id)) {
+      const claimed = await claimFreeRevisionTopic(topic.id);
+      if (!claimed) return;
+    } else {
+      promptRevisionUpgrade(topic);
+      return;
+    }
+  }
+
+  if (!hasFeature("quickPractice")) {
+    promptRevisionUpgrade(topic);
     return;
   }
 
@@ -3534,26 +3662,51 @@ function getQuizTopicById(topicId) {
   return REVISION_TOPICS.find((topic) => topic.id === topicId);
 }
 
-function selectRevisionTopic(event) {
+async function selectRevisionTopic(event) {
   const button = event.target.closest("[data-topic-id]");
   if (!button) return;
 
-  if (!canAccessRevisionTopic(button.dataset.topicId)) {
-    promptRevisionUpgrade();
-    return;
+  const topicId = button.dataset.topicId;
+  if (!canAccessRevisionTopic(topicId)) {
+    if (canClaimFreeRevisionTopic(topicId)) {
+      const claimed = await claimFreeRevisionTopic(topicId);
+      if (!claimed) return;
+    } else {
+      promptRevisionUpgrade(getQuizTopicById(topicId));
+      return;
+    }
   }
 
-  activeRevisionTopicId = button.dataset.topicId;
+  activeRevisionTopicId = topicId;
   neatQuizState = createEmptyNeatQuizState();
   clearRevisionAutoReset();
   startRevisionSession(activeRevisionTopicId);
   renderRevisionPage();
 }
 
-function flipRevisionCard(event) {
+async function flipRevisionCard(event) {
+  const claimButton = event.target.closest("[data-claim-free-topic]");
+  if (claimButton) {
+    const claimed = await claimFreeRevisionTopic(claimButton.dataset.claimFreeTopic);
+    if (claimed) {
+      activeRevisionTopicId = claimButton.dataset.claimFreeTopic;
+      neatQuizState = createEmptyNeatQuizState();
+      clearRevisionAutoReset();
+      startRevisionSession(activeRevisionTopicId);
+      renderRevisionPage();
+    }
+    return;
+  }
+
+  const upgradeButton = event.target.closest("[data-upgrade-revision]");
+  if (upgradeButton) {
+    promptRevisionUpgrade(getQuizTopicById(upgradeButton.dataset.upgradeRevision));
+    return;
+  }
+
   const summaryAction = event.target.closest("[data-summary-action]");
   if (summaryAction) {
-    handleDeckSummaryAction(summaryAction.dataset.summaryAction);
+    await handleDeckSummaryAction(summaryAction.dataset.summaryAction);
     return;
   }
 
@@ -3707,7 +3860,9 @@ function renderPlan() {
 
   const plan = currentUser.entitlements || plans[currentUser.plan] || plans.free || {};
 
-  elements.userPlanLabel.textContent = currentUser.planName || plan.name || "Free";
+  const freeDeck = getSelectedFreeRevisionTopicId();
+  const planSuffix = !hasFeature("fullRevisionLibrary") && freeDeck ? " · 1 deck" : "";
+  elements.userPlanLabel.textContent = `${currentUser.planName || plan.name || "Free"}${planSuffix}`;
   elements.workspaceKind.disabled = !hasFeature("classroomSpaces");
   elements.instantCardsButton.disabled = !selectedId;
   elements.studyPackButton.disabled = !selectedId || !hasFeature("studyPack");
@@ -4340,18 +4495,124 @@ function getVisibleNotes() {
 }
 
 function hasFeature(feature) {
-  const plan = currentUser?.entitlements || plans[currentUser?.plan] || plans.free || {};
+  const plan = isGuestMode
+    ? plans.guest || plans.free || {}
+    : currentUser?.entitlements || plans[currentUser?.plan] || plans.free || {};
   return Boolean(plan.features?.[feature]);
 }
 
-function canAccessRevisionTopic(topicId) {
-  const index = REVISION_TOPICS.findIndex((topic) => topic.id === topicId);
-  if (index === -1) return false;
-  return index < FREE_REVISION_TOPIC_LIMIT || hasFeature("fullRevisionLibrary");
+function getSelectedFreeRevisionTopicId() {
+  return isGuestMode || !currentUser ? freeRevisionTopicId || "" : currentUser.freeRevisionDeckId || "";
 }
 
-function promptRevisionUpgrade() {
-  elements.upgradeMessage.textContent = "Upgrade to Pro to unlock the full OCR revision library and Quick Practice.";
+function getRevisionTopicAccessState(topicId) {
+  const topic = getQuizTopicById(topicId);
+  if (!topic) {
+    return {
+      canAccess: false,
+      canClaim: false,
+      locked: true,
+      selectedFreeDeck: false,
+      label: "Locked",
+      reason: "This revision deck is not available.",
+    };
+  }
+
+  if (hasFeature("fullRevisionLibrary")) {
+    return {
+      canAccess: true,
+      canClaim: false,
+      locked: false,
+      selectedFreeDeck: false,
+      label: "Included",
+      reason: "Your plan includes the full OCR revision library.",
+    };
+  }
+
+  const selectedFreeDeck = getSelectedFreeRevisionTopicId();
+  if (selectedFreeDeck === topic.id) {
+    return {
+      canAccess: true,
+      canClaim: false,
+      locked: false,
+      selectedFreeDeck: true,
+      label: "Free deck",
+      reason: "This is your selected free revision deck.",
+    };
+  }
+
+  if (!selectedFreeDeck) {
+    return {
+      canAccess: false,
+      canClaim: true,
+      locked: false,
+      selectedFreeDeck: false,
+      label: "Free pick",
+      reason: "Choose one OCR deck to revise for free. Pro unlocks the rest.",
+    };
+  }
+
+  return {
+    canAccess: false,
+    canClaim: false,
+    locked: true,
+    selectedFreeDeck: false,
+    label: "Pro",
+    reason: "Upgrade to Pro to unlock every OCR Computer Science deck.",
+  };
+}
+
+function canAccessRevisionTopic(topicId) {
+  return getRevisionTopicAccessState(topicId).canAccess;
+}
+
+function canClaimFreeRevisionTopic(topicId) {
+  return getRevisionTopicAccessState(topicId).canClaim;
+}
+
+async function claimFreeRevisionTopic(topicId) {
+  const topic = getQuizTopicById(topicId);
+  if (!topic) return false;
+
+  const access = getRevisionTopicAccessState(topic.id);
+  if (access.canAccess) return true;
+  if (!access.canClaim) {
+    promptRevisionUpgrade(topic);
+    return false;
+  }
+
+  if (isGuestMode || !currentUser) {
+    saveFreeRevisionTopicId(topic.id);
+    elements.upgradeMessage.textContent = `${topic.code} ${topic.title} is now your free revision deck. Pro unlocks the full OCR library.`;
+    elements.upgradeMessage.className = "topbar-plan-message success";
+    return true;
+  }
+
+  try {
+    const response = await api("/api/revision/free-deck", {
+      method: "POST",
+      body: { deckId: topic.id },
+    });
+    currentUser = response.user || currentUser;
+    saveFreeRevisionTopicId(currentUser.freeRevisionDeckId || topic.id);
+    elements.upgradeMessage.textContent = response.message || `${topic.code} ${topic.title} is now your free revision deck.`;
+    elements.upgradeMessage.className = "topbar-plan-message success";
+    renderAccountChrome();
+    renderPlan();
+    return true;
+  } catch (error) {
+    elements.upgradeMessage.textContent = error.message;
+    elements.upgradeMessage.className = "topbar-plan-message error";
+    if (/upgrade/i.test(error.message)) {
+      openPlansModal();
+    }
+    return false;
+  }
+}
+
+function promptRevisionUpgrade(topic = null) {
+  const topicName = topic ? `${topic.code} ${topic.title}` : "this deck";
+  elements.upgradeMessage.textContent = `Upgrade to Pro to unlock ${topicName}, Quick Practice, badges and the full OCR revision library.`;
   elements.upgradeMessage.className = "topbar-plan-message error";
   openPlansModal();
 }

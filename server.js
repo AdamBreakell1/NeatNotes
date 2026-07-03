@@ -16,7 +16,7 @@ const PORT = Number(process.env.PORT || 4173);
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const SESSION_COOKIE = "nn_session";
 const CONTACT_TO = process.env.CONTACT_TO || "neatnotescontact@gmail.com";
-const FREE_REVISION_TOPIC_LIMIT = Number(process.env.FREE_REVISION_TOPIC_LIMIT || 3);
+const FREE_REVISION_DECK_LIMIT = Number(process.env.FREE_REVISION_DECK_LIMIT || 1);
 const DATA_DIR = path.join(__dirname, "data");
 const REQUESTED_DB_PATH = process.env.DATABASE_PATH || path.join(DATA_DIR, "neat-notes.sqlite");
 const DATABASE_CONFIG = prepareDatabasePath(REQUESTED_DB_PATH);
@@ -56,7 +56,7 @@ const PLAN_CATALOG = {
       studyPack: false,
       teacherDashboard: false,
       fullRevisionLibrary: false,
-      quickPractice: false,
+      quickPractice: true,
       billingPortal: false,
     },
   },
@@ -135,6 +135,7 @@ db.exec(`
     stripe_subscription_id TEXT UNIQUE,
     subscription_status TEXT,
     subscription_current_period_end TEXT,
+    free_revision_deck_id TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -1109,6 +1110,37 @@ app.get("/api/revision/decks", requireUser, (req, res) => {
   res.json({ decks });
 });
 
+app.post("/api/revision/free-deck", requireUser, (req, res) => {
+  const requestedDeckId = String(req.body.deckId || req.body.topicId || "").trim();
+  const deck = db.prepare("SELECT * FROM flashcard_decks WHERE id = ? OR topic_id = ?").get(requestedDeckId, requestedDeckId);
+  if (!deck) return res.status(404).json({ error: "Deck not found." });
+
+  if (hasFeature(req.user, "fullRevisionLibrary")) {
+    return res.json({
+      user: publicUser(req.user),
+      deck: getRevisionDeck(deck.id, req.user),
+      message: "Your plan already includes the full OCR revision library.",
+    });
+  }
+
+  if (req.user.free_revision_deck_id && req.user.free_revision_deck_id !== deck.id) {
+    return res.status(402).json({
+      error: "Your free deck is already selected. Upgrade to Pro to unlock every OCR Computer Science deck.",
+    });
+  }
+
+  const now = new Date().toISOString();
+  db.prepare("UPDATE users SET free_revision_deck_id = ?, updated_at = ? WHERE id = ?")
+    .run(deck.id, now, req.user.id);
+  const updatedUser = getUserById(req.user.id);
+
+  res.json({
+    user: publicUser(updatedUser),
+    deck: getRevisionDeck(deck.id, updatedUser),
+    message: `${deck.code} ${deck.title} is now your free revision deck.`,
+  });
+});
+
 app.get("/api/revision/decks/:id", requireUser, (req, res) => {
   const classId = String(req.query.classId || "").trim() || null;
   if (classId && !isClassParticipant(classId, req.user.id)) {
@@ -1388,6 +1420,7 @@ function migrateSchema() {
   addColumnIfMissing("users", "plan", "TEXT NOT NULL DEFAULT 'free'");
   addColumnIfMissing("users", "plan_status", "TEXT NOT NULL DEFAULT 'active'");
   addColumnIfMissing("users", "plan_updated_at", "TEXT");
+  addColumnIfMissing("users", "free_revision_deck_id", "TEXT");
   addColumnIfMissing("workspaces", "kind", "TEXT NOT NULL DEFAULT 'project'");
   db.prepare("UPDATE workspaces SET kind = 'personal' WHERE kind = 'project' AND name LIKE ?").run("%'s Notes");
   db.prepare("UPDATE users SET plan = 'pro' WHERE plan = 'plus'").run();
@@ -1678,9 +1711,7 @@ function getClassStudents(classId) {
 
 function canAccessRevisionDeck(user, deckId) {
   if (hasFeature(user, "fullRevisionLibrary")) return true;
-
-  const unlockedDecks = db.prepare("SELECT id FROM flashcard_decks ORDER BY code LIMIT ?").all(FREE_REVISION_TOPIC_LIMIT);
-  return unlockedDecks.some((deck) => deck.id === deckId);
+  return user?.free_revision_deck_id === deckId;
 }
 
 function listRevisionDecks(user, classId = null) {
@@ -1688,6 +1719,8 @@ function listRevisionDecks(user, classId = null) {
     const attempts = getDeckAttempts(deck.id, user.id, classId);
     const summary = calculateConfidenceSummary(attempts);
     const locked = !canAccessRevisionDeck(user, deck.id);
+    const freeSelectable = !hasFeature(user, "fullRevisionLibrary") && !user.free_revision_deck_id;
+    const selectedFreeDeck = user.free_revision_deck_id === deck.id;
     return {
       id: deck.id,
       topicId: deck.topic_id,
@@ -1699,7 +1732,9 @@ function listRevisionDecks(user, classId = null) {
       cardCount: deck.card_count,
       source: deck.source,
       locked,
-      requiredPlan: locked ? "pro" : null,
+      freeSelectable,
+      selectedFreeDeck,
+      requiredPlan: locked && !freeSelectable ? "pro" : null,
       confidence: summary,
       lastAttemptAt: attempts[0]?.created_at || null,
     };
@@ -1728,6 +1763,7 @@ function getRevisionDeck(deckId, user, classId = null) {
     summary: deck.summary,
     cardCount: deck.card_count,
     locked,
+    selectedFreeDeck: user.free_revision_deck_id === deck.id,
     requiredPlan: locked ? "pro" : null,
     confidence: calculateConfidenceSummary(attempts),
     cards: cards.map((card) => ({
@@ -2219,6 +2255,10 @@ function getUserByEmail(email) {
   return db.prepare("SELECT * FROM users WHERE email = ?").get(email);
 }
 
+function getUserById(id) {
+  return db.prepare("SELECT * FROM users WHERE id = ?").get(id);
+}
+
 function normalizeEmail(email) {
   const normalized = String(email || "").trim().toLowerCase();
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized) ? normalized : "";
@@ -2277,6 +2317,8 @@ function publicUser(user) {
     planStatus: user.plan_status || "active",
     subscriptionStatus: user.subscription_status || null,
     subscriptionCurrentPeriodEnd: user.subscription_current_period_end || null,
+    freeRevisionDeckId: user.free_revision_deck_id || null,
+    freeRevisionDeckLimit: FREE_REVISION_DECK_LIMIT,
     billingPortalReady: Boolean(user.stripe_customer_id && stripe),
     entitlements: plan,
     emailVerified: Boolean(user.email_verified),

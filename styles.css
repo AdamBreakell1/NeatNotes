@@ -2984,6 +2984,13 @@ input[aria-invalid="true"] {
     var(--surface);
 }
 
+.neat-question-card.claimable {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--line));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 78%, transparent), transparent 72%),
+    var(--surface);
+}
+
 .neat-question-card.locked .topic-card-meter span {
   background: linear-gradient(90deg, var(--muted), var(--accent));
 }
@@ -3021,6 +3028,12 @@ input[aria-invalid="true"] {
 .question-variant.pro {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
   background: color-mix(in srgb, var(--accent-soft) 80%, white);
+}
+
+.question-variant.free {
+  border-color: #f59e0b;
+  background: color-mix(in srgb, #fef3c7 78%, var(--surface));
+  color: #92400e;
 }
 
 .neat-question-card h4 {
@@ -3635,6 +3648,20 @@ input[aria-invalid="true"] {
   color: var(--ink);
 }
 
+.mastery-dot.claimable,
+.mastery-dot.free-selected {
+  border-color: color-mix(in srgb, #f59e0b 68%, var(--line));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, #fef3c7 72%, transparent), transparent 70%),
+    var(--surface);
+  color: var(--ink);
+}
+
+.mastery-dot.locked {
+  border-style: dashed;
+  opacity: 0.62;
+}
+
 .revision-topic-list {
   display: grid;
   gap: 6px;
@@ -3676,6 +3703,13 @@ input[aria-invalid="true"] {
 
 .revision-topic-button.locked:hover {
   opacity: 1;
+}
+
+.revision-topic-button.claimable {
+  border-color: color-mix(in srgb, #f59e0b 62%, var(--line));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, #fef3c7 62%, transparent), transparent 70%),
+    var(--surface);
 }
 
 .revision-topic-index {
@@ -3726,6 +3760,10 @@ input[aria-invalid="true"] {
   margin-top: 3px;
   color: var(--accent-strong);
   font-size: 0.62rem;
+}
+
+.revision-topic-badge.free {
+  color: #92400e;
 }
 
 .revision-topic-button.active .revision-topic-index {
@@ -3990,6 +4028,94 @@ input[aria-invalid="true"] {
 .teacher-empty-state button:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 10px 22px color-mix(in srgb, var(--accent) 14%, transparent);
+  transform: translateY(-1px);
+}
+
+.revision-paywall-panel {
+  display: grid;
+  gap: 18px;
+  grid-column: 1 / -1;
+  align-content: start;
+  border: 1px solid color-mix(in srgb, var(--accent) 54%, var(--line-dark));
+  border-radius: var(--radius);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, #fef3c7 58%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 70%, transparent), transparent 64%),
+    var(--surface);
+  padding: clamp(22px, 4vw, 34px);
+  box-shadow: 0 20px 42px rgba(23, 33, 31, 0.08);
+}
+
+.revision-paywall-panel h3 {
+  max-width: 760px;
+  margin: 0;
+  font-size: clamp(1.6rem, 3.4vw, 3rem);
+  letter-spacing: -0.05em;
+  line-height: 0.98;
+}
+
+.revision-paywall-panel p {
+  max-width: 760px;
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.revision-paywall-panel article {
+  display: grid;
+  gap: 5px;
+  width: min(100%, 440px);
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  padding: 14px;
+}
+
+.revision-paywall-panel article span,
+.revision-paywall-panel article small {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.revision-paywall-panel article strong {
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.revision-paywall-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.revision-paywall-actions button {
+  min-height: 42px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: white;
+  padding: 0 16px;
+  font-weight: 900;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.revision-paywall-actions button.secondary {
+  border-color: var(--line-dark);
+  background: var(--surface);
+  color: var(--accent-strong);
+}
+
+.revision-paywall-actions button:hover,
+.revision-paywall-actions button:focus-visible {
+  border-color: var(--accent-strong);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--accent) 16%, transparent);
   transform: translateY(-1px);
 }
 

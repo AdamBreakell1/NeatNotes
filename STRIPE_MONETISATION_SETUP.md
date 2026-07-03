@@ -7,12 +7,12 @@ Neat Notes now supports real Stripe subscription checkout.
 The platform uses a generous but limited free tier:
 
 - Free users can create notes.
-- Free users can explore the first 3 OCR Computer Science topic packs.
+- Free users can choose one OCR Computer Science deck as their free revision sample.
 - Free users see the rest of the OCR library, but locked with a Pro prompt.
 
 The upgrade path is:
 
-- **Student Pro** - unlocks the full OCR library, Quick Practice, unlimited notes/spaces, exports, study packs, version history and peer collaboration.
+- **Student Pro** - unlocks the full OCR library, Quick Practice across every deck, unlimited notes/spaces, exports, study packs, version history and peer collaboration.
 - **Teacher** - unlocks Student Pro features plus classroom spaces, class join codes, teacher dashboards and class analytics.
 - **Institution** - remains a sales conversation for schools/colleges rather than instant checkout.
 
@@ -77,7 +77,7 @@ STRIPE_PRICE_PRO=price_...
 STRIPE_PRICE_TEACHER=price_...
 STRIPE_PRICE_INSTITUTION=
 ALLOW_MOCK_BILLING=false
-FREE_REVISION_TOPIC_LIMIT=3
+FREE_REVISION_DECK_LIMIT=1
 ```
 
 Use Stripe test keys first. Only switch to live keys when you are ready to take real payments.
@@ -132,9 +132,9 @@ The user opens it through **Plans > Manage billing**.
 
 Server-side:
 
-- Free users only get backend access to the first 3 seeded revision decks.
+- Free users only get backend access to their chosen free revision deck.
 - Pro and Teacher users get `fullRevisionLibrary`.
-- Quick Practice is a Pro/Teacher feature.
+- Quick Practice is available on the chosen free deck, then expands to every deck on Pro/Teacher.
 - PDF export, version history, study packs and collaboration are already gated by plan entitlements.
 - Teacher dashboard and classroom spaces are Teacher/Institution features.
 

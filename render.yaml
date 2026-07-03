@@ -51,8 +51,8 @@ services:
         sync: false
       - key: ALLOW_MOCK_BILLING
         value: "false"
-      - key: FREE_REVISION_TOPIC_LIMIT
-        value: "3"
+      - key: FREE_REVISION_DECK_LIMIT
+        value: "1"
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
