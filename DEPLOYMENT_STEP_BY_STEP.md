@@ -248,6 +248,44 @@ Before charging real schools at scale, still add:
 
 ## Quick Troubleshooting
 
+### Render Will Not Let Me Add A Disk Yet
+
+If Render says the instance change only applies after a successful deploy, let the app deploy once using the temporary database fallback.
+
+When `/var/data` is not mounted yet, Neat Notes falls back to:
+
+```text
+/tmp/neat-notes.sqlite
+```
+
+This is only to unlock the first successful deploy. It is not permanent storage.
+
+After the deploy succeeds:
+
+1. Upgrade the instance to Starter.
+2. Add the persistent disk.
+3. Mount it at:
+
+```text
+/var/data
+```
+
+4. Keep this environment variable:
+
+```text
+DATABASE_PATH=/var/data/neat-notes.sqlite
+```
+
+5. Redeploy.
+6. Check `/api/health`.
+
+You want:
+
+```json
+"databasePersistent": true,
+"databaseFallbackActive": false
+```
+
 If deploy fails:
 
 - Check Render logs.
@@ -272,4 +310,3 @@ If Google login fails:
 - Check the Google redirect URI exactly matches the Render URL.
 - Check `GOOGLE_CLIENT_ID`.
 - Check `GOOGLE_CLIENT_SECRET`.
-

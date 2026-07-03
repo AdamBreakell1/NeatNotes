@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const crypto = require("node:crypto");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const vm = require("node:vm");
 const { DatabaseSync } = require("node:sqlite");
@@ -14,8 +15,10 @@ const PORT = Number(process.env.PORT || 4173);
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const SESSION_COOKIE = "nn_session";
 const DATA_DIR = path.join(__dirname, "data");
-const DB_PATH = process.env.DATABASE_PATH || path.join(DATA_DIR, "neat-notes.sqlite");
-const DB_DIR = path.dirname(DB_PATH);
+const REQUESTED_DB_PATH = process.env.DATABASE_PATH || path.join(DATA_DIR, "neat-notes.sqlite");
+const DATABASE_CONFIG = prepareDatabasePath(REQUESTED_DB_PATH);
+const DB_PATH = DATABASE_CONFIG.path;
+const DB_FALLBACK_ACTIVE = DATABASE_CONFIG.fallbackActive;
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || BASE_URL)
   .split(",")
   .map((origin) => origin.trim())
@@ -86,8 +89,6 @@ const PLAN_CATALOG = {
     },
   },
 };
-
-fs.mkdirSync(DB_DIR, { recursive: true });
 
 const db = new DatabaseSync(DB_PATH);
 db.exec("PRAGMA foreign_keys = ON");
@@ -336,6 +337,8 @@ app.get("/api/health", (req, res) => {
   res.json({
     ok: Boolean(database?.ok),
     service: "neat-notes",
+    databasePersistent: !DB_FALLBACK_ACTIVE,
+    databaseFallbackActive: DB_FALLBACK_ACTIVE,
     deckCount,
     timestamp: new Date().toISOString(),
   });
@@ -1099,6 +1102,30 @@ app.listen(PORT, () => {
 
 function asyncHandler(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+}
+
+function prepareDatabasePath(requestedPath) {
+  const requestedDir = path.dirname(requestedPath);
+
+  try {
+    fs.mkdirSync(requestedDir, { recursive: true });
+    return {
+      path: requestedPath,
+      fallbackActive: false,
+    };
+  } catch (error) {
+    const fallbackPath = process.env.DATABASE_FALLBACK_PATH || path.join(os.tmpdir(), "neat-notes.sqlite");
+    fs.mkdirSync(path.dirname(fallbackPath), { recursive: true });
+    console.warn(
+      `Could not prepare DATABASE_PATH directory "${requestedDir}" (${error.code || error.message}). ` +
+        `Falling back to "${fallbackPath}". Data will not persist until a Render disk is mounted at the configured path.`,
+    );
+
+    return {
+      path: fallbackPath,
+      fallbackActive: true,
+    };
+  }
 }
 
 function securityHeaders(req, res, next) {
