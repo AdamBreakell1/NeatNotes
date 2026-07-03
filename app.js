@@ -1041,6 +1041,15 @@ function updateContactMessageCounter() {
 }
 
 function handleContactRouteClick(event) {
+  const focusButton = event.target.closest("[data-contact-focus]");
+  if (focusButton) {
+    elements.contactStatus.textContent = "Use the form below to send the enquiry directly in Neat Notes.";
+    elements.contactStatus.className = "status-message success";
+    elements.contactForm.scrollIntoView({ behavior: "smooth", block: "center" });
+    elements.contactName.focus();
+    return;
+  }
+
   const routeButton = event.target.closest("[data-contact-route]");
   if (!routeButton) return;
 

@@ -4614,6 +4614,8 @@ input[aria-invalid="true"] {
   border-radius: 999px;
   background: var(--surface);
   color: var(--accent-strong);
+  cursor: pointer;
+  font: inherit;
   padding: 0 16px;
   font-weight: 850;
   text-decoration: none;

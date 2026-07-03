@@ -13,7 +13,7 @@
           storedTheme && storedTheme !== "system" ? storedTheme : prefersDark ? "dark" : "light";
       })();
     </script>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20260703-contact-native" />
   </head>
   <body>
     <div id="launch-overlay" class="launch-overlay" role="status" aria-live="polite" aria-label="Loading Neat Notes">
@@ -570,7 +570,9 @@
               </article>
             </div>
           </div>
-          <a class="contact-email-pill" href="mailto:neatnotescontact@gmail.com">neatnotescontact@gmail.com</a>
+          <button class="contact-email-pill" type="button" data-contact-focus>
+            neatnotescontact@gmail.com
+          </button>
         </header>
 
         <div class="contact-layout">
@@ -908,8 +910,8 @@
       </section>
     </div>
 
-    <script src="revision-topics.js"></script>
-    <script src="neat-questions.js"></script>
-    <script src="app.js"></script>
+    <script src="revision-topics.js?v=20260703-contact-native"></script>
+    <script src="neat-questions.js?v=20260703-contact-native"></script>
+    <script src="app.js?v=20260703-contact-native"></script>
   </body>
 </html>
