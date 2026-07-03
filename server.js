@@ -15,6 +15,7 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const SESSION_COOKIE = "nn_session";
 const DATA_DIR = path.join(__dirname, "data");
 const DB_PATH = process.env.DATABASE_PATH || path.join(DATA_DIR, "neat-notes.sqlite");
+const DB_DIR = path.dirname(DB_PATH);
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || BASE_URL)
   .split(",")
   .map((origin) => origin.trim())
@@ -86,7 +87,7 @@ const PLAN_CATALOG = {
   },
 };
 
-fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(DB_DIR, { recursive: true });
 
 const db = new DatabaseSync(DB_PATH);
 db.exec("PRAGMA foreign_keys = ON");
