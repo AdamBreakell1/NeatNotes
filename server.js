@@ -15,6 +15,7 @@ const app = express();
 const PORT = Number(process.env.PORT || 4173);
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const SESSION_COOKIE = "nn_session";
+const CONTACT_TO = process.env.CONTACT_TO || "neatnotescontact@gmail.com";
 const FREE_REVISION_TOPIC_LIMIT = Number(process.env.FREE_REVISION_TOPIC_LIMIT || 3);
 const DATA_DIR = path.join(__dirname, "data");
 const REQUESTED_DB_PATH = process.env.DATABASE_PATH || path.join(DATA_DIR, "neat-notes.sqlite");
@@ -28,6 +29,10 @@ const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || BASE_URL)
 const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: Number(process.env.AUTH_RATE_LIMIT || 25),
+});
+const contactRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.CONTACT_RATE_LIMIT || 8),
 });
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
@@ -362,6 +367,37 @@ app.get("/api/session", requireUser, (req, res) => {
 app.get("/api/plans", (req, res) => {
   res.json({ plans: PLAN_CATALOG, stripeConfigured: isStripeConfigured() });
 });
+
+app.post("/api/contact", contactRateLimiter, asyncHandler(async (req, res) => {
+  const name = String(req.body.name || "").trim().slice(0, 120);
+  const email = normalizeEmail(req.body.email);
+  const reason = String(req.body.reason || "General question").trim().slice(0, 120);
+  const message = String(req.body.message || "").trim().slice(0, 2000);
+
+  if (!name) {
+    return res.status(400).json({ error: "Enter your name." });
+  }
+
+  if (!email) {
+    return res.status(400).json({ error: "Enter a valid email address so we can reply." });
+  }
+
+  if (message.length < 10) {
+    return res.status(400).json({ error: "Add a little more detail so the enquiry can be routed properly." });
+  }
+
+  if (!hasSmtpConfig()) {
+    console.log(`Contact enquiry for ${CONTACT_TO}:`, { name, email, reason, message });
+    return res.status(503).json({
+      error: "Contact email is not configured on the server yet. Add SMTP settings in Render and try again.",
+    });
+  }
+
+  await sendContactEmail({ name, email, reason, message });
+  res.status(202).json({
+    message: "Thanks. Your enquiry has been sent to the Neat Notes team.",
+  });
+}));
 
 app.get("/api/health", (req, res) => {
   const database = db.prepare("SELECT 1 AS ok").get();
@@ -1984,6 +2020,46 @@ async function createAndSendVerification(userId, email, name) {
 
   console.log(`Verification link for ${email}: ${verificationUrl}`);
   return process.env.NODE_ENV === "production" ? {} : { devVerificationUrl: verificationUrl };
+}
+
+async function sendContactEmail({ name, email, reason, message }) {
+  const transport = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: process.env.SMTP_SECURE === "true",
+    auth: process.env.SMTP_USER
+      ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      : undefined,
+  });
+
+  const submittedAt = new Date().toISOString();
+  const subject = `Neat Notes enquiry: ${reason}`;
+  const text = [
+    "New Neat Notes enquiry",
+    "",
+    `Name: ${name}`,
+    `Email: ${email}`,
+    `Reason: ${reason}`,
+    `Submitted: ${submittedAt}`,
+    "",
+    "Message:",
+    message,
+  ].join("\n");
+
+  await transport.sendMail({
+    from: process.env.EMAIL_FROM || "Neat Notes <no-reply@localhost>",
+    to: CONTACT_TO,
+    replyTo: email,
+    subject,
+    text,
+    html: `<h2>New Neat Notes enquiry</h2>
+      <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+      <p><strong>Email:</strong> ${escapeHtml(email)}</p>
+      <p><strong>Reason:</strong> ${escapeHtml(reason)}</p>
+      <p><strong>Submitted:</strong> ${escapeHtml(submittedAt)}</p>
+      <h3>Message</h3>
+      <p>${escapeHtml(message).replaceAll("\n", "<br>")}</p>`,
+  });
 }
 
 function upsertGoogleUser(profile) {

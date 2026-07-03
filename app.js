@@ -11,7 +11,6 @@ const CLASS_MEMBERSHIPS_KEY = "neat-notes-class-memberships";
 const ACTIVE_STUDENT_CLASS_KEY = "neat-notes-active-student-class";
 const CENTRES_KEY = "neat-notes-centres";
 const LEARNING_MODE_KEY = "neat-notes-learning-mode";
-const CONTACT_EMAIL = "hello@breakellsystems.co.uk";
 const DAILY_REVIEW_GOAL = 10;
 const FREE_REVISION_TOPIC_LIMIT = 3;
 const MIN_LAUNCH_OVERLAY_MS = 2100;
@@ -953,18 +952,27 @@ function renderContactPage() {
   updateContactMessageCounter();
 }
 
-function sendContactMessage(event) {
+async function sendContactMessage(event) {
   event.preventDefault();
 
-  const name = elements.contactName.value.trim() || "Not supplied";
-  const email = elements.contactEmail.value.trim() || "Not supplied";
+  const name = elements.contactName.value.trim();
+  const email = elements.contactEmail.value.trim();
   const reason = elements.contactReason.value;
   const message = elements.contactMessage.value.trim();
+  const submitButton = elements.contactForm.querySelector(".contact-submit-button");
 
   clearContactFieldStates();
 
-  if (email !== "Not supplied" && !isValidContactEmail(email)) {
-    elements.contactStatus.textContent = "Check the email address or leave it blank if you prefer to include it in your email app.";
+  if (!name) {
+    elements.contactStatus.textContent = "Add your name so we know who the enquiry is from.";
+    elements.contactStatus.className = "status-message error";
+    elements.contactName.setAttribute("aria-invalid", "true");
+    elements.contactName.focus();
+    return;
+  }
+
+  if (!isValidContactEmail(email)) {
+    elements.contactStatus.textContent = "Enter a valid email address so we can reply.";
     elements.contactStatus.className = "status-message error";
     elements.contactEmail.setAttribute("aria-invalid", "true");
     elements.contactEmail.focus();
@@ -979,18 +987,27 @@ function sendContactMessage(event) {
     return;
   }
 
-  const subject = `Neat Notes enquiry: ${reason}`;
-  const body = [
-    `Name: ${name}`,
-    `Email: ${email}`,
-    `Reason: ${reason}`,
-    "",
-    message,
-  ].join("\n");
+  submitButton.disabled = true;
+  submitButton.textContent = "Sending...";
+  elements.contactStatus.textContent = "Sending your enquiry...";
+  elements.contactStatus.className = "status-message";
 
-  elements.contactStatus.textContent = "Opening your email app. A future hosted version can send this directly through BreakellSystems support.";
-  elements.contactStatus.className = "status-message success";
-  window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  try {
+    const response = await api("/api/contact", {
+      method: "POST",
+      body: { name, email, reason, message },
+    });
+    elements.contactStatus.textContent = response.message || "Thanks. Your enquiry has been sent.";
+    elements.contactStatus.className = "status-message success";
+    elements.contactMessage.value = "";
+    updateContactMessageCounter();
+  } catch (error) {
+    elements.contactStatus.textContent = error.message;
+    elements.contactStatus.className = "status-message error";
+  } finally {
+    submitButton.disabled = false;
+    submitButton.textContent = "Send enquiry";
+  }
 }
 
 function updateContactMessageCounter() {
@@ -1013,6 +1030,7 @@ function handleContactRouteClick(event) {
 }
 
 function clearContactFieldStates() {
+  elements.contactName.removeAttribute("aria-invalid");
   elements.contactEmail.removeAttribute("aria-invalid");
   elements.contactMessage.removeAttribute("aria-invalid");
 }

@@ -104,6 +104,8 @@ NODE_ENV=production
 DATABASE_PATH=/var/data/neat-notes.sqlite
 JSON_BODY_LIMIT=1mb
 AUTH_RATE_LIMIT=25
+CONTACT_TO=neatnotescontact@gmail.com
+CONTACT_RATE_LIMIT=8
 BASE_URL=https://YOUR_RENDER_URL.onrender.com
 CORS_ORIGIN=https://YOUR_RENDER_URL.onrender.com
 SMTP_HOST=smtp.resend.com
@@ -166,6 +168,20 @@ If no email arrives:
 2. Check `SMTP_PASS` is correct.
 3. Check `EMAIL_FROM` is allowed by Resend.
 4. Check your Resend dashboard for blocked or rejected emails.
+
+## Step 6B: Test The Contact Form
+
+1. Open the live app.
+2. Go to **Contact**.
+3. Send a short test enquiry with your own email address.
+4. Check `neatnotescontact@gmail.com`.
+
+If no contact email arrives:
+
+1. Check `CONTACT_TO=neatnotescontact@gmail.com` in Render.
+2. Check the same SMTP settings used for verification email.
+3. Check Render logs for `/api/contact` errors.
+4. Check Resend for rejected or blocked messages.
 
 ## Step 7: Test Saved Data
 

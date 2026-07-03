@@ -34,11 +34,12 @@ Required locally:
 
 Optional production integrations:
 
-- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` for verification email delivery.
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` for verification and contact form email delivery.
+- `CONTACT_TO`, `CONTACT_RATE_LIMIT` for public contact form routing and abuse protection.
 - `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` for Google sign-in.
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO`, `STRIPE_PRICE_TEACHER` for live subscription billing.
 
-Without SMTP, local verification links are printed to the server console and returned in development API responses.
+Without SMTP, local verification links are printed to the server console and returned in development API responses. The contact form requires SMTP in production and routes to `neatnotescontact@gmail.com` by default.
 
 ## Backend Architecture
 

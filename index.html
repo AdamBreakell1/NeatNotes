@@ -570,7 +570,7 @@
               </article>
             </div>
           </div>
-          <a class="contact-email-pill" href="mailto:hello@breakellsystems.co.uk">hello@breakellsystems.co.uk</a>
+          <a class="contact-email-pill" href="mailto:neatnotescontact@gmail.com">neatnotescontact@gmail.com</a>
         </header>
 
         <div class="contact-layout">
@@ -578,15 +578,15 @@
             <p class="eyebrow">Enquiry</p>
             <h3>Send an enquiry</h3>
             <p>
-              Tell us what you need and we will route the message to the right BreakellSystems pathway. This local
-              prototype opens your email app; the structure is ready for a future support inbox or ticket system.
+              Tell us what you need and we will route the message to the right BreakellSystems pathway. Your enquiry
+              is sent to the Neat Notes support inbox for follow-up.
             </p>
             <form id="contact-form" class="contact-form" novalidate>
               <label for="contact-name">Name</label>
-              <input id="contact-name" type="text" autocomplete="name" placeholder="Your name" />
+              <input id="contact-name" type="text" autocomplete="name" placeholder="Your name" required />
 
               <label for="contact-email">Email</label>
-              <input id="contact-email" type="email" autocomplete="email" placeholder="you@example.com" />
+              <input id="contact-email" type="email" autocomplete="email" placeholder="you@example.com" required />
 
               <label for="contact-reason">Reason</label>
               <select id="contact-reason">
@@ -607,6 +607,8 @@
                 id="contact-message"
                 rows="7"
                 maxlength="1000"
+                minlength="10"
+                required
                 aria-describedby="contact-message-counter contact-privacy-note contact-status"
                 placeholder="Tell us what you need help with."
               ></textarea>

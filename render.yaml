@@ -19,6 +19,10 @@ services:
         value: 1mb
       - key: AUTH_RATE_LIMIT
         value: "25"
+      - key: CONTACT_TO
+        value: neatnotescontact@gmail.com
+      - key: CONTACT_RATE_LIMIT
+        value: "8"
       - key: BASE_URL
         sync: false
       - key: CORS_ORIGIN
