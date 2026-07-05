@@ -392,14 +392,23 @@ app.post("/api/contact", contactRateLimiter, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Add a little more detail so the enquiry can be routed properly." });
   }
 
-  if (!hasSmtpConfig()) {
+  const smtpConfigError = getSmtpConfigError();
+  if (smtpConfigError) {
     console.log(`Contact enquiry for ${CONTACT_TO}:`, { name, email, reason, message });
     return res.status(503).json({
-      error: "Contact email is not configured on the server yet. Add SMTP settings in Render and try again.",
+      error: smtpConfigError,
     });
   }
 
-  await sendContactEmail({ name, email, reason, message });
+  try {
+    await sendContactEmail({ name, email, reason, message });
+  } catch (error) {
+    console.error("Contact email delivery failed:", sanitizeMailerError(error));
+    return res.status(502).json({
+      error: getEmailDeliveryErrorMessage(error),
+    });
+  }
+
   res.status(202).json({
     message: "Thanks. Your enquiry has been sent to the Neat Notes team.",
   });
@@ -1258,8 +1267,9 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Neat Notes running at ${BASE_URL}`);
-  if (!hasSmtpConfig()) {
-    console.log("SMTP is not configured. Verification links will be printed to the server console and returned in dev responses.");
+  const smtpConfigError = getSmtpConfigError();
+  if (smtpConfigError) {
+    console.log(`${smtpConfigError} Verification links will be printed to the server console and returned in dev responses.`);
   }
   if (!isGoogleConfigured()) {
     console.log("Google OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable it.");
@@ -2121,7 +2131,7 @@ async function createAndSendVerification(userId, email, name) {
     });
 
     await transport.sendMail({
-      from: process.env.EMAIL_FROM || "Neat Notes <no-reply@localhost>",
+      from: getEmailFromAddress(),
       to: email,
       subject: "Verify your Neat Notes account",
       text: `Hi ${name},\n\nVerify your Neat Notes account here:\n${verificationUrl}\n\nThis link expires in 24 hours.`,
@@ -2160,7 +2170,7 @@ async function sendContactEmail({ name, email, reason, message }) {
   ].join("\n");
 
   await transport.sendMail({
-    from: process.env.EMAIL_FROM || "Neat Notes <no-reply@localhost>",
+    from: getEmailFromAddress(),
     to: CONTACT_TO,
     replyTo: email,
     subject,
@@ -2403,7 +2413,50 @@ function publicUser(user) {
 }
 
 function hasSmtpConfig() {
-  return Boolean(process.env.SMTP_HOST);
+  return !getSmtpConfigError();
+}
+
+function getSmtpConfigError() {
+  if (!process.env.SMTP_HOST) {
+    return "Email delivery is not configured on the server yet. Add SMTP settings in Render and try again.";
+  }
+
+  if (process.env.SMTP_USER && !process.env.SMTP_PASS) {
+    return "SMTP is missing its password or app password. Add SMTP_PASS in Render, then try again.";
+  }
+
+  if (process.env.SMTP_USER?.toLowerCase() === "resend" && !process.env.EMAIL_FROM) {
+    return "EMAIL_FROM must be set to a verified sender address when using Resend SMTP.";
+  }
+
+  return "";
+}
+
+function getEmailFromAddress() {
+  if (process.env.EMAIL_FROM) {
+    return process.env.EMAIL_FROM;
+  }
+
+  if (process.env.SMTP_USER?.includes("@")) {
+    return `Neat Notes <${process.env.SMTP_USER}>`;
+  }
+
+  return "Neat Notes <no-reply@localhost>";
+}
+
+function getEmailDeliveryErrorMessage(error) {
+  const detail = process.env.NODE_ENV === "production" ? "" : ` (${error.message})`;
+  return `We could not send the enquiry email from the server. Check the SMTP provider, SMTP_PASS/app password, and EMAIL_FROM settings in Render, then try again.${detail}`;
+}
+
+function sanitizeMailerError(error) {
+  return {
+    message: error.message,
+    code: error.code,
+    command: error.command,
+    responseCode: error.responseCode,
+    response: error.response,
+  };
 }
 
 function isGoogleConfigured() {
