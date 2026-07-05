@@ -1,4 +1,15 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" fill="#0f766e"/>
-  <path d="M15 47V17h7.2l19.6 30H35L22 26.8V47h-7Zm28 0V17h6v30h-6Z" fill="#fff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Neat Notes">
+  <rect x="4" y="4" width="56" height="56" fill="#0f766e"/>
+  <rect x="4" y="4" width="56" height="56" fill="none" stroke="#0f766e" stroke-width="2"/>
+  <path d="M8 60 48 4h12L20 60H8Z" fill="#ffffff" opacity=".13"/>
+  <path d="M-4 58 38 4h8L4 58H-4Z" fill="#ffffff" opacity=".08"/>
+  <text
+    x="32"
+    y="37"
+    fill="#ffffff"
+    font-family="Inter, Arial, Helvetica, sans-serif"
+    font-size="21"
+    font-weight="900"
+    letter-spacing="2.4"
+    text-anchor="middle">NN</text>
 </svg>
