@@ -253,6 +253,7 @@ const elements = {
   themeChoiceGroup: document.querySelector("#theme-choice-group"),
   topbarLoginButton: document.querySelector("#topbar-login-button"),
   topbarLogoutButton: document.querySelector("#topbar-logout-button"),
+  topbarBrandButton: document.querySelector("#topbar-brand-button"),
   topbarProfileAvatar: document.querySelector("#topbar-profile-avatar"),
   topbarSignupButton: document.querySelector("#topbar-signup-button"),
   topbarDate: document.querySelector("#topbar-date"),
@@ -294,6 +295,7 @@ elements.signupForm.addEventListener("input", clearAuthMessageOnInput);
 elements.logoutButton.addEventListener("click", logout);
 elements.topbarLoginButton.addEventListener("click", () => openAuthModal("login"));
 elements.topbarSignupButton.addEventListener("click", () => openAuthModal("signup"));
+elements.topbarBrandButton.addEventListener("click", handleTopbarBrandAction);
 elements.accountProfileButton.addEventListener("click", () => openSettingsModal("account"));
 elements.topbarLogoutButton.addEventListener("click", logout);
 elements.closeAuthButton.addEventListener("click", closeAuthModal);
@@ -1518,6 +1520,28 @@ function showLandingPage() {
   hideLaunchOverlay();
 }
 
+function handleTopbarBrandAction() {
+  if (isGuestMode || !currentUser) {
+    exitDemoWorkspace();
+    return;
+  }
+
+  setAppSection("notes");
+}
+
+function exitDemoWorkspace() {
+  localStorage.removeItem(LANDING_DISMISSED_KEY);
+  activeAppSection = "notes";
+  activeLearningMode = "student";
+  localStorage.setItem(LEARNING_MODE_KEY, activeLearningMode);
+  elements.authView.hidden = true;
+  elements.appView.hidden = true;
+  elements.landingView.hidden = false;
+  hideLaunchOverlay();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  trackEvent("demo_exited_to_landing");
+}
+
 function openDemoWorkspace(options = {}) {
   localStorage.setItem(LANDING_DISMISSED_KEY, "true");
   ensureDemoWorkspace({ reset: false });
@@ -2633,6 +2657,8 @@ function renderAccountChrome() {
   const isSignedIn = Boolean(currentUser) && !isGuestMode;
   elements.guestAccountActions.hidden = isSignedIn;
   elements.signedInAccountActions.hidden = !isSignedIn;
+  elements.topbarBrandButton.setAttribute("aria-label", isSignedIn ? "Return to Notes" : "Exit demo and return to the Neat Notes homepage");
+  elements.topbarBrandButton.title = isSignedIn ? "Return to Notes" : "Exit demo";
   renderProfileAvatar(elements.topbarProfileAvatar);
 
   if (isSignedIn) {
