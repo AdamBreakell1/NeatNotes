@@ -3,7 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Neat Notes | A BreakellSystems product</title>
+    <meta
+      name="description"
+      content="Neat Notes is an OCR A-Level Computer Science revision workspace for notes, flashcards, quizzes, mastery tracking and teacher class insight."
+    />
+    <meta property="og:title" content="Neat Notes | OCR A-Level Computer Science revision" />
+    <meta
+      property="og:description"
+      content="Write lesson notes, generate revision materials, practise OCR Computer Science topics and track progress in one workspace."
+    />
+    <meta property="og:type" content="website" />
+    <title>Neat Notes | OCR A-Level Computer Science revision</title>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <script>
       (() => {
@@ -13,7 +23,7 @@
           storedTheme && storedTheme !== "system" ? storedTheme : prefersDark ? "dark" : "light";
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=20260703-contact-native" />
+    <link rel="stylesheet" href="styles.css?v=20260705-saas-pass" />
   </head>
   <body>
     <div id="launch-overlay" class="launch-overlay" role="status" aria-live="polite" aria-label="Loading Neat Notes">
@@ -25,6 +35,106 @@
         </div>
       </div>
     </div>
+
+    <main id="landing-view" class="landing-page" hidden>
+      <header class="landing-nav" aria-label="Neat Notes landing navigation">
+        <div class="topbar-product">
+          <span class="brand-mark">NN</span>
+          <div>
+            <strong>Neat Notes</strong>
+            <span>A BreakellSystems product</span>
+          </div>
+        </div>
+        <div class="landing-nav-actions">
+          <button type="button" data-landing-action="demo">View demo workspace</button>
+          <button type="button" data-landing-action="login">Login</button>
+          <button class="primary-account-button" type="button" data-landing-action="signup">Start free</button>
+        </div>
+      </header>
+
+      <section class="landing-hero">
+        <div>
+          <p class="eyebrow">OCR H446 revision workspace</p>
+          <h1>OCR A-Level Computer Science revision, notes and progress tracking in one workspace.</h1>
+          <p>
+            Write or paste lesson notes, generate flashcards and quizzes, then track weak topics, confidence and
+            mastery across the OCR specification.
+          </p>
+          <div class="landing-hero-actions">
+            <button class="primary-account-button" type="button" data-landing-action="signup">Start free</button>
+            <button type="button" data-landing-action="demo">View demo workspace</button>
+            <button type="button" data-landing-action="teacher">Explore teacher tools</button>
+          </div>
+        </div>
+        <aside class="landing-demo-card" aria-label="Demo workspace preview">
+          <span>Demo workspace</span>
+          <strong>1.1.1 Structure of the Processor</strong>
+          <p>Sample note, generated cards, Quick Practice questions, progress signals and a weak-topic recommendation.</p>
+          <div>
+            <span>5 cards ready</span>
+            <span>5 quiz checks</span>
+            <span>OCR topic map</span>
+          </div>
+        </aside>
+      </section>
+
+      <section class="landing-workflow" aria-label="Neat Notes workflow">
+        <article><span>1</span><strong>Write or paste notes</strong><p>Structure OCR topic notes with headings, definitions, examples and revision tasks.</p></article>
+        <article><span>2</span><strong>Generate revision</strong><p>Create summaries, flashcards, quiz checks, key terms and exam-style prompts from the note.</p></article>
+        <article><span>3</span><strong>Revise smarter</strong><p>Use confidence ratings, streaks and recommendations to decide what to revise next.</p></article>
+      </section>
+
+      <section class="landing-benefits-grid">
+        <div>
+          <p class="eyebrow">Students</p>
+          <h2>Independent revision with structure.</h2>
+          <ul>
+            <li>Daily review mission and streak tracking</li>
+            <li>Topic mastery across OCR Computer Science</li>
+            <li>Flashcards, Quick Practice and confidence scoring</li>
+            <li>Exportable revision packs on paid plans</li>
+          </ul>
+        </div>
+        <div>
+          <p class="eyebrow">Teachers</p>
+          <h2>Classroom insight without spreadsheet gymnastics.</h2>
+          <ul>
+            <li>Create classes and invite students with join codes</li>
+            <li>View class mastery, confidence and activity</li>
+            <li>Identify weak topics and intervention priorities</li>
+            <li>Set revision tasks and monitor completion</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="landing-pricing-preview" aria-label="Pricing preview">
+        <div class="section-title"><span>Pricing preview</span><span>Cancel anytime · Secure billing through Stripe</span></div>
+        <div class="landing-plan-row">
+          <article><span>Free</span><strong>£0</strong><p>25 notes and one OCR deck of your choice.</p></article>
+          <article><span>Pro</span><strong>£3.99/mo</strong><p>Full OCR library, unlimited notes, exports and collaboration.</p></article>
+          <article><span>Teacher</span><strong>£9.99/mo</strong><p>Class tools, join codes, assignments and dashboards.</p></article>
+          <article><span>Institution</span><strong>Custom</strong><p>Managed rollout for schools and departments.</p></article>
+        </div>
+      </section>
+
+      <section class="landing-trust-faq">
+        <div class="landing-trust">
+          <article><span>Teacher-built</span><strong>Built by a UK Computer Science teacher</strong></article>
+          <article><span>OCR-focused</span><strong>Designed around A-Level Computer Science revision</strong></article>
+          <article><span>Data-aware</span><strong>GDPR-conscious workspace and export controls</strong></article>
+          <article><span>Classroom-ready</span><strong>Supports independent study and intervention</strong></article>
+        </div>
+        <div class="landing-faq">
+          <p class="eyebrow">FAQ</p>
+          <details open><summary>Is Neat Notes free?</summary><p>Yes. Free accounts can create notes and choose one OCR revision deck to try.</p></details>
+          <details><summary>What does Pro unlock?</summary><p>Pro unlocks the full OCR library, unlimited notes, exports, version history, collaboration and full Quick Practice.</p></details>
+          <details><summary>Can teachers create classes?</summary><p>Yes. Teacher mode supports class creation, join codes and class insight tools.</p></details>
+          <details><summary>Is it only for OCR A-Level Computer Science?</summary><p>The current product focus is OCR A-Level Computer Science. The structure can expand to other courses as the product grows.</p></details>
+          <details><summary>Can I cancel anytime?</summary><p>Paid plans are managed securely through Stripe, including billing changes and cancellation.</p></details>
+          <details><summary>How is student data handled?</summary><p>Student and class data is used to provide the workspace, revision tracking and teacher insight. Schools can request export or deletion support.</p></details>
+        </div>
+      </section>
+    </main>
 
     <main id="auth-view" class="auth-page auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-card-title" hidden>
       <div class="auth-backdrop" data-close-auth></div>
@@ -269,6 +379,7 @@
               <p>Theme, density, default folders, and editor comfort.</p>
             </div>
             <button type="button" data-open-sidebar-settings>Open settings</button>
+            <button class="subtle-panel-button" type="button" data-reset-demo>Reset demo workspace</button>
           </section>
         </div>
       </aside>
@@ -288,7 +399,7 @@
         <header class="editor-masthead">
           <div class="note-identity">
             <p id="note-date" class="eyebrow">New note</p>
-            <h2 id="auto-title">Untitled note</h2>
+            <h2 id="auto-title" contenteditable="true" role="textbox" aria-label="Rename note">Untitled note</h2>
           </div>
           <div class="editor-actions">
             <label for="tag-input">Folder</label>
@@ -300,10 +411,12 @@
           <div class="format-toolbar" aria-label="Formatting tools">
             <button type="button" data-format="heading">Topic</button>
             <button type="button" data-format="subheading">Key point</button>
+            <button type="button" data-format="definition">Definition</button>
+            <button type="button" data-format="example">Example</button>
+            <button type="button" data-format="examtip">Exam tip</button>
             <button type="button" data-format="bullet">Bullet</button>
             <button type="button" data-format="numbered">Steps</button>
             <button type="button" data-format="check">Revision task</button>
-            <button type="button" data-format="quote">Definition</button>
             <button type="button" data-format="divider">Divider</button>
           </div>
           <div class="editor-toolbar">
@@ -344,7 +457,7 @@
           <aside class="study-pane" aria-label="Study output">
             <div class="summary-box">
               <span>Auto summary</span>
-              <div id="summary-text" class="summary-text">Start writing and a tidy summary will appear here.</div>
+              <div id="summary-text" class="summary-text">Start writing and a tidy summary is built here.</div>
             </div>
 
             <section id="insights-panel" class="insights-panel" hidden></section>
@@ -364,30 +477,7 @@
               </div>
             </section>
 
-            <section class="note-intelligence-panel" aria-label="Future note intelligence">
-              <div class="section-title">
-                <span>Learning intelligence</span>
-                <span>Prepared</span>
-              </div>
-              <div class="intelligence-grid">
-                <article>
-                  <span>OCR coverage</span>
-                  <strong>Ready for spec checks</strong>
-                </article>
-                <article>
-                  <span>Quality score</span>
-                  <strong>Awaiting note depth</strong>
-                </article>
-                <article>
-                  <span>Knowledge gaps</span>
-                  <strong>Generated from weak topics</strong>
-                </article>
-                <article>
-                  <span>Teacher comments</span>
-                  <strong>Collaboration-ready</strong>
-                </article>
-              </div>
-            </section>
+            <section id="note-intelligence-panel" class="note-intelligence-panel" aria-label="Note quality and revision readiness"></section>
 
             <div class="preview-wrap">
               <div class="section-title">
@@ -420,10 +510,10 @@
               <button id="revision-continue-button" class="revision-primary-action" type="button">Continue revision</button>
               <button id="revision-progress-jump-button" class="revision-secondary-action" type="button">View progress</button>
             </div>
-            <div class="revision-tier-strip" aria-label="Future subscription tiers">
+            <div class="revision-tier-strip" aria-label="Subscription tiers">
               <span class="tier-chip tier-free">Free starter</span>
-              <span class="tier-chip tier-pro">Student Pro ready</span>
-              <span class="tier-chip tier-teacher">Teacher and college tools planned</span>
+              <span class="tier-chip tier-pro">Student Pro</span>
+              <span class="tier-chip tier-teacher">Teacher and college tools</span>
             </div>
           </div>
           <div class="revision-summary-grid" aria-label="Revision summary">
@@ -523,21 +613,21 @@
             </div>
           </div>
 
-          <div class="revision-retention-grid" aria-label="Future study pathways">
+          <div class="revision-retention-grid" aria-label="Study pathways">
             <article class="retention-card" data-tier="free">
               <span>Continue where you left off</span>
-              <strong id="revision-weak-topic">Recommended topic will appear here</strong>
+              <strong id="revision-weak-topic">Recommended topic is shown here</strong>
               <p>Neat Notes can steer students back into the weakest or next incomplete pack.</p>
             </article>
             <article class="retention-card premium-ready" data-tier="student-pro">
               <span>Weekly revision missions</span>
-              <strong>Mission engine ready</strong>
-              <p>Future Student Pro plans can add weekly targets, streak rewards and revision calendars.</p>
+              <strong>Build consistent study habits</strong>
+              <p>Pro expands missions across the complete OCR library with streak and completion history.</p>
             </article>
             <article class="retention-card premium-ready" data-tier="teacher-college">
               <span>Exam mode and assignments</span>
               <strong>Teacher/College pathway</strong>
-              <p>Future teacher tools can set class tasks, exam-mode quizzes and completion dashboards.</p>
+              <p>Teacher plans add class tasks, exam-mode practice and completion dashboards.</p>
             </article>
           </div>
         </section>
@@ -640,13 +730,13 @@
             <article class="contact-card contact-route-card">
               <p class="eyebrow">Roadmap</p>
               <h3>Suggest a subject pack</h3>
-              <p>Request future A-Level subjects, exam boards, or interactive revision formats.</p>
+              <p>Request additional A-Level subjects, exam boards, or interactive revision formats.</p>
               <button type="button" data-contact-route="Subject pack request">Suggest a pack</button>
             </article>
             <article class="contact-card contact-route-card">
               <p class="eyebrow">Questions</p>
               <h3>General questions</h3>
-              <p>Ask about BreakellSystems, Neat Notes, partnerships, beta access, or the product roadmap.</p>
+              <p>Ask about BreakellSystems, Neat Notes, partnerships, school setup, or account questions.</p>
               <button type="button" data-contact-route="General question">Ask a question</button>
             </article>
           </aside>
@@ -663,47 +753,44 @@
           </article>
           <article>
             <span>GDPR-conscious</span>
-            <p>Future hosted contact flows can connect to proper consent, ticketing and data retention controls.</p>
+            <p>Contact data is used to respond to enquiries and support account, billing or school setup requests.</p>
           </article>
           <article>
             <span>Classroom-ready</span>
-            <p>Roadmap support for teacher assignments, institution demos and school partnership enquiries.</p>
+            <p>Teacher tools support class setup, revision insight and school partnership enquiries.</p>
           </article>
         </section>
 
-        <section class="contact-future-grid" aria-label="Future help channels">
+        <section class="contact-future-grid" aria-label="Support categories">
           <div>
             <p class="eyebrow">Additional help</p>
-            <h3>Support channels ready to scale</h3>
-            <p>
-              These placeholders prepare BreakellSystems for future knowledge base, status, live chat and enterprise
-              support workflows without changing the current local prototype behaviour.
-            </p>
+            <h3>Choose the right support route</h3>
+            <p>Select a category, add a short message, and the enquiry is routed to the Neat Notes support inbox.</p>
           </div>
           <div class="future-support-grid">
-            <button type="button" disabled>
-              <span>FAQ accordion</span>
-              <strong>Coming later</strong>
+            <button type="button" data-contact-route="Account access">
+              <span>Account access</span>
+              <strong>Login and verification</strong>
             </button>
-            <button type="button" disabled>
-              <span>Knowledge base</span>
-              <strong>Articles and guides</strong>
+            <button type="button" data-contact-route="Billing">
+              <span>Billing</span>
+              <strong>Plans and invoices</strong>
             </button>
-            <button type="button" disabled>
-              <span>Status page</span>
-              <strong>Service health</strong>
+            <button type="button" data-contact-route="School setup">
+              <span>School setup</span>
+              <strong>Classes and rollout</strong>
             </button>
-            <button type="button" disabled>
-              <span>Enterprise demos</span>
+            <button type="button" data-contact-route="Bug report">
+              <span>Bug report</span>
+              <strong>Something is not working</strong>
+            </button>
+            <button type="button" data-contact-route="Feature request">
+              <span>Feature request</span>
+              <strong>Improve the product</strong>
+            </button>
+            <button type="button" data-contact-route="Enterprise demo">
+              <span>Enterprise demo</span>
               <strong>School partnerships</strong>
-            </button>
-            <button type="button" disabled>
-              <span>Beta programme</span>
-              <strong>Early feature access</strong>
-            </button>
-            <button type="button" disabled>
-              <span>Feature requests</span>
-              <strong>Roadmap signals</strong>
             </button>
           </div>
         </section>
@@ -787,12 +874,25 @@
               <li>Everything in Teacher</li>
               <li>Department workspaces</li>
               <li>Managed onboarding</li>
-              <li>Admin controls later</li>
-              <li>SSO-ready roadmap</li>
+              <li>Data protection support</li>
+              <li>School invoice conversations</li>
             </ul>
             <button class="plan-button institutional" type="button" data-plan="institution">Register interest</button>
           </article>
         </div>
+        <section class="pricing-comparison" aria-label="Plan comparison">
+          <div class="section-title"><span>Feature comparison</span><span>Secure payments by Stripe · Cancel anytime</span></div>
+          <div class="comparison-table" role="table" aria-label="Neat Notes plan comparison">
+            <div role="row"><span role="columnheader">Feature</span><strong>Free</strong><strong>Pro</strong><strong>Teacher</strong><strong>Institution</strong></div>
+            <div role="row"><span>Notes</span><strong>25</strong><strong>Unlimited</strong><strong>Unlimited</strong><strong>Managed</strong></div>
+            <div role="row"><span>OCR decks</span><strong>1 deck</strong><strong>Full library</strong><strong>Full library</strong><strong>Department rollout</strong></div>
+            <div role="row"><span>Flashcards and quizzes</span><strong>Limited</strong><strong>Full</strong><strong>Full + classes</strong><strong>Managed</strong></div>
+            <div role="row"><span>PDF export and version history</span><strong>—</strong><strong>Included</strong><strong>Included</strong><strong>Included</strong></div>
+            <div role="row"><span>Teacher dashboard</span><strong>—</strong><strong>—</strong><strong>Included</strong><strong>Included</strong></div>
+            <div role="row"><span>School support</span><strong>Contact</strong><strong>Contact</strong><strong>Priority</strong><strong>Custom</strong></div>
+          </div>
+          <p>Need a school invoice? Contact us and choose “Billing” or “School setup”.</p>
+        </section>
         <div class="billing-footer">
           <p>Already subscribed? Manage invoices, payment methods, and cancellations securely in Stripe.</p>
           <button class="plan-button subtle" type="button" data-billing-portal>Manage billing</button>
@@ -910,8 +1010,29 @@
       </section>
     </div>
 
-    <script src="revision-topics.js?v=20260703-contact-native"></script>
-    <script src="neat-questions.js?v=20260703-contact-native"></script>
-    <script src="app.js?v=20260703-contact-native"></script>
+    <div id="legal-modal" class="legal-modal" hidden>
+      <div class="legal-backdrop" data-close-legal></div>
+      <section class="legal-dialog" aria-labelledby="legal-title" aria-modal="true" role="dialog">
+        <button class="modal-close-button" type="button" data-close-legal aria-label="Close legal information">×</button>
+        <p class="eyebrow">BreakellSystems</p>
+        <h2 id="legal-title">Privacy and terms</h2>
+        <div id="legal-content" class="legal-content"></div>
+      </section>
+    </div>
+
+    <footer class="site-footer" aria-label="Legal and trust links">
+      <button type="button" data-legal-page="privacy">Privacy Policy</button>
+      <button type="button" data-legal-page="terms">Terms of Service</button>
+      <button type="button" data-legal-page="cookies">Cookie Policy</button>
+      <button type="button" data-legal-page="data-protection">Data Protection</button>
+      <button type="button" data-legal-page="billing">Cancellation/Billing Policy</button>
+      <button type="button" data-app-section="contact">Contact</button>
+      <button type="button" data-open-pricing-footer>Pricing</button>
+    </footer>
+
+    <script src="revision-generator.js?v=20260705-saas-pass"></script>
+    <script src="revision-topics.js?v=20260705-saas-pass"></script>
+    <script src="neat-questions.js?v=20260705-saas-pass"></script>
+    <script src="app.js?v=20260705-saas-pass"></script>
   </body>
 </html>

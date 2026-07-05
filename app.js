@@ -1,6 +1,7 @@
 const SETTINGS_KEY = "neat-notes-settings";
 const THEME_KEY = "neat-notes-theme";
 const GUEST_WORKSPACE_KEY = "neat-notes-guest-workspace";
+const LANDING_DISMISSED_KEY = "neat-notes-landing-dismissed";
 const REVISION_BADGES_KEY = "neat-notes-revision-badges";
 const STUDY_HISTORY_KEY = "neat-notes-study-history";
 const NEAT_QUIZ_PROGRESS_KEY = "neat-notes-quiz-progress";
@@ -12,6 +13,7 @@ const CLASS_MEMBERSHIPS_KEY = "neat-notes-class-memberships";
 const ACTIVE_STUDENT_CLASS_KEY = "neat-notes-active-student-class";
 const CENTRES_KEY = "neat-notes-centres";
 const LEARNING_MODE_KEY = "neat-notes-learning-mode";
+const APP_EVENT_LOG_KEY = "neat-notes-event-log";
 const DAILY_REVIEW_GOAL = 10;
 const MIN_LAUNCH_OVERLAY_MS = 2100;
 const launchOverlayStartedAt = performance.now();
@@ -99,6 +101,7 @@ const elements = {
   authMessage: document.querySelector("#auth-message"),
   authView: document.querySelector("#auth-view"),
   authCardTitle: document.querySelector("#auth-card-title"),
+  landingView: document.querySelector("#landing-view"),
   autoTitle: document.querySelector("#auto-title"),
   achievementBadge: document.querySelector("#achievement-badge"),
   achievementCollectionButton: document.querySelector("#achievement-view-badges-button"),
@@ -140,6 +143,7 @@ const elements = {
   noteBody: document.querySelector("#note-body"),
   noteCount: document.querySelector("#note-count"),
   noteDate: document.querySelector("#note-date"),
+  noteIntelligencePanel: document.querySelector("#note-intelligence-panel"),
   notesColumn: document.querySelector(".notes-column"),
   notesList: document.querySelector("#notes-list"),
   closePlansButton: document.querySelector("#close-plans-button"),
@@ -201,6 +205,10 @@ const elements = {
   settingsMessage: document.querySelector("#settings-message"),
   settingsModal: document.querySelector("#settings-modal"),
   settingsTabs: document.querySelector(".settings-tabs"),
+  legalModal: document.querySelector("#legal-modal"),
+  legalContent: document.querySelector("#legal-content"),
+  legalTitle: document.querySelector("#legal-title"),
+  siteFooter: document.querySelector(".site-footer"),
   shareEmail: document.querySelector("#share-email"),
   shareForm: document.querySelector("#share-form"),
   showLogin: document.querySelector("#show-login"),
@@ -246,6 +254,7 @@ const elements = {
 
 elements.showLogin.addEventListener("click", () => setAuthMode("login"));
 elements.showSignup.addEventListener("click", () => setAuthMode("signup"));
+elements.landingView.addEventListener("click", handleLandingClick);
 elements.loginForm.addEventListener("submit", login);
 elements.signupForm.addEventListener("submit", signup);
 document.querySelectorAll("[data-toggle-password]").forEach((button) => {
@@ -284,6 +293,8 @@ elements.achievementModal.addEventListener("click", handleAchievementModalClick)
 elements.settingsButton.addEventListener("click", openSettingsModal);
 elements.closeSettingsButton.addEventListener("click", closeSettingsModal);
 elements.settingsModal.addEventListener("click", handleSettingsModalClick);
+elements.legalModal.addEventListener("click", handleLegalModalClick);
+elements.siteFooter.addEventListener("click", handleFooterClick);
 elements.settingsTabs.addEventListener("click", switchSettingsTab);
 elements.themeChoiceGroup.addEventListener("click", chooseTheme);
 elements.settingsDensity.addEventListener("change", updateSettingsFromControls);
@@ -326,10 +337,13 @@ elements.exportPdfButton.addEventListener("click", exportSelectedPdf);
 elements.historyButton.addEventListener("click", showVersionHistory);
 elements.dashboardButton.addEventListener("click", showTeacherDashboard);
 elements.formatToolbar.addEventListener("click", applyFormattingAction);
+elements.autoTitle.addEventListener("keydown", handleTitleKeydown);
+elements.autoTitle.addEventListener("blur", renameSelectedNoteFromTitle);
 elements.noteBody.addEventListener("input", updateActiveNote);
 elements.noteBody.addEventListener("keydown", handleEditorKeydown);
 elements.tagInput.addEventListener("input", updateActiveNote);
 elements.searchInput.addEventListener("input", renderNotesAndFolders);
+elements.notesList.addEventListener("click", handleNotesListClick);
 elements.notesSidebarContext.addEventListener("click", handleNotesSidebarClick);
 elements.studyPane.addEventListener("click", handleStudyPaneClick);
 elements.contactForm.addEventListener("submit", sendContactMessage);
@@ -685,6 +699,21 @@ function recordActivityEvent(event) {
   saveLocalArray(ACTIVITY_EVENTS_KEY, activityEvents);
 }
 
+function trackEvent(name, details = {}) {
+  try {
+    const existing = JSON.parse(localStorage.getItem(APP_EVENT_LOG_KEY) || "[]");
+    const events = Array.isArray(existing) ? existing : [];
+    events.unshift({
+      name,
+      details,
+      createdAt: new Date().toISOString(),
+    });
+    localStorage.setItem(APP_EVENT_LOG_KEY, JSON.stringify(events.slice(0, 250)));
+  } catch {
+    // Product analytics should never block the learner workflow.
+  }
+}
+
 function createEmptyNeatQuizState() {
   return {
     quizId: null,
@@ -1024,6 +1053,7 @@ async function sendContactMessage(event) {
     elements.contactStatus.className = "status-message success";
     elements.contactMessage.value = "";
     updateContactMessageCounter();
+    trackEvent("contact_enquiry_sent", { reason });
   } catch (error) {
     elements.contactStatus.textContent = error.message;
     elements.contactStatus.className = "status-message error";
@@ -1156,6 +1186,96 @@ function handleSettingsModalClick(event) {
   }
 }
 
+function handleFooterClick(event) {
+  const legalButton = event.target.closest("[data-legal-page]");
+  if (legalButton) {
+    openLegalModal(legalButton.dataset.legalPage);
+    return;
+  }
+
+  if (event.target.closest("[data-open-pricing-footer]")) {
+    openPlansModal();
+    return;
+  }
+
+  const sectionButton = event.target.closest("[data-app-section]");
+  if (sectionButton) {
+    localStorage.setItem(LANDING_DISMISSED_KEY, "true");
+    elements.landingView.hidden = true;
+    elements.appView.hidden = false;
+    setAppSection(sectionButton.dataset.appSection);
+  }
+}
+
+function handleLegalModalClick(event) {
+  if (event.target.closest("[data-close-legal]")) {
+    closeLegalModal();
+  }
+}
+
+function openLegalModal(page = "privacy") {
+  const legalPage = getLegalPageContent(page);
+  elements.legalTitle.textContent = legalPage.title;
+  elements.legalContent.innerHTML = legalPage.html;
+  elements.legalModal.hidden = false;
+  document.body.classList.add("modal-open");
+  trackEvent("legal_page_opened", { page });
+}
+
+function closeLegalModal() {
+  elements.legalModal.hidden = true;
+  document.body.classList.remove("modal-open");
+}
+
+function getLegalPageContent(page) {
+  const pages = {
+    privacy: {
+      title: "Privacy Policy",
+      html: `<p>Neat Notes uses account details, notes and revision activity to provide the workspace, save progress and support enquiries.</p>
+        <ul>
+          <li>Contact enquiries are routed to the Neat Notes support inbox.</li>
+          <li>Student workspace data is used to run notes, revision and class features.</li>
+          <li>Payment processing is handled securely by Stripe when subscriptions are enabled.</li>
+        </ul>
+        <p>This page is a product-facing summary. Formal legal wording should be reviewed for larger school agreements.</p>`,
+    },
+    terms: {
+      title: "Terms of Service",
+      html: `<p>Neat Notes is an education workspace for note taking, OCR Computer Science revision and classroom support.</p>
+        <ul>
+          <li>Users are responsible for the content they add to notes and collaboration spaces.</li>
+          <li>Accounts may be limited or suspended if the service is misused.</li>
+          <li>Subscription features depend on the active plan attached to the account.</li>
+        </ul>`,
+    },
+    cookies: {
+      title: "Cookie Policy",
+      html: `<p>Neat Notes uses essential cookies and local browser storage to keep users signed in, remember preferences and save local guest progress.</p>
+        <p>Analytics and marketing cookies should only be added with clear consent controls.</p>`,
+    },
+    "data-protection": {
+      title: "Data Protection",
+      html: `<p>BreakellSystems is building Neat Notes with UK education workflows in mind.</p>
+        <ul>
+          <li>Only collect data needed to run accounts, notes, revision progress, payments and support.</li>
+          <li>Use school-facing exports and teacher dashboards carefully, with clear class membership context.</li>
+          <li>Review GDPR documentation, retention rules and processor agreements before institution rollout.</li>
+        </ul>`,
+    },
+    billing: {
+      title: "Cancellation and Billing",
+      html: `<p>Subscriptions use Stripe Checkout and the Stripe billing portal when payment settings are active.</p>
+        <ul>
+          <li>Students can start on the Free plan and upgrade to Pro.</li>
+          <li>Subscribers manage payment methods, invoices and cancellation through Stripe.</li>
+          <li>School and institution billing can be handled by enquiry until a full sales workflow is added.</li>
+        </ul>`,
+    },
+  };
+
+  return pages[page] || pages.privacy;
+}
+
 function switchSettingsTab(event) {
   const button = event.target.closest("[data-settings-tab]");
   if (!button) return;
@@ -1194,12 +1314,59 @@ async function boot() {
       elements.upgradeMessage.className = "topbar-plan-message success";
     }
   } catch {
-    loadGuestApp();
+    loadGuestApp({ showLanding: !localStorage.getItem(LANDING_DISMISSED_KEY) && !emailWasVerified });
     if (emailWasVerified) {
       openAuthModal("login");
       showAuthMessage("Email verified. You can log in now.", "success");
     }
   }
+}
+
+function handleLandingClick(event) {
+  const actionButton = event.target.closest("[data-landing-action]");
+  if (!actionButton) return;
+
+  const action = actionButton.dataset.landingAction;
+  if (action === "signup") {
+    openAuthModal("signup");
+    return;
+  }
+
+  if (action === "login") {
+    openAuthModal("login");
+    return;
+  }
+
+  if (action === "teacher") {
+    openDemoWorkspace({ section: "revision", teacher: true });
+    return;
+  }
+
+  openDemoWorkspace({ section: "notes" });
+}
+
+function showLandingPage() {
+  elements.landingView.hidden = false;
+  elements.appView.hidden = true;
+  elements.authView.hidden = true;
+  hideLaunchOverlay();
+}
+
+function openDemoWorkspace(options = {}) {
+  localStorage.setItem(LANDING_DISMISSED_KEY, "true");
+  ensureDemoWorkspace({ reset: false });
+  elements.landingView.hidden = true;
+  elements.appView.hidden = false;
+  if (options.teacher) {
+    activeLearningMode = "teacher";
+    localStorage.setItem(LEARNING_MODE_KEY, "teacher");
+  }
+  setAppSection(options.section || "notes");
+  render();
+  if (options.teacher) {
+    renderRevisionPage();
+  }
+  trackEvent("demo_workspace_opened", { section: options.section || "notes", teacher: Boolean(options.teacher) });
 }
 
 function hideLaunchOverlay() {
@@ -1406,7 +1573,7 @@ function setAuthLoading(mode, isLoading) {
   });
 }
 
-function loadGuestApp() {
+function loadGuestApp(options = {}) {
   isGuestMode = true;
   currentUser = null;
   plans = {
@@ -1434,15 +1601,26 @@ function loadGuestApp() {
   members = guestState.members;
   notes = guestState.notes.filter((note) => note.workspace_id === activeWorkspaceId);
   selectedId = notes[0]?.id || null;
+  if (activeWorkspaceId === "demo-ocr-workspace") {
+    activeRevisionTopicId = "cs-1-1-1";
+    saveFreeRevisionTopicId("cs-1-1-1");
+    seedDemoProgress();
+  }
   elements.authView.hidden = true;
-  elements.appView.hidden = false;
+  elements.appView.hidden = Boolean(options.showLanding);
+  elements.landingView.hidden = !options.showLanding;
   render();
-  hideLaunchOverlay();
+  if (options.showLanding) {
+    showLandingPage();
+  } else {
+    hideLaunchOverlay();
+  }
 }
 
 async function loadApp() {
   isGuestMode = false;
   elements.authView.hidden = true;
+  elements.landingView.hidden = true;
   elements.appView.hidden = false;
   elements.userName.textContent = currentUser.name;
   elements.userEmail.textContent = currentUser.email;
@@ -1518,13 +1696,19 @@ function loadGuestState() {
     // Fall through to the default starter state.
   }
 
+  const defaultState = createDemoGuestState();
+  saveGuestState(defaultState);
+  return defaultState;
+}
+
+function createDemoGuestState() {
   const now = new Date().toISOString();
-  const workspaceId = createLocalId("guest-space");
-  const defaultState = {
+  const workspaceId = "demo-ocr-workspace";
+  return {
     workspaces: [
       {
         id: workspaceId,
-        name: "Guest notes",
+        name: "OCR demo workspace",
         kind: "personal",
         note_count: 1,
         member_count: 1,
@@ -1536,19 +1720,97 @@ function loadGuestState() {
         id: createLocalId("guest-note"),
         workspace_id: workspaceId,
         owner_id: "guest",
-        body:
-          "# Welcome to Neat Notes\n\n## Start here\n- Write a note without creating an account\n- Use the formatting toolbar\n- Create folders with tags\n\n> Guest notes are stored in this browser only.\n\nCreate an account when you want sync, collaboration, exports, and class spaces.",
-        tag: appSettings.defaultTag,
-        title: "Welcome To Neat Notes",
-        summary: "Start writing without creating an account. Guest notes are stored in this browser only.",
+        body: getDemoNoteBody(),
+        tag: "processor",
+        title: "1.1.1 Structure of the Processor",
+        summary: "CPU components, registers, buses, the fetch-decode-execute cycle and performance factors.",
         created_at: now,
         updated_at: now,
       },
     ],
   };
+}
 
-  saveGuestState(defaultState);
-  return defaultState;
+function ensureDemoWorkspace(options = {}) {
+  if (options.reset) {
+    const resetState = createDemoGuestState();
+    saveGuestState(resetState);
+  } else {
+    const existing = loadGuestStateWithoutDefault();
+    const hasDemo = existing.workspaces.some((workspace) => workspace.id === "demo-ocr-workspace");
+    if (!hasDemo) {
+      const demo = createDemoGuestState();
+      saveGuestState({
+        workspaces: [...demo.workspaces, ...existing.workspaces],
+        members: existing.members.length ? existing.members : createGuestMembers(),
+        notes: [...demo.notes, ...existing.notes],
+      });
+    }
+  }
+
+  const guestState = loadGuestState();
+  workspaces = guestState.workspaces;
+  activeWorkspaceId = "demo-ocr-workspace";
+  members = guestState.members;
+  notes = guestState.notes.filter((note) => note.workspace_id === activeWorkspaceId);
+  selectedId = notes[0]?.id || null;
+  activeRevisionTopicId = "cs-1-1-1";
+  saveFreeRevisionTopicId("cs-1-1-1");
+  seedDemoProgress();
+}
+
+function getDemoNoteBody() {
+  return `# 1.1.1 Structure of the Processor
+
+## Topic overview
+- The CPU fetches, decodes and executes instructions.
+- The Control Unit coordinates the movement of data and sends control signals.
+- The ALU performs arithmetic and logical operations.
+- Registers are small, fast storage locations inside the processor.
+- Buses carry addresses, data and control signals between CPU, memory and devices.
+
+## Key definitions
+CPU: The central processing unit executes program instructions using the fetch-decode-execute cycle.
+Program Counter: A register that stores the address of the next instruction to fetch.
+Accumulator: A register that temporarily stores calculation results from the ALU.
+Cache: Fast memory close to the CPU that stores frequently used data and instructions.
+
+## Example
+During fetch, the address in the Program Counter is copied to the MAR. The instruction is fetched from memory into the MDR and copied into the CIR so the Control Unit can decode it.
+
+## Exam tip
+When explaining performance, link clock speed, cores and cache to how quickly instructions can be processed.
+
+- [ ] Draw the fetch-decode-execute cycle.
+- [ ] Explain why cache improves processor performance.
+- [ ] Compare Von Neumann and Harvard architecture.`;
+}
+
+function seedDemoProgress() {
+  const topic = REVISION_TOPICS.find((item) => item.id === "cs-1-1-1");
+  if (!topic) return;
+
+  topic.cards.slice(0, 5).forEach((card, index) => {
+    const cardKey = getRevisionCardKey(topic, card);
+    completedRevisionCards.add(cardKey);
+    if (!cardAttempts.some((attempt) => attempt.cardId === cardKey && attempt.source === "demo")) {
+      cardAttempts.unshift({
+        id: createLocalId("demo-attempt"),
+        userId: "guest",
+        cardId: cardKey,
+        topicId: topic.id,
+        deckId: topic.id,
+        classId: null,
+        confidence: index < 3 ? "confident" : "needs_practice",
+        quizCorrect: index < 3,
+        source: "demo",
+        sessionId: revisionSession?.id,
+        createdAt: new Date(Date.now() - index * 60 * 60 * 1000).toISOString(),
+      });
+    }
+  });
+  cardAttempts = cardAttempts.slice(0, 1200);
+  saveLocalArray(CARD_ATTEMPTS_KEY, cardAttempts);
 }
 
 function saveGuestState(state = null) {
@@ -1669,7 +1931,7 @@ async function createNote() {
       body: "",
       tag: activeTag === "all" ? appSettings.defaultTag : activeTag,
       title: "Untitled note",
-      summary: "Start writing and a tidy summary will appear here.",
+      summary: "Start writing and a tidy summary is built here.",
       created_at: now,
       updated_at: now,
     };
@@ -1678,6 +1940,7 @@ async function createNote() {
     selectedId = note.id;
     saveGuestState();
     recordActivityEvent({ type: "note_created" });
+    trackEvent("note_created", { mode: "guest" });
     render();
     elements.noteBody.focus();
     return;
@@ -1696,6 +1959,7 @@ async function createNote() {
     notes.unshift(response.note);
     selectedId = response.note.id;
     recordActivityEvent({ type: "note_created" });
+    trackEvent("note_created", { mode: "account" });
     render();
     elements.noteBody.focus();
   } catch (error) {
@@ -1705,6 +1969,7 @@ async function createNote() {
 
 async function deleteSelectedNote() {
   if (!selectedId) return;
+  if (!window.confirm("Delete this note? This cannot be undone.")) return;
 
   if (isGuestMode) {
     notes = notes.filter((note) => note.id !== selectedId);
@@ -1782,6 +2047,7 @@ async function handleBillingAction(event) {
 function openPlansModal() {
   elements.pricingModal.hidden = false;
   document.body.classList.add("modal-open");
+  trackEvent("pricing_opened", { section: activeAppSection });
 }
 
 function closePlansModal() {
@@ -1814,6 +2080,41 @@ function handleGlobalKeydown(event) {
   if (event.key === "Escape" && !elements.authView.hidden) {
     closeAuthModal();
   }
+  if (event.key === "Escape" && !elements.legalModal.hidden) {
+    closeLegalModal();
+  }
+}
+
+function handleTitleKeydown(event) {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    elements.autoTitle.blur();
+  }
+
+  if (event.key === "Escape") {
+    event.preventDefault();
+    const note = getSelectedNote();
+    elements.autoTitle.textContent = note?.title || createTitle(note?.body || "");
+    elements.autoTitle.blur();
+  }
+}
+
+function renameSelectedNoteFromTitle() {
+  const note = getSelectedNote();
+  if (!note) return;
+
+  const nextTitle = elements.autoTitle.textContent.replace(/\s+/g, " ").trim();
+  const currentTitle = note.title || createTitle(note.body);
+  if (!nextTitle || nextTitle === currentTitle) {
+    elements.autoTitle.textContent = currentTitle;
+    return;
+  }
+
+  const nextHeading = `# ${nextTitle}`;
+  elements.noteBody.value = /^#{1,3}\s+.+$/m.test(note.body || "")
+    ? (note.body || "").replace(/^#{1,3}\s+.+$/m, nextHeading)
+    : `${nextHeading}\n\n${note.body || ""}`.trim();
+  updateActiveNote();
 }
 
 function updateActiveNote() {
@@ -1861,10 +2162,12 @@ function applyFormattingAction(event) {
   const templates = {
     heading: { prefix: "# ", placeholder: "Topic title" },
     subheading: { prefix: "## ", placeholder: "Key point" },
+    definition: { prefix: "> ", placeholder: "Definition: concise explanation" },
+    example: { prefix: "- Example: ", placeholder: "How this appears in a question or scenario" },
+    examtip: { prefix: "- Exam tip: ", placeholder: "Link the point to OCR wording or marks" },
     bullet: { prefix: "- ", placeholder: "Evidence, explanation, or example" },
     numbered: { prefix: "1. ", placeholder: "Step or sequence" },
     check: { prefix: "- [ ] ", placeholder: "Revision task" },
-    quote: { prefix: "> ", placeholder: "Definition: explanation" },
     divider: { block: "\n---\n" },
   };
 
@@ -2123,7 +2426,7 @@ function renderStudentClassPanel() {
           <div class="student-class-list">
             ${memberships.map(renderStudentClassCard).join("")}
           </div>`
-        : `<div class="student-class-empty"><strong>Join a class using the code your teacher gave you.</strong><span>Class-linked revision assignments will appear here when your teacher sets them.</span></div>`
+        : `<div class="student-class-empty"><strong>Join a class using the code your teacher gave you.</strong><span>Class-linked revision assignments are shown here when your teacher sets them.</span></div>`
     }`;
 }
 
@@ -2363,7 +2666,7 @@ function renderTeacherMode() {
       </div>
       <div class="teacher-preview-card">
         <span>${isGuestMode ? "Preview mode" : "Teacher workspace"}</span>
-        <strong>${isGuestMode ? "Create an account to save classes and invite students." : "Class data is saved locally in this MVP."}</strong>
+        <strong>${isGuestMode ? "Create an account to save classes and invite students." : "Class data is saved in your workspace."}</strong>
       </div>
     </header>
     <nav class="teacher-tabs" aria-label="Teacher mode sections">
@@ -2419,7 +2722,7 @@ function renderTeacherDashboardSection() {
         ${
           weakTopics.length
             ? `<div class="topic-insight-list">${weakTopics.map(renderCompactTopicInsight).join("")}</div>`
-            : `<p class="empty-copy">Topic confidence will appear once students rate flashcards.</p>`
+            : `<p class="empty-copy">Topic confidence is shown once students rate flashcards.</p>`
         }
       </article>
       <article class="teacher-panel-card">
@@ -2431,10 +2734,10 @@ function renderTeacherDashboardSection() {
         ${renderRecentActivityList()}
       </article>
       <article class="teacher-panel-card">
-        <div class="section-title"><span>Suggested teacher actions</span><span>MVP</span></div>
+        <div class="section-title"><span>Suggested teacher actions</span><span>Next steps</span></div>
         <div class="teacher-action-list">
-          <button type="button" disabled>Assignments coming soon</button>
-          <button type="button" disabled>Export coming soon</button>
+          <button type="button" data-create-assignment>Prepare review assignment</button>
+          <button type="button" data-export-interventions>Export intervention CSV</button>
           <button type="button" data-teacher-section="topic-insights">Review topic insights</button>
           <button type="button" data-teacher-section="classes">Invite students</button>
         </div>
@@ -2503,7 +2806,7 @@ function renderCentreSettingsSection() {
         <p class="eyebrow">Centre Settings</p>
         <h3>Create a centre or join an existing centre.</h3>
       </div>
-      <span class="teacher-mode-note">Foundation for future Institution plans</span>
+      <span class="teacher-mode-note">Institution-ready structure</span>
     </div>
     <div class="teacher-management-grid">
       <form class="teacher-form" data-create-centre>
@@ -2668,7 +2971,7 @@ function renderTopicInsightCard(insight) {
       <li>${insight.weakCards.length} cards most often marked Need practice</li>
       <li>Last revised: ${escapeHtml(insight.lastRevised)}</li>
     </ul>
-    <button type="button" disabled>${escapeHtml(insight.suggestedAction)} · coming soon</button>
+    <button type="button" data-create-assignment data-topic-id="${escapeHtml(insight.topic.id)}">${escapeHtml(insight.suggestedAction)}</button>
   </article>`;
 }
 
@@ -2678,13 +2981,13 @@ function renderWatchlistItem(student) {
     <span>Last accessed: ${escapeHtml(student.lastAccessed)}</span>
     <span>Average confidence: ${escapeHtml(student.averageConfidence)}</span>
     <span>Weakest topic: ${escapeHtml(student.weakestTopic)}</span>
-    <button type="button" disabled>${escapeHtml(student.suggestedAction)} · coming soon</button>
+    <button type="button" data-create-assignment>${escapeHtml(student.suggestedAction)}</button>
   </div>`;
 }
 
 function renderRecentActivityList() {
   if (!activityEvents.length) {
-    return `<p class="empty-copy">Activity will appear when students rate cards, complete decks, join classes, or create notes.</p>`;
+    return `<p class="empty-copy">Activity is shown when students rate cards, complete decks, join classes, or create notes.</p>`;
   }
 
   return `<div class="activity-list">${activityEvents.slice(0, 6).map((event) => {
@@ -2720,7 +3023,64 @@ function renderClassCard(group) {
   </article>`;
 }
 
+function prepareTeacherAssignment(topicId = "") {
+  const topic = getQuizTopicById(topicId) || getRecommendedRevisionTopic() || getActiveRevisionTopic();
+  activeTeacherSection = "classes";
+  renderTeacherMode();
+  window.setTimeout(() => {
+    elements.teacherModePanel.querySelector(".teacher-section")?.insertAdjacentHTML(
+      "afterbegin",
+      `<div class="teacher-assignment-draft" role="status">
+        <strong>Review assignment prepared</strong>
+        <p>${escapeHtml(topic.code)} ${escapeHtml(topic.title)} is ready to share as a class revision focus. Use the class join code, then ask students to complete flashcards and Quick Practice for this topic.</p>
+      </div>`
+    );
+  }, 0);
+  trackEvent("teacher_assignment_prepared", { topicId: topic.id });
+}
+
+function exportInterventionCsv() {
+  const insights = getClassTopicInsights();
+  const rows = [
+    ["Topic code", "Topic title", "Confidence", "Band", "Weak cards", "Last revised", "Suggested action"],
+    ...insights.map((insight) => [
+      insight.topic.code,
+      insight.topic.title,
+      insight.confidence.totalAttempts ? `${insight.confidence.percent}%` : "No data",
+      insight.confidence.band,
+      String(insight.weakCards.length),
+      insight.lastRevised,
+      insight.suggestedAction,
+    ]),
+  ];
+  const csv = rows.map((row) => row.map(csvEscape).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  const activeClass = getActiveClassGroup();
+  anchor.href = url;
+  anchor.download = `${slugify(activeClass?.name || "neat-notes-interventions")}-interventions.csv`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+  trackEvent("teacher_interventions_exported", { classId: activeClass?.id || "none" });
+}
+
+function csvEscape(value) {
+  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+}
+
 function handleTeacherModeClick(event) {
+  if (event.target.closest("[data-export-interventions]")) {
+    exportInterventionCsv();
+    return;
+  }
+
+  const assignmentButton = event.target.closest("[data-create-assignment]");
+  if (assignmentButton) {
+    prepareTeacherAssignment(assignmentButton.dataset.topicId);
+    return;
+  }
+
   const sectionButton = event.target.closest("[data-teacher-section]");
   if (sectionButton) {
     activeTeacherSection = sectionButton.dataset.teacherSection;
@@ -3968,12 +4328,20 @@ function renderFolders() {
 
 function renderNotes(visibleNotes) {
   if (!activeWorkspaceId) {
-    elements.notesList.innerHTML = `<div class="empty-state">Create a collaboration space to begin.</div>`;
+    elements.notesList.innerHTML = `<div class="empty-state">
+      <strong>Create a workspace or open the OCR demo.</strong>
+      <p>The demo shows notes, generated revision material, and progress tracking with real OCR Computer Science content.</p>
+      <button type="button" data-reset-demo>Open OCR demo</button>
+    </div>`;
     return;
   }
 
   if (!visibleNotes.length) {
-    elements.notesList.innerHTML = `<div class="empty-state">No notes here yet.</div>`;
+    elements.notesList.innerHTML = `<div class="empty-state">
+      <strong>No notes here yet.</strong>
+      <p>Create a note, change folder, or reset the OCR demo workspace to see the full study workflow.</p>
+      <button type="button" data-reset-demo>Load demo note</button>
+    </div>`;
     return;
   }
 
@@ -4016,7 +4384,7 @@ function renderRecentNotes() {
     .slice(0, 4);
 
   if (!recentNotes.length) {
-    elements.recentNoteList.innerHTML = `<p class="status-message">Recent notes will appear after you start writing.</p>`;
+    elements.recentNoteList.innerHTML = `<p class="status-message">Recent notes are shown after you start writing.</p>`;
     return;
   }
 
@@ -4088,7 +4456,26 @@ function handleNotesSidebarClick(event) {
 
   if (event.target.closest("[data-open-sidebar-settings]")) {
     openSettingsModal();
+    return;
   }
+
+  if (event.target.closest("[data-reset-demo]")) {
+    const shouldReset = window.confirm("Reset the OCR demo workspace? This refreshes the demo note and progress sample.");
+    if (!shouldReset) return;
+    ensureDemoWorkspace({ reset: true });
+    setAppSection("notes");
+    render();
+    showWorkspaceMessage("OCR demo workspace reset.", "success");
+  }
+}
+
+function handleNotesListClick(event) {
+  if (!event.target.closest("[data-reset-demo]")) return;
+
+  ensureDemoWorkspace({ reset: true });
+  setAppSection("notes");
+  render();
+  showWorkspaceMessage("OCR demo workspace loaded.", "success");
 }
 
 function setSaveState(message) {
@@ -4104,11 +4491,13 @@ function renderSummaryContent(note) {
     );
   }
 
-  const summary = note.summary || createSummary(note.body);
-  const cardCount = createInstantNoteCards(note.body || "").length;
+  const pack = getRevisionGenerator().generateStudyPack(note.body || "");
+  const summary = pack.summary || note.summary || createSummary(note.body);
+  const cardCount = pack.flashcards.length;
   const signals = [
     `${lines.length} learning point${lines.length === 1 ? "" : "s"}`,
     cardCount ? `${cardCount} instant card${cardCount === 1 ? "" : "s"} ready` : "Add bullets for cards",
+    `${pack.quality.score}% note quality`,
   ];
 
   return `<p>${escapeHtml(summary)}</p>
@@ -4129,9 +4518,61 @@ function renderSummaryEmptyState(title, detail) {
   </div>`;
 }
 
+function renderNoteIntelligenceEmptyState() {
+  return `<div class="note-quality-empty">
+    <div class="section-title"><span>Note intelligence</span><span>Waiting</span></div>
+    <p>Add a heading, definitions, examples and revision tasks to see a readiness score.</p>
+  </div>`;
+}
+
+function renderNoteIntelligencePanel(note) {
+  if (!elements.noteIntelligencePanel) return;
+
+  const body = note?.body || "";
+  if (!getPlainNoteLines(body).length) {
+    elements.noteIntelligencePanel.innerHTML = renderNoteIntelligenceEmptyState();
+    return;
+  }
+
+  const generator = getRevisionGenerator();
+  const pack = generator.generateStudyPack(body);
+  const signals = pack.quality.signals;
+  const qualityClass =
+    pack.quality.score >= 70 ? "strong" : pack.quality.score >= 38 ? "developing" : "thin";
+  const nextStep =
+    pack.quality.score >= 70
+      ? "Ready for revision generation."
+      : signals.definitions < 2
+        ? "Add two precise definitions."
+        : signals.revisionTasks < 2
+          ? "Add revision tasks for follow-up."
+          : "Add more OCR-linked examples.";
+
+  elements.noteIntelligencePanel.innerHTML = `
+    <div class="section-title"><span>Note intelligence</span><span>${escapeHtml(pack.quality.label)}</span></div>
+    <div class="note-quality-score ${qualityClass}">
+      <strong>${pack.quality.score}%</strong>
+      <div>
+        <span>${escapeHtml(nextStep)}</span>
+        <i aria-hidden="true"><b style="width:${Math.max(4, pack.quality.score)}%"></b></i>
+      </div>
+    </div>
+    <div class="intelligence-grid">
+      <article><span>Headings</span><strong>${signals.headings}</strong></article>
+      <article><span>Definitions</span><strong>${signals.definitions}</strong></article>
+      <article><span>Key terms</span><strong>${signals.keyTerms}</strong></article>
+      <article><span>Tasks</span><strong>${signals.revisionTasks}</strong></article>
+    </div>
+    ${
+      pack.keyTerms.length
+        ? `<div class="key-term-cloud">${pack.keyTerms.slice(0, 6).map((term) => `<span>${escapeHtml(term)}</span>`).join("")}</div>`
+        : ""
+    }`;
+}
+
 function renderFormattedPreviewEmptyState() {
   return `<div class="formatted-empty-state">
-    <strong>Your formatted preview will appear here.</strong>
+    <strong>Your formatted preview is shown here.</strong>
     <p>Try a topic heading, a short definition, and three bullets to see the note become revision-ready.</p>
     <div>
       <span># Topic title</span>
@@ -4155,8 +4596,9 @@ function renderEditor() {
     elements.tagInput.value = "";
     elements.tagInput.disabled = true;
     setSaveState("No note selected");
-    elements.summaryText.innerHTML = renderSummaryEmptyState("Create a note to begin.", "Your summary, key terms, and revision prompts will appear as you write.");
+    elements.summaryText.innerHTML = renderSummaryEmptyState("Create a note to begin.", "Your summary, key terms, and revision prompts are built as you write.");
     elements.formattedPreview.innerHTML = renderFormattedPreviewEmptyState();
+    elements.noteIntelligencePanel.innerHTML = renderNoteIntelligenceEmptyState();
     renderPlan();
     return;
   }
@@ -4177,6 +4619,7 @@ function renderEditorDetails(updateBody) {
   elements.noteDate.textContent = `Created ${formatDate(note.created_at)} · Updated ${formatDate(note.updated_at)}`;
   elements.summaryText.innerHTML = renderSummaryContent(note);
   elements.formattedPreview.innerHTML = formatNote(note.body);
+  renderNoteIntelligencePanel(note);
 
   if (updateBody) {
     setSaveState(`Last edited ${getRelativeEditLabel(note.updated_at || note.created_at).replace(/^Edited\s*/i, "")}`);
@@ -4203,14 +4646,12 @@ function handleStudyPaneClick(event) {
     return;
   }
 
-  const labels = {
-    quiz: "self-marking quiz generation",
-    exam: "OCR-style exam question generation",
-    organiser: "knowledge organiser creation",
-    "mind-map": "mind map generation",
-  };
+  const note = getSelectedNote();
+  if (!note) return;
 
-  showInsightsMessage(`${labels[action] || "This generator"} is prepared for a future Student Pro or Teacher tier.`, "success");
+  const pack = getRevisionGenerator().generateStudyPack(note.body || "");
+  renderGeneratedStudyAction(action, pack);
+  trackEvent("note_revision_generated", { action, noteQuality: pack.quality.score });
 }
 
 async function exportSelectedPdf() {
@@ -4230,7 +4671,7 @@ function showInstantCards() {
   if (!note) return;
 
   generatedCardFlips.clear();
-  generatedNoteCards = createInstantNoteCards(note.body);
+  generatedNoteCards = getRevisionGenerator().generateFlashcards(note.body || "");
 
   if (!generatedNoteCards.length) {
     showInsightsMessage("Add a few headings, bullet points, definitions, or tasks and Instant cards will turn them into a revision sprint.", "error");
@@ -4269,8 +4710,9 @@ function showInstantCards() {
           )
           .join("")}
       </div>
-      <p class="instant-card-note">Future paid versions can save these as synced custom decks with AI refinement and teacher-set review dates.</p>
+      <p class="instant-card-note">These are generated locally from the note. Save them into the note, refine the wording, then use them for a revision sprint.</p>
     </div>`;
+  trackEvent("instant_cards_generated", { count: generatedNoteCards.length });
 }
 
 function handleInsightsPanelClick(event) {
@@ -4306,6 +4748,159 @@ function insertGeneratedCardsIntoNote() {
   elements.noteBody.value = `${note.body.trimEnd()}${addition}`;
   updateActiveNote();
   showInsightsMessage("Draft revision cards added to the note. You can edit them before exporting or sharing.", "success");
+}
+
+function getRevisionGenerator() {
+  const generator = window.NeatRevisionGenerator || window.NeetRevisionGenerator;
+  if (generator) return generator;
+
+  return {
+    generateStudyPack(body) {
+      const flashcards = createInstantNoteCards(body);
+      return {
+        summary: createSummary(body),
+        flashcards,
+        quiz: flashcards.slice(0, 8).map((card, index) => ({
+          id: `fallback-${index + 1}`,
+          type: "short-answer",
+          prompt: card.front,
+          answer: card.back,
+          explanation: "Generated from your note content.",
+          options: [card.back],
+        })),
+        keyTerms: getPlainNoteLines(body)
+          .map((line) => line.match(/^([^:]{3,52}):/)?.[1])
+          .filter(Boolean)
+          .slice(0, 8),
+        checklist: getPlainNoteLines(body).filter((line) => /^- \[[ xX]\]/.test(line)).slice(0, 8),
+        examPrompts: [createTitle(body)].filter(Boolean).map((title) => `Explain ${title} in an OCR-style answer.`),
+        quality: assessFallbackNoteQuality(body),
+      };
+    },
+    generateFlashcards: createInstantNoteCards,
+    generateSummary: createSummary,
+    extractKeyTerms(body) {
+      return this.generateStudyPack(body).keyTerms;
+    },
+    assessNoteQuality: assessFallbackNoteQuality,
+  };
+}
+
+function assessFallbackNoteQuality(body = "") {
+  const lines = getPlainNoteLines(body);
+  const headings = (body.match(/^#{1,3}\s+/gm) || []).length;
+  const definitions = lines.filter((line) => /^([^:]{3,52}):\s+(.{4,})$/.test(line)).length;
+  const tasks = (body.match(/^- \[[ xX]\]\s+/gm) || []).length;
+  const score = Math.min(100, lines.length * 8 + headings * 10 + definitions * 12 + tasks * 10);
+  return {
+    score,
+    label: score >= 70 ? "Revision-ready" : score >= 38 ? "Developing" : "Too brief",
+    signals: {
+      words: body.split(/\s+/).filter(Boolean).length,
+      headings,
+      definitions,
+      keyTerms: definitions,
+      revisionTasks: tasks,
+    },
+  };
+}
+
+function normalizeStudyPack(pack, body = "") {
+  if (!pack) return getRevisionGenerator().generateStudyPack(body);
+  const localPack = getRevisionGenerator().generateStudyPack(body);
+  return {
+    summary: pack.summary || localPack.summary,
+    flashcards: Array.isArray(pack.flashcards) ? pack.flashcards : localPack.flashcards,
+    quiz: Array.isArray(pack.quiz)
+      ? pack.quiz
+      : Array.isArray(pack.questions)
+        ? pack.questions.map((question, index) => ({
+            id: `server-${index + 1}`,
+            prompt: question.prompt,
+            answer: question.answer,
+            explanation: question.explanation || "Generated from your note content.",
+            options: question.options || [question.answer],
+          }))
+        : localPack.quiz,
+    keyTerms: Array.isArray(pack.keyTerms) ? pack.keyTerms : pack.keyPoints || localPack.keyTerms,
+    checklist: Array.isArray(pack.checklist) ? pack.checklist : pack.tasks || localPack.checklist,
+    examPrompts: Array.isArray(pack.examPrompts) ? pack.examPrompts : localPack.examPrompts,
+    quality: pack.quality || localPack.quality,
+  };
+}
+
+function renderGeneratedStudyAction(action, pack) {
+  const views = {
+    quiz: {
+      title: "Quick quiz",
+      count: `${pack.quiz.length} checks`,
+      html: renderQuizList(pack.quiz),
+    },
+    exam: {
+      title: "Exam prompts",
+      count: `${pack.examPrompts.length} prompts`,
+      html: renderSimpleList(pack.examPrompts),
+    },
+    organiser: {
+      title: "Knowledge organiser",
+      count: `${pack.keyTerms.length} terms`,
+      html: `<article><strong>Summary</strong><p>${escapeHtml(pack.summary)}</p></article>
+        <article><strong>Key terms</strong><div class="key-term-cloud">${pack.keyTerms.map((term) => `<span>${escapeHtml(term)}</span>`).join("")}</div></article>
+        <article><strong>Checklist</strong>${renderSimpleList(pack.checklist)}</article>`,
+    },
+    "mind-map": {
+      title: "Study map",
+      count: `${pack.keyTerms.length} nodes`,
+      html: renderStudyMap(pack),
+    },
+  };
+  const view = views[action] || views.quiz;
+  elements.insightsPanel.hidden = false;
+  elements.insightsPanel.innerHTML = `
+    <div class="section-title"><span>${escapeHtml(view.title)}</span><span>${escapeHtml(view.count)}</span></div>
+    <div class="generated-study-panel">${view.html}</div>`;
+}
+
+function renderGeneratedStudyPack(pack, title = "Study pack") {
+  elements.insightsPanel.hidden = false;
+  elements.insightsPanel.innerHTML = `
+    <div class="section-title">
+      <span>${escapeHtml(title)}</span>
+      <span>${pack.flashcards.length} cards · ${pack.quiz.length} checks</span>
+    </div>
+    <div class="generated-study-panel">
+      <article><strong>Summary</strong><p>${escapeHtml(pack.summary)}</p></article>
+      <article><strong>Key terms</strong><div class="key-term-cloud">${pack.keyTerms.map((term) => `<span>${escapeHtml(term)}</span>`).join("")}</div></article>
+      <article><strong>Flashcards</strong><div class="flashcard-list">${pack.flashcards
+        .map((card) => `<div><span>${escapeHtml(card.front)}</span><p>${escapeHtml(card.back)}</p></div>`)
+        .join("")}</div></article>
+      <article><strong>Quick quiz</strong>${renderQuizList(pack.quiz)}</article>
+      <article><strong>OCR exam prompts</strong>${renderSimpleList(pack.examPrompts)}</article>
+      <article><strong>Revision checklist</strong>${renderSimpleList(pack.checklist)}</article>
+    </div>`;
+}
+
+function renderQuizList(questions = []) {
+  if (!questions.length) return `<p class="empty-copy">Add more note detail to generate checks.</p>`;
+  return `<ol class="generated-quiz-list">${questions
+    .map((question) => `<li>
+      <span>${escapeHtml(question.prompt)}</span>
+      <p>${escapeHtml(question.answer)}</p>
+    </li>`)
+    .join("")}</ol>`;
+}
+
+function renderSimpleList(items = []) {
+  if (!items.length) return `<p class="empty-copy">Add more note detail to generate this section.</p>`;
+  return `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+}
+
+function renderStudyMap(pack) {
+  const nodes = [pack.summary, ...pack.keyTerms, ...pack.checklist].filter(Boolean).slice(0, 9);
+  if (!nodes.length) return `<p class="empty-copy">Add headings and key terms to generate a study map.</p>`;
+  return `<div class="study-map" aria-label="Generated study map">
+    ${nodes.map((node, index) => `<span class="${index === 0 ? "central" : ""}">${escapeHtml(node)}</span>`).join("")}
+  </div>`;
 }
 
 function createInstantNoteCards(body) {
@@ -4385,40 +4980,22 @@ async function showStudyPack() {
   const note = getSelectedNote();
   if (!note) return;
 
+  let pack = null;
+  let source = "local";
+
   try {
-    const response = await api(`/api/notes/${note.id}/study-pack`);
-    const pack = response.studyPack;
-    elements.insightsPanel.hidden = false;
-    elements.insightsPanel.innerHTML = `
-      <div class="section-title">
-        <span>Study pack</span>
-        <span>${pack.questions.length} questions</span>
-      </div>
-      <article>
-        <strong>Key points</strong>
-        <ul>${pack.keyPoints.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul>
-      </article>
-      <article>
-        <strong>Revision questions</strong>
-        <ol>${pack.questions
-          .map((question) => `<li><span>${escapeHtml(question.prompt)}</span><p>${escapeHtml(question.answer)}</p></li>`)
-          .join("")}</ol>
-      </article>
-      <article>
-        <strong>Flashcards</strong>
-        <div class="flashcard-list">${pack.flashcards
-          .map((card) => `<div><span>${escapeHtml(card.front)}</span><p>${escapeHtml(card.back)}</p></div>`)
-          .join("")}</div>
-      </article>
-      ${
-        pack.tasks.length
-          ? `<article><strong>Action list</strong><ul>${pack.tasks.map((task) => `<li>${escapeHtml(task)}</li>`).join("")}</ul></article>`
-          : ""
-      }
-    `;
+    if (!isGuestMode && hasFeature("studyPack")) {
+      const response = await api(`/api/notes/${note.id}/study-pack`);
+      pack = normalizeStudyPack(response.studyPack, note.body || "");
+      source = "server";
+    }
   } catch (error) {
-    showInsightsMessage(error.message, "error");
+    pack = null;
   }
+
+  pack ||= getRevisionGenerator().generateStudyPack(note.body || "");
+  renderGeneratedStudyPack(pack, source === "server" ? "Synced study pack" : "Study pack");
+  trackEvent("study_pack_generated", { source, noteQuality: pack.quality.score });
 }
 
 async function showVersionHistory() {
@@ -4703,7 +5280,7 @@ function createTitle(body) {
 
 function createSummary(body) {
   const lines = getPlainNoteLines(body);
-  if (!lines.length) return "Start writing and a tidy summary will appear here.";
+  if (!lines.length) return "Start writing and a tidy summary is built here.";
 
   const sentences = lines
     .join(" ")
