@@ -167,6 +167,7 @@
     const lines = getPlainLines(note);
     const headings = getHeadings(note);
     const definitions = lines.filter((line) => /^([^:]{3,52}):\s+(.{4,})$/.test(line));
+    const examples = lines.filter((line) => /\b(for example|example|e\.g\.)\b/i.test(line));
     const tasks = note.split(/\r?\n/).filter((line) => /^- \[[ xX]\]\s+/.test(line.trim()));
     const keyTerms = extractKeyTerms(note);
     const words = cleanText(note).split(/\s+/).filter(Boolean);
@@ -177,6 +178,7 @@
     else if (words.length >= 12) score += 8;
     score += Math.min(20, headings.length * 10);
     score += Math.min(24, definitions.length * 10);
+    score += Math.min(10, examples.length * 5);
     score += Math.min(24, keyTerms.length * 3);
     score += Math.min(18, tasks.length * 10);
     score = Math.min(100, score);
@@ -189,6 +191,7 @@
         words: words.length,
         headings: headings.length,
         definitions: definitions.length,
+        examples: examples.length,
         keyTerms: keyTerms.length,
         revisionTasks: tasks.length,
       },

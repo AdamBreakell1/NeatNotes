@@ -12,6 +12,7 @@ const CLASS_GROUPS_KEY = "neat-notes-class-groups";
 const CLASS_MEMBERSHIPS_KEY = "neat-notes-class-memberships";
 const ACTIVE_STUDENT_CLASS_KEY = "neat-notes-active-student-class";
 const CENTRES_KEY = "neat-notes-centres";
+const TEACHER_ASSIGNMENTS_KEY = "neat-notes-teacher-assignments";
 const LEARNING_MODE_KEY = "neat-notes-learning-mode";
 const APP_EVENT_LOG_KEY = "neat-notes-event-log";
 const DAILY_REVIEW_GOAL = 10;
@@ -80,6 +81,7 @@ let activityEvents = loadLocalArray(ACTIVITY_EVENTS_KEY);
 let classGroups = loadLocalArray(CLASS_GROUPS_KEY);
 let classMemberships = loadLocalArray(CLASS_MEMBERSHIPS_KEY);
 let centres = loadLocalArray(CENTRES_KEY);
+let teacherAssignments = loadLocalArray(TEACHER_ASSIGNMENTS_KEY);
 let activeLearningMode = localStorage.getItem(LEARNING_MODE_KEY) === "teacher" ? "teacher" : "student";
 let activeTeacherSection = "dashboard";
 let activeClassId = classGroups[0]?.id || null;
@@ -224,6 +226,7 @@ const elements = {
   studyPackButton: document.querySelector("#study-pack-button"),
   startDailyReviewButton: document.querySelector("#start-daily-review-button"),
   studentClassPanel: document.querySelector("#student-class-panel"),
+  studentDashboardPanel: document.querySelector("#student-dashboard-panel"),
   studyPane: document.querySelector(".study-pane"),
   summaryText: document.querySelector("#summary-text"),
   tagInput: document.querySelector("#tag-input"),
@@ -315,6 +318,7 @@ elements.learningModeSwitch.addEventListener("click", switchLearningMode);
 elements.studentClassPanel.addEventListener("click", handleStudentClassPanelClick);
 elements.studentClassPanel.addEventListener("submit", handleStudentClassPanelSubmit);
 elements.studentClassPanel.addEventListener("change", handleStudentClassPanelChange);
+elements.studentDashboardPanel.addEventListener("click", handleStudentDashboardClick);
 elements.teacherModePanel.addEventListener("click", handleTeacherModeClick);
 elements.teacherModePanel.addEventListener("submit", handleTeacherModeSubmit);
 elements.teacherModePanel.addEventListener("change", handleTeacherModeChange);
@@ -370,10 +374,18 @@ function switchAppSection(event) {
 }
 
 function setAppSection(section) {
-  activeAppSection = ["revision", "contact"].includes(section) ? section : "notes";
+  activeAppSection = ["revision", "teacher", "contact"].includes(section) ? section : "notes";
   const isNotes = activeAppSection === "notes";
-  const isRevision = activeAppSection === "revision";
+  const isRevision = activeAppSection === "revision" || activeAppSection === "teacher";
+  const isTeacher = activeAppSection === "teacher";
   const isContact = activeAppSection === "contact";
+
+  if (isTeacher) {
+    activeLearningMode = "teacher";
+  } else if (activeAppSection === "revision") {
+    activeLearningMode = "student";
+  }
+  localStorage.setItem(LEARNING_MODE_KEY, activeLearningMode);
 
   elements.notesColumn.hidden = !isNotes;
   elements.editorPanel.hidden = !isNotes;
@@ -382,6 +394,7 @@ function setAppSection(section) {
   elements.notesSidebarContext.hidden = !isNotes;
   elements.appView.classList.toggle("notes-mode", isNotes);
   elements.appView.classList.toggle("revision-mode", isRevision);
+  elements.appView.classList.toggle("teacher-app-mode", isTeacher);
   elements.appView.classList.toggle("contact-mode", isContact);
 
   document.querySelectorAll("[data-app-section]").forEach((button) => {
@@ -389,7 +402,9 @@ function setAppSection(section) {
   });
 
   if (isRevision) {
-    recordActivityEvent({ type: "revision_started", topicId: activeRevisionTopicId });
+    if (!isTeacher) {
+      recordActivityEvent({ type: "revision_started", topicId: activeRevisionTopicId });
+    }
     renderRevisionPage();
   }
 
@@ -512,6 +527,7 @@ function recordCardAttempt(cardId, topicId, confidence, options = {}) {
     responseTimeMs: options.responseTimeMs,
     quizCorrect: options.quizCorrect,
     source: options.source || "flashcard",
+    difficulty: options.difficulty,
     sessionId: revisionSession?.id,
     createdAt: new Date().toISOString(),
   };
@@ -955,7 +971,7 @@ function getRevisionAchievementTotals() {
   const totalCards = REVISION_TOPICS.reduce((sum, topic) => sum + topic.cards.length, 0);
   const earnedTopics = REVISION_TOPICS.filter((topic) => earnedRevisionBadges[topic.id]).length;
   const earnedCards = REVISION_TOPICS.reduce(
-    (sum, topic) => sum + (earnedRevisionBadges[topic.id] ? topic.cards.length : 0),
+    (sum, topic) => sum + (earnedRevisionBadges[topic.id] ? topic.cards.length : getCompletedRevisionCount(topic)),
     0,
   );
 
@@ -1323,6 +1339,13 @@ async function boot() {
 }
 
 function handleLandingClick(event) {
+  const scrollButton = event.target.closest("[data-landing-scroll]");
+  if (scrollButton) {
+    const target = document.querySelector(`#landing-${scrollButton.dataset.landingScroll}`);
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
   const actionButton = event.target.closest("[data-landing-action]");
   if (!actionButton) return;
 
@@ -1338,7 +1361,18 @@ function handleLandingClick(event) {
   }
 
   if (action === "teacher") {
-    openDemoWorkspace({ section: "revision", teacher: true });
+    openDemoWorkspace({ section: "teacher", teacher: true });
+    return;
+  }
+
+  if (action === "contact" || action === "school-contact") {
+    openDemoWorkspace({ section: "contact" });
+    window.setTimeout(() => {
+      if (action === "school-contact" && elements.contactReason) {
+        elements.contactReason.value = "School setup";
+      }
+      elements.contactName?.focus();
+    }, 80);
     return;
   }
 
@@ -1790,7 +1824,11 @@ function seedDemoProgress() {
   const topic = REVISION_TOPICS.find((item) => item.id === "cs-1-1-1");
   if (!topic) return;
 
-  topic.cards.slice(0, 5).forEach((card, index) => {
+  const todayKey = getStudyDayKey();
+  const now = Date.now();
+  const demoClassId = seedDemoTeacherWorkspace();
+
+  topic.cards.slice(0, 18).forEach((card, index) => {
     const cardKey = getRevisionCardKey(topic, card);
     completedRevisionCards.add(cardKey);
     if (!cardAttempts.some((attempt) => attempt.cardId === cardKey && attempt.source === "demo")) {
@@ -1801,16 +1839,167 @@ function seedDemoProgress() {
         topicId: topic.id,
         deckId: topic.id,
         classId: null,
-        confidence: index < 3 ? "confident" : "needs_practice",
-        quizCorrect: index < 3,
+        confidence: index < 12 ? "confident" : "needs_practice",
+        quizCorrect: index < 12,
         source: "demo",
         sessionId: revisionSession?.id,
-        createdAt: new Date(Date.now() - index * 60 * 60 * 1000).toISOString(),
+        createdAt: new Date(now - index * 42 * 60 * 1000).toISOString(),
       });
     }
   });
+
+  topic.cards.slice(0, 12).forEach((card, index) => {
+    const cardKey = getRevisionCardKey(topic, card);
+    if (!cardAttempts.some((attempt) => attempt.cardId === cardKey && attempt.source === "demo-class")) {
+      cardAttempts.unshift({
+        id: createLocalId("demo-class-attempt"),
+        userId: index % 2 === 0 ? "demo-student-ava" : "demo-student-sam",
+        cardId: cardKey,
+        topicId: topic.id,
+        deckId: topic.id,
+        classId: demoClassId,
+        confidence: index < 7 ? "confident" : "needs_practice",
+        quizCorrect: index < 7,
+        source: "demo-class",
+        sessionId: "demo-class-session",
+        createdAt: new Date(now - index * 75 * 60 * 1000).toISOString(),
+      });
+    }
+  });
+
+  studyHistory = {
+    ...studyHistory,
+    [todayKey]: {
+      cards: Math.max(Number(studyHistory[todayKey]?.cards) || 0, 6),
+      topics: Array.from(new Set([...(studyHistory[todayKey]?.topics || []), topic.id])),
+      updatedAt: new Date().toISOString(),
+    },
+  };
+  saveStudyHistory();
+
+  neatQuizProgress = {
+    ...neatQuizProgress,
+    [topic.id]: {
+      attempts: Math.max(Number(neatQuizProgress[topic.id]?.attempts) || 0, 1),
+      bestScore: Math.max(Number(neatQuizProgress[topic.id]?.bestScore) || 0, 4),
+      bestStreak: Math.max(Number(neatQuizProgress[topic.id]?.bestStreak) || 0, 3),
+      lastScore: Math.max(Number(neatQuizProgress[topic.id]?.lastScore) || 0, 4),
+      totalQuestions: Math.max(Number(neatQuizProgress[topic.id]?.totalQuestions) || 0, 5),
+      lastCompletedAt: neatQuizProgress[topic.id]?.lastCompletedAt || new Date(now - 2 * 60 * 60 * 1000).toISOString(),
+    },
+  };
+  saveNeatQuizProgress();
+
+  if (!activityEvents.some((event) => event.source === "demo-onboarding")) {
+    activityEvents = [
+      {
+        id: createLocalId("demo-activity"),
+        userId: "guest",
+        classId: demoClassId,
+        type: "quiz_completed",
+        topicId: topic.id,
+        source: "demo-onboarding",
+        createdAt: new Date(now - 45 * 60 * 1000).toISOString(),
+      },
+      {
+        id: createLocalId("demo-activity"),
+        userId: "guest",
+        classId: demoClassId,
+        type: "note_created",
+        topicId: topic.id,
+        source: "demo-onboarding",
+        createdAt: new Date(now - 3 * 60 * 60 * 1000).toISOString(),
+      },
+      ...activityEvents,
+    ].slice(0, 800);
+  }
+
   cardAttempts = cardAttempts.slice(0, 1200);
   saveLocalArray(CARD_ATTEMPTS_KEY, cardAttempts);
+  saveLocalArray(ACTIVITY_EVENTS_KEY, activityEvents);
+}
+
+function seedDemoTeacherWorkspace() {
+  const centreId = "demo-centre-breakell";
+  const classId = "demo-class-ocr-y12";
+  const now = new Date().toISOString();
+
+  if (!centres.some((centre) => centre.id === centreId)) {
+    centres = [
+      {
+        id: centreId,
+        name: "BreakellSystems Demo College",
+        type: "college",
+        code: "CENTRE-DEMO",
+        createdAt: now,
+      },
+      ...centres,
+    ];
+    saveLocalArray(CENTRES_KEY, centres);
+  }
+
+  if (!classGroups.some((group) => group.id === classId)) {
+    classGroups = [
+      {
+        id: classId,
+        centreId,
+        name: "Year 12 OCR Computer Science",
+        subject: "Computer Science",
+        examBoard: "OCR A-Level",
+        yearGroup: "Year 12",
+        description: "Demo class for teacher insight, topic confidence and assignment workflows.",
+        inviteCode: "NN-DEMO",
+        students: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+      ...classGroups,
+    ];
+    saveLocalArray(CLASS_GROUPS_KEY, classGroups);
+  }
+
+  const demoStudents = [
+    { id: "demo-membership-ava", userId: "demo-student-ava", studentName: "Ava Patel", studentEmail: "ava.demo@example.com" },
+    { id: "demo-membership-sam", userId: "demo-student-sam", studentName: "Sam Taylor", studentEmail: "sam.demo@example.com" },
+    { id: "demo-membership-mia", userId: "demo-student-mia", studentName: "Mia Jones", studentEmail: "mia.demo@example.com" },
+  ];
+  const existingMembershipIds = new Set(classMemberships.map((membership) => membership.id));
+  const missingMemberships = demoStudents
+    .filter((student) => !existingMembershipIds.has(student.id))
+    .map((student, index) => ({
+      ...student,
+      classId,
+      role: "student",
+      status: "active",
+      joinedAt: new Date(Date.now() - (index + 2) * 24 * 60 * 60 * 1000).toISOString(),
+    }));
+
+  if (missingMemberships.length) {
+    classMemberships = [...missingMemberships, ...classMemberships];
+    saveClassMemberships();
+  }
+
+  if (!teacherAssignments.some((assignment) => assignment.id === "demo-assignment-111")) {
+    teacherAssignments = [
+      {
+        id: "demo-assignment-111",
+        classId,
+        topicId: "cs-1-1-1",
+        title: "Structure of the processor recovery task",
+        taskType: "flashcards_quiz",
+        instructions: "Complete the remaining flashcards, then score 4/5 or better in Quick Practice.",
+        dueAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+        status: "active",
+        createdAt: now,
+      },
+      ...teacherAssignments,
+    ];
+    saveLocalArray(TEACHER_ASSIGNMENTS_KEY, teacherAssignments);
+  }
+
+  activeClassId = activeClassId || classId;
+  activeCentreId = activeCentreId || centreId;
+  return classId;
 }
 
 function saveGuestState(state = null) {
@@ -2343,6 +2532,10 @@ function renderRevisionMasteryMap() {
 
 function renderLearningMode() {
   elements.revisionView.classList.toggle("teacher-mode-active", activeLearningMode === "teacher");
+  const legacyModeBar = elements.learningModeSwitch.closest(".learning-mode-bar");
+  if (legacyModeBar) {
+    legacyModeBar.hidden = true;
+  }
   document.querySelectorAll(".student-revision-section").forEach((section) => {
     section.hidden = activeLearningMode === "teacher";
   });
@@ -2656,6 +2849,19 @@ function renderTeacherMode() {
   if (!centres.some((centre) => centre.id === activeCentreId)) {
     activeCentreId = centres[0]?.id || null;
   }
+  if (activeTeacherSection === "topic-insights" || activeTeacherSection === "centre-settings") {
+    activeTeacherSection = activeTeacherSection === "topic-insights" ? "heatmap" : "settings";
+  }
+
+  const teacherSections = [
+    ["dashboard", "Dashboard"],
+    ["classes", "Classes"],
+    ["assignments", "Assignments"],
+    ["students", "Students"],
+    ["heatmap", "Topic Heatmap"],
+    ["reports", "Reports"],
+    ["settings", "Settings"],
+  ];
 
   elements.teacherModePanel.innerHTML = `
     <header class="teacher-hero">
@@ -2670,14 +2876,8 @@ function renderTeacherMode() {
       </div>
     </header>
     <nav class="teacher-tabs" aria-label="Teacher mode sections">
-      ${["dashboard", "classes", "topic-insights", "centre-settings"].map((section) => {
-        const labels = {
-          dashboard: "Dashboard",
-          classes: "Classes",
-          "topic-insights": "Topic Insights",
-          "centre-settings": "Centre Settings",
-        };
-        return `<button class="${section === activeTeacherSection ? "active" : ""}" type="button" data-teacher-section="${section}">${labels[section]}</button>`;
+      ${teacherSections.map(([section, label]) => {
+        return `<button class="${section === activeTeacherSection ? "active" : ""}" type="button" data-teacher-section="${section}">${label}</button>`;
       }).join("")}
     </nav>
     ${renderTeacherSection()}`;
@@ -2685,8 +2885,11 @@ function renderTeacherMode() {
 
 function renderTeacherSection() {
   if (activeTeacherSection === "classes") return renderTeacherClassesSection();
-  if (activeTeacherSection === "topic-insights") return renderTopicInsightsSection();
-  if (activeTeacherSection === "centre-settings") return renderCentreSettingsSection();
+  if (activeTeacherSection === "assignments") return renderTeacherAssignmentsSection();
+  if (activeTeacherSection === "students") return renderTeacherStudentsSection();
+  if (activeTeacherSection === "heatmap") return renderTeacherHeatmapSection();
+  if (activeTeacherSection === "reports") return renderTeacherReportsSection();
+  if (activeTeacherSection === "settings") return renderCentreSettingsSection();
   return renderTeacherDashboardSection();
 }
 
@@ -2738,7 +2941,8 @@ function renderTeacherDashboardSection() {
         <div class="teacher-action-list">
           <button type="button" data-create-assignment>Prepare review assignment</button>
           <button type="button" data-export-interventions>Export intervention CSV</button>
-          <button type="button" data-teacher-section="topic-insights">Review topic insights</button>
+          <button type="button" data-teacher-section="heatmap">Open topic heatmap</button>
+          <button type="button" data-teacher-section="assignments">Manage assignments</button>
           <button type="button" data-teacher-section="classes">Invite students</button>
         </div>
       </article>
@@ -2774,6 +2978,162 @@ function renderTeacherClassesSection() {
         <div class="section-title"><span>Class list</span><span>${classGroups.length}</span></div>
         ${classGroups.length ? classGroups.map(renderClassCard).join("") : renderInlineEmpty("Create your first class and invite students with a join code.")}
       </div>
+    </div>
+  </section>`;
+}
+
+function renderTeacherAssignmentsSection() {
+  const activeClass = getActiveClassGroup();
+  const activeAssignments = teacherAssignments
+    .filter((assignment) => !activeClass?.id || assignment.classId === activeClass.id)
+    .sort((a, b) => new Date(a.dueAt || 0) - new Date(b.dueAt || 0));
+
+  return `<section class="teacher-section">
+    <div class="teacher-section-head">
+      <div>
+        <p class="eyebrow">Assignments</p>
+        <h3>Set focused revision tasks and monitor class follow-through.</h3>
+      </div>
+      ${renderClassSelector()}
+    </div>
+    <div class="teacher-management-grid">
+      <form class="teacher-form" data-create-assignment-form>
+        <h4>Create assignment</h4>
+        <label for="assignment-class">Class</label>
+        <select id="assignment-class" name="classId" required>
+          ${classGroups.map((group) => `<option value="${escapeHtml(group.id)}" ${group.id === activeClass?.id ? "selected" : ""}>${escapeHtml(group.name)}</option>`).join("")}
+        </select>
+        <label for="assignment-topic">OCR topic</label>
+        <select id="assignment-topic" name="topicId" required>
+          ${REVISION_TOPICS.map((topic) => `<option value="${escapeHtml(topic.id)}" ${topic.id === activeRevisionTopicId ? "selected" : ""}>${escapeHtml(topic.code)} ${escapeHtml(topic.title)}</option>`).join("")}
+        </select>
+        <label for="assignment-task">Task type</label>
+        <select id="assignment-task" name="taskType">
+          <option value="flashcards_quiz">Flashcards + Quick Practice</option>
+          <option value="flashcards">Flashcards only</option>
+          <option value="quiz">Quick Practice only</option>
+          <option value="weak-cards">Weak-card recovery</option>
+        </select>
+        <label for="assignment-due">Due date</label>
+        <input id="assignment-due" name="dueAt" type="date" />
+        <label for="assignment-instructions">Instructions</label>
+        <textarea id="assignment-instructions" name="instructions" placeholder="Example: complete the deck, then score 80% or better in Quick Practice."></textarea>
+        <button type="submit" ${classGroups.length ? "" : "disabled"}>Set assignment</button>
+      </form>
+      <div class="teacher-panel-card">
+        <div class="section-title"><span>Active assignments</span><span>${activeAssignments.length}</span></div>
+        ${activeAssignments.length ? `<div class="teacher-assignment-list">${activeAssignments.map(renderTeacherAssignmentCard).join("")}</div>` : renderInlineEmpty("Assignments will appear here after you create a class task.")}
+      </div>
+    </div>
+  </section>`;
+}
+
+function renderTeacherStudentsSection() {
+  const activeClass = getActiveClassGroup();
+  const students = getClassMemberships(activeClass?.id);
+
+  return `<section class="teacher-section">
+    <div class="teacher-section-head">
+      <div>
+        <p class="eyebrow">Students</p>
+        <h3>Review learner activity, confidence and intervention priority.</h3>
+      </div>
+      ${renderClassSelector()}
+    </div>
+    ${
+      students.length
+        ? `<div class="teacher-table-wrap">
+            <table class="teacher-table">
+              <thead>
+                <tr>
+                  <th scope="col">Student</th>
+                  <th scope="col">Average confidence</th>
+                  <th scope="col">Cards rated</th>
+                  <th scope="col">Last active</th>
+                  <th scope="col">Weakest topic</th>
+                  <th scope="col">Action</th>
+                </tr>
+              </thead>
+              <tbody>${students.map(renderTeacherStudentRow).join("")}</tbody>
+            </table>
+          </div>`
+        : renderTeacherEmptyState("No students have joined this class yet. Share the join code from Classes.", "Open classes", "classes")
+    }
+  </section>`;
+}
+
+function renderTeacherHeatmapSection() {
+  const activeClass = getActiveClassGroup();
+  const students = getClassMemberships(activeClass?.id);
+  const topics = REVISION_TOPICS;
+
+  return `<section class="teacher-section">
+    <div class="teacher-section-head">
+      <div>
+        <p class="eyebrow">Topic Heatmap</p>
+        <h3>Scan class confidence across the OCR specification.</h3>
+      </div>
+      ${renderClassSelector()}
+    </div>
+    ${
+      students.length
+        ? `<div class="topic-heatmap-wrap" role="region" aria-label="Class topic heatmap" tabindex="0">
+            <table class="topic-heatmap">
+              <thead>
+                <tr>
+                  <th scope="col">Student</th>
+                  ${topics.map((topic) => `<th scope="col" title="${escapeHtml(topic.title)}">${escapeHtml(topic.code)}</th>`).join("")}
+                </tr>
+              </thead>
+              <tbody>
+                ${students.map((student) => `<tr>
+                  <th scope="row">${escapeHtml(student.studentName || "Student")}</th>
+                  ${topics.map((topic) => renderTeacherHeatmapCell(student, topic, activeClass?.id)).join("")}
+                </tr>`).join("")}
+              </tbody>
+            </table>
+          </div>
+          <div class="heatmap-legend"><span class="secure">Secure</span><span class="developing">Developing</span><span class="priority">Priority</span><span class="empty">No data</span></div>`
+        : renderTeacherEmptyState("Add students to generate a class heatmap.", "Invite students", "classes")
+    }
+  </section>`;
+}
+
+function renderTeacherReportsSection() {
+  const activeClass = getActiveClassGroup();
+  return `<section class="teacher-section">
+    <div class="teacher-section-head">
+      <div>
+        <p class="eyebrow">Reports</p>
+        <h3>Export intervention and progress evidence for the selected class.</h3>
+      </div>
+      ${renderClassSelector()}
+    </div>
+    <div class="teacher-report-grid">
+      <article class="teacher-panel-card">
+        <span>Interventions</span>
+        <strong>Topic weaknesses CSV</strong>
+        <p>Export low-confidence topics, weak-card counts and suggested teacher actions.</p>
+        <button type="button" data-export-interventions>Export interventions</button>
+      </article>
+      <article class="teacher-panel-card">
+        <span>Assignments</span>
+        <strong>Completion CSV</strong>
+        <p>Export assignment titles, due dates, class names and current completion signals.</p>
+        <button type="button" data-export-report="assignments" ${activeClass ? "" : "disabled"}>Export assignments</button>
+      </article>
+      <article class="teacher-panel-card">
+        <span>Mastery</span>
+        <strong>Topic mastery CSV</strong>
+        <p>Export every OCR topic with class confidence and latest activity.</p>
+        <button type="button" data-export-report="mastery" ${activeClass ? "" : "disabled"}>Export mastery</button>
+      </article>
+      <article class="teacher-panel-card">
+        <span>Future Pro</span>
+        <strong>PDF report pack</strong>
+        <p>Prepared UI for future branded reports, school evidence packs and parent-facing summaries.</p>
+        <button type="button" disabled>Coming soon</button>
+      </article>
     </div>
   </section>`;
 }
@@ -3018,21 +3378,117 @@ function renderClassCard(group) {
       <span>Join code</span>
       <code>${escapeHtml(group.inviteCode)}</code>
       <button type="button" data-copy-code="${escapeHtml(group.inviteCode)}">Copy code</button>
+      <button type="button" data-regenerate-code="${escapeHtml(group.id)}">Regenerate</button>
     </div>
     <p>Students can join this class using this code.</p>
+    <div class="class-card-actions">
+      <button type="button" data-teacher-section="students">View students</button>
+      <button type="button" data-teacher-section="assignments">Set assignment</button>
+      <button type="button" data-archive-class="${escapeHtml(group.id)}">${group.archivedAt ? "Archived" : "Archive"}</button>
+    </div>
   </article>`;
+}
+
+function renderTeacherAssignmentCard(assignment) {
+  const topic = getQuizTopicById(assignment.topicId);
+  const group = getClassById(assignment.classId);
+  const completion = getAssignmentCompletionSummary(assignment);
+  return `<article class="teacher-assignment-card ${escapeHtml(assignment.status || "active")}">
+    <div>
+      <span>${escapeHtml(assignment.taskType || "assignment")}</span>
+      <strong>${escapeHtml(assignment.title || `${topic?.code || ""} ${topic?.title || "Revision assignment"}`)}</strong>
+      <p>${escapeHtml(assignment.instructions || "Complete the assigned revision task.")}</p>
+    </div>
+    <div class="assignment-meta-grid">
+      <span>Class: ${escapeHtml(group?.name || "No class")}</span>
+      <span>Topic: ${topic ? `${escapeHtml(topic.code)} ${escapeHtml(topic.title)}` : "Unknown"}</span>
+      <span>Due: ${assignment.dueAt ? escapeHtml(formatDate(assignment.dueAt)) : "No due date"}</span>
+      <span>${completion.completed}/${completion.total} showing progress</span>
+    </div>
+  </article>`;
+}
+
+function getAssignmentCompletionSummary(assignment) {
+  const students = getClassMemberships(assignment.classId);
+  const completed = students.filter((student) => {
+    const attempts = cardAttempts.filter((attempt) =>
+      attempt.userId === student.userId &&
+      attempt.classId === assignment.classId &&
+      attempt.topicId === assignment.topicId
+    );
+    return attempts.length >= 3 || calculateTopicConfidence(attempts).percent >= 70;
+  }).length;
+
+  return {
+    total: students.length,
+    completed,
+  };
+}
+
+function renderTeacherStudentRow(student) {
+  const activeClass = getActiveClassGroup();
+  const attempts = cardAttempts.filter((attempt) => attempt.userId === student.userId && attempt.classId === activeClass?.id);
+  const confidence = calculateTopicConfidence(attempts);
+  const weakest = getWeakestTopicForStudent(student, activeClass?.id);
+  const lastAttempt = attempts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
+
+  return `<tr>
+    <td><strong>${escapeHtml(student.studentName || "Student")}</strong><span>${escapeHtml(student.studentEmail || "No email")}</span></td>
+    <td>${confidence.totalAttempts ? `${confidence.percent}% · ${escapeHtml(confidence.band)}` : "No data"}</td>
+    <td>${confidence.totalAttempts}</td>
+    <td>${lastAttempt ? escapeHtml(formatDate(lastAttempt.createdAt)) : "Not active yet"}</td>
+    <td>${weakest ? `${escapeHtml(weakest.topic.code)} ${escapeHtml(weakest.topic.title)}` : "None yet"}</td>
+    <td><button type="button" data-remove-student="${escapeHtml(student.id)}">Remove</button></td>
+  </tr>`;
+}
+
+function getWeakestTopicForStudent(student, classId) {
+  return REVISION_TOPICS.map((topic) => {
+    const attempts = cardAttempts.filter((attempt) =>
+      attempt.userId === student.userId &&
+      attempt.classId === classId &&
+      attempt.topicId === topic.id
+    );
+    return {
+      topic,
+      confidence: calculateTopicConfidence(attempts),
+    };
+  })
+    .filter((entry) => entry.confidence.totalAttempts)
+    .sort((a, b) => a.confidence.percent - b.confidence.percent)[0] || null;
+}
+
+function renderTeacherHeatmapCell(student, topic, classId) {
+  const attempts = cardAttempts.filter((attempt) =>
+    attempt.userId === student.userId &&
+    attempt.classId === classId &&
+    attempt.topicId === topic.id
+  );
+  const confidence = calculateTopicConfidence(attempts);
+  const heatClass = !confidence.totalAttempts
+    ? "empty"
+    : confidence.percent >= 75
+      ? "secure"
+      : confidence.percent >= 45
+        ? "developing"
+        : "priority";
+
+  return `<td class="${heatClass}" title="${escapeHtml(student.studentName || "Student")} · ${escapeHtml(topic.code)} ${escapeHtml(topic.title)} · ${confidence.totalAttempts ? `${confidence.percent}% confidence` : "No data"}">
+    ${confidence.totalAttempts ? `${confidence.percent}%` : "—"}
+  </td>`;
 }
 
 function prepareTeacherAssignment(topicId = "") {
   const topic = getQuizTopicById(topicId) || getRecommendedRevisionTopic() || getActiveRevisionTopic();
-  activeTeacherSection = "classes";
+  activeRevisionTopicId = topic.id;
+  activeTeacherSection = classGroups.length ? "assignments" : "classes";
   renderTeacherMode();
   window.setTimeout(() => {
     elements.teacherModePanel.querySelector(".teacher-section")?.insertAdjacentHTML(
       "afterbegin",
       `<div class="teacher-assignment-draft" role="status">
         <strong>Review assignment prepared</strong>
-        <p>${escapeHtml(topic.code)} ${escapeHtml(topic.title)} is ready to share as a class revision focus. Use the class join code, then ask students to complete flashcards and Quick Practice for this topic.</p>
+        <p>${escapeHtml(topic.code)} ${escapeHtml(topic.title)} is selected. ${classGroups.length ? "Complete the assignment form to set the task for your class." : "Create a class first, then set this as a revision task."}</p>
       </div>`
     );
   }, 0);
@@ -3053,16 +3509,65 @@ function exportInterventionCsv() {
       insight.suggestedAction,
     ]),
   ];
+  const activeClass = getActiveClassGroup();
+  downloadCsv(rows, `${slugify(activeClass?.name || "neat-notes-interventions")}-interventions.csv`);
+  trackEvent("teacher_interventions_exported", { classId: activeClass?.id || "none" });
+}
+
+function exportAssignmentsCsv() {
+  const activeClass = getActiveClassGroup();
+  const assignments = teacherAssignments.filter((assignment) => !activeClass?.id || assignment.classId === activeClass.id);
+  const rows = [
+    ["Class", "Topic code", "Topic title", "Task type", "Due", "Status", "Students showing progress", "Students total", "Instructions"],
+    ...assignments.map((assignment) => {
+      const topic = getQuizTopicById(assignment.topicId);
+      const group = getClassById(assignment.classId);
+      const completion = getAssignmentCompletionSummary(assignment);
+      return [
+        group?.name || "",
+        topic?.code || "",
+        topic?.title || "",
+        assignment.taskType || "",
+        assignment.dueAt ? formatDate(assignment.dueAt) : "",
+        assignment.status || "active",
+        String(completion.completed),
+        String(completion.total),
+        assignment.instructions || "",
+      ];
+    }),
+  ];
+  downloadCsv(rows, `${slugify(activeClass?.name || "neat-notes-assignments")}-assignments.csv`);
+  trackEvent("teacher_assignments_exported", { classId: activeClass?.id || "none" });
+}
+
+function exportMasteryCsv() {
+  const activeClass = getActiveClassGroup();
+  const rows = [
+    ["Topic code", "Topic title", "Class confidence", "Band", "Attempts", "Weak cards", "Last activity", "Suggested action"],
+    ...getClassTopicInsights().map((insight) => [
+      insight.topic.code,
+      insight.topic.title,
+      insight.confidence.totalAttempts ? `${insight.confidence.percent}%` : "No data",
+      insight.confidence.band,
+      String(insight.confidence.totalAttempts),
+      String(insight.weakCards.length),
+      insight.lastRevised,
+      insight.suggestedAction,
+    ]),
+  ];
+  downloadCsv(rows, `${slugify(activeClass?.name || "neat-notes-mastery")}-topic-mastery.csv`);
+  trackEvent("teacher_mastery_exported", { classId: activeClass?.id || "none" });
+}
+
+function downloadCsv(rows, filename) {
   const csv = rows.map((row) => row.map(csvEscape).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
-  const activeClass = getActiveClassGroup();
   anchor.href = url;
-  anchor.download = `${slugify(activeClass?.name || "neat-notes-interventions")}-interventions.csv`;
+  anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(url);
-  trackEvent("teacher_interventions_exported", { classId: activeClass?.id || "none" });
 }
 
 function csvEscape(value) {
@@ -3072,6 +3577,16 @@ function csvEscape(value) {
 function handleTeacherModeClick(event) {
   if (event.target.closest("[data-export-interventions]")) {
     exportInterventionCsv();
+    return;
+  }
+
+  const reportButton = event.target.closest("[data-export-report]");
+  if (reportButton) {
+    if (reportButton.dataset.exportReport === "assignments") {
+      exportAssignmentsCsv();
+    } else if (reportButton.dataset.exportReport === "mastery") {
+      exportMasteryCsv();
+    }
     return;
   }
 
@@ -3088,6 +3603,24 @@ function handleTeacherModeClick(event) {
     return;
   }
 
+  const regenerateButton = event.target.closest("[data-regenerate-code]");
+  if (regenerateButton) {
+    regenerateClassCode(regenerateButton.dataset.regenerateCode);
+    return;
+  }
+
+  const archiveButton = event.target.closest("[data-archive-class]");
+  if (archiveButton) {
+    archiveClassGroup(archiveButton.dataset.archiveClass);
+    return;
+  }
+
+  const removeStudentButton = event.target.closest("[data-remove-student]");
+  if (removeStudentButton) {
+    removeClassStudent(removeStudentButton.dataset.removeStudent);
+    return;
+  }
+
   const copyButton = event.target.closest("[data-copy-code]");
   if (copyButton) {
     navigator.clipboard?.writeText(copyButton.dataset.copyCode).then(() => {
@@ -3100,14 +3633,20 @@ function handleTeacherModeClick(event) {
 
 function handleTeacherModeSubmit(event) {
   const classForm = event.target.closest("[data-create-class]");
+  const assignmentForm = event.target.closest("[data-create-assignment-form]");
   const centreForm = event.target.closest("[data-create-centre]");
   const joinCentreForm = event.target.closest("[data-join-centre]");
-  if (!classForm && !centreForm && !joinCentreForm) return;
+  if (!classForm && !assignmentForm && !centreForm && !joinCentreForm) return;
 
   event.preventDefault();
 
   if (classForm) {
     createClassGroup(new FormData(classForm));
+    return;
+  }
+
+  if (assignmentForm) {
+    createTeacherAssignment(new FormData(assignmentForm));
     return;
   }
 
@@ -3148,6 +3687,70 @@ function createClassGroup(form) {
   activeClassId = group.id;
   saveLocalArray(CLASS_GROUPS_KEY, classGroups);
   recordActivityEvent({ type: "class_joined", classId: group.id });
+  renderTeacherMode();
+}
+
+function createTeacherAssignment(form) {
+  const classId = String(form.get("classId") || activeClassId || "").trim();
+  const topicId = String(form.get("topicId") || activeRevisionTopicId || "").trim();
+  const topic = getQuizTopicById(topicId);
+  if (!classId || !topic) return;
+
+  const dueValue = String(form.get("dueAt") || "").trim();
+  const assignment = {
+    id: createLocalId("assignment"),
+    classId,
+    topicId,
+    title: `${topic.code} ${topic.title}`,
+    taskType: String(form.get("taskType") || "flashcards_quiz"),
+    instructions: String(form.get("instructions") || "").trim() || "Complete the flashcards, then use Quick Practice to check your understanding.",
+    dueAt: dueValue ? new Date(`${dueValue}T16:00:00`).toISOString() : "",
+    status: "active",
+    createdAt: new Date().toISOString(),
+  };
+
+  teacherAssignments = [assignment, ...teacherAssignments].slice(0, 300);
+  saveLocalArray(TEACHER_ASSIGNMENTS_KEY, teacherAssignments);
+  activeClassId = classId;
+  activeRevisionTopicId = topicId;
+  recordActivityEvent({ type: "assignment_created", classId, topicId });
+  trackEvent("teacher_assignment_created", { classId, topicId, taskType: assignment.taskType });
+  renderTeacherMode();
+}
+
+function regenerateClassCode(classId) {
+  classGroups = classGroups.map((group) =>
+    group.id === classId
+      ? { ...group, inviteCode: createInviteCode("NN"), updatedAt: new Date().toISOString() }
+      : group
+  );
+  saveLocalArray(CLASS_GROUPS_KEY, classGroups);
+  renderTeacherMode();
+}
+
+function archiveClassGroup(classId) {
+  const group = getClassById(classId);
+  if (!group || group.archivedAt) return;
+  const confirmed = window.confirm(`Archive ${group.name}? Students are not deleted, but the class is marked as inactive.`);
+  if (!confirmed) return;
+
+  classGroups = classGroups.map((item) =>
+    item.id === classId ? { ...item, archivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : item
+  );
+  saveLocalArray(CLASS_GROUPS_KEY, classGroups);
+  renderTeacherMode();
+}
+
+function removeClassStudent(membershipId) {
+  const membership = classMemberships.find((item) => item.id === membershipId);
+  if (!membership) return;
+  const confirmed = window.confirm(`Remove ${membership.studentName || "this student"} from the class?`);
+  if (!confirmed) return;
+
+  classMemberships = classMemberships.map((item) =>
+    item.id === membershipId ? { ...item, status: "removed", removedAt: new Date().toISOString() } : item
+  );
+  saveClassMemberships();
   renderTeacherMode();
 }
 
@@ -3214,6 +3817,7 @@ function renderRevisionPage() {
   renderAchievementSummary();
   renderDailyStudyPanel();
   renderRevisionDashboard(topic);
+  renderStudentDashboard(topic);
   renderStudentClassPanel();
   elements.revisionTopicCode.textContent = topic.code;
   elements.revisionTopicTitle.textContent = topic.title;
@@ -3283,8 +3887,9 @@ function renderRevisionPage() {
             <span class="revision-card-back-actions">
               <span class="revision-card-cue">Return to question</span>
               <span class="confidence-controls" aria-label="Rate your confidence for this card">
-                <button class="confidence-button confident" type="button" data-card-confidence="confident" data-card-id="${escapeHtml(cardKey)}" tabindex="${isFlipped ? "0" : "-1"}">Confident</button>
-                <button class="confidence-button needs-practice" type="button" data-card-confidence="needs_practice" data-card-id="${escapeHtml(cardKey)}" tabindex="${isFlipped ? "0" : "-1"}">Need practice</button>
+                <button class="confidence-button needs-practice" type="button" data-card-confidence="again" data-card-id="${escapeHtml(cardKey)}" tabindex="${isFlipped ? "0" : "-1"}">Again</button>
+                <button class="confidence-button good" type="button" data-card-confidence="good" data-card-id="${escapeHtml(cardKey)}" tabindex="${isFlipped ? "0" : "-1"}">Good</button>
+                <button class="confidence-button easy" type="button" data-card-confidence="easy" data-card-id="${escapeHtml(cardKey)}" tabindex="${isFlipped ? "0" : "-1"}">Easy</button>
               </span>
             </span>
           </span>
@@ -3490,6 +4095,152 @@ function renderRevisionDashboard(topic) {
     elements.revisionRecommendedNext.textContent = `${recommendedTopic.code} ${recommendedTopic.title}`;
     elements.revisionRecommendedMeta.textContent = `${recommendedCompleted}/${recommendedTotal} cards complete`;
     elements.revisionWeakTopic.textContent = `${recommendedTopic.code} ${recommendedTopic.title}`;
+  }
+}
+
+function renderStudentDashboard(topic) {
+  if (!elements.studentDashboardPanel) return;
+
+  const today = getTodayStudyStats();
+  const streak = getStudyStreak();
+  const totals = getRevisionAchievementTotals();
+  const recommendedTopic = getRecommendedRevisionTopic() || topic;
+  const recommendation = generateRevisionRecommendation(recommendedTopic?.id || topic?.id);
+  const activeTopicProgress = topic?.cards?.length ? Math.round((getCompletedRevisionCount(topic) / topic.cards.length) * 100) : 0;
+  const weakCards = recommendedTopic ? identifyWeakCards(recommendedTopic.id) : [];
+  const recentNote = [...notes].sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))[0];
+  const recentQuiz = getMostRecentQuizProgress();
+  const missionRemaining = Math.max(0, DAILY_REVIEW_GOAL - today.cards);
+  const missionPercent = Math.min(100, Math.round((today.cards / DAILY_REVIEW_GOAL) * 100));
+  const recentActivity = activityEvents.slice(0, 3);
+
+  elements.studentDashboardPanel.innerHTML = `
+    <div class="student-dashboard-head">
+      <div>
+        <p class="eyebrow">Student dashboard</p>
+        <h3>Today’s revision plan</h3>
+        <p>Start with the highest-value task, then let Neat Notes update your weak-topic recommendation as you revise.</p>
+      </div>
+      <button type="button" data-student-action="continue">Continue revision</button>
+    </div>
+    <div class="student-dashboard-grid">
+      <article class="student-action-card primary-path">
+        <span>Recommended next</span>
+        <strong>${escapeHtml(recommendation.title || `${recommendedTopic?.code || ""} ${recommendedTopic?.title || ""}`)}</strong>
+        <p>${escapeHtml(recommendation.reason || "Continue your next OCR revision task.")}</p>
+        <div class="student-card-actions">
+          <button type="button" data-student-action="continue">${escapeHtml(recommendation.actionLabel || "Start")}</button>
+          <button type="button" data-student-action="cards">Review cards</button>
+        </div>
+      </article>
+      <article class="student-action-card">
+        <span>Daily mission</span>
+        <strong>${today.cards}/${DAILY_REVIEW_GOAL} cards</strong>
+        <p>${missionRemaining ? `${missionRemaining} cards left today. Current streak: ${streak} day${streak === 1 ? "" : "s"}.` : "Daily mission complete. Nice, clean progress banked."}</p>
+        <div class="mini-meter" aria-label="${missionPercent}% daily mission complete"><i style="width: ${missionPercent}%"></i></div>
+      </article>
+      <article class="student-action-card">
+        <span>OCR mastery</span>
+        <strong>${totals.earnedCards}/${totals.totalCards}</strong>
+        <p>${totals.earnedTopics}/${totals.totalTopics} topic badges unlocked. Current deck is ${activeTopicProgress}% complete.</p>
+        <button type="button" data-student-action="progress">View progress map</button>
+      </article>
+      <article class="student-action-card">
+        <span>Weak-topic signal</span>
+        <strong>${weakCards.length ? `${weakCards.length} cards need practice` : "No urgent weakness"}</strong>
+        <p>${weakCards.length ? `Best short review: ${recommendedTopic.code} ${recommendedTopic.title}.` : "Rate cards as you revise and this becomes more precise."}</p>
+        <button type="button" data-student-action="weak" ${weakCards.length ? "" : "disabled"}>Review weak cards</button>
+      </article>
+      <article class="student-action-card">
+        <span>Recent activity</span>
+        <strong>${recentQuiz ? `${recentQuiz.topic.code} quiz ${recentQuiz.progress.lastScore || recentQuiz.progress.bestScore || 0}/${recentQuiz.progress.totalQuestions || recentQuiz.topic.cards.length}` : recentNote ? recentNote.title || createTitle(recentNote.body) : "Demo ready"}</strong>
+        <p>${recentNote ? `Latest note edited ${getRelativeEditLabel(recentNote.updated_at || recentNote.created_at).toLowerCase()}.` : "Create your first note to see revision material appear here."}</p>
+      </article>
+      <article class="student-action-card quick-actions">
+        <span>Quick actions</span>
+        <div class="student-quick-action-grid">
+          <button type="button" data-student-action="note">Create note</button>
+          <button type="button" data-student-action="quick">Quick Practice</button>
+          <button type="button" data-student-action="teacher">Teacher mode</button>
+          <button type="button" data-student-action="progress">Progress</button>
+        </div>
+      </article>
+    </div>
+    ${
+      recentActivity.length
+        ? `<div class="student-recent-strip" aria-label="Recent revision events">
+            ${recentActivity.map((event) => {
+              const eventTopic = event.topicId ? getQuizTopicById(event.topicId) : null;
+              return `<span>${escapeHtml(formatActivityType(event.type))}${eventTopic ? ` · ${escapeHtml(eventTopic.code)}` : ""}</span>`;
+            }).join("")}
+          </div>`
+        : ""
+    }`;
+}
+
+function getMostRecentQuizProgress() {
+  return Object.entries(neatQuizProgress)
+    .map(([topicId, progress]) => ({
+      topic: getQuizTopicById(topicId),
+      progress,
+      time: new Date(progress.lastCompletedAt || 0).getTime(),
+    }))
+    .filter((entry) => entry.topic && entry.progress?.attempts)
+    .sort((a, b) => b.time - a.time)[0] || null;
+}
+
+async function handleStudentDashboardClick(event) {
+  const button = event.target.closest("[data-student-action]");
+  if (!button) return;
+
+  const action = button.dataset.studentAction;
+  if (action === "continue") {
+    await continueRevisionJourney();
+    return;
+  }
+
+  if (action === "cards") {
+    const topic = getRecommendedRevisionTopic() || getActiveRevisionTopic();
+    if (topic?.id) {
+      activeRevisionTopicId = topic.id;
+      if (canAccessRevisionTopic(topic.id)) startRevisionSession(topic.id);
+      renderRevisionPage();
+    }
+    document.querySelector(".revision-stage")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  if (action === "quick") {
+    await startActiveTopicQuiz();
+    elements.quickPracticeSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  if (action === "note") {
+    setAppSection("notes");
+    if (!selectedId) {
+      createNote();
+    } else {
+      elements.noteBody.focus();
+    }
+    return;
+  }
+
+  if (action === "progress") {
+    scrollToRevisionProgress();
+    return;
+  }
+
+  if (action === "weak") {
+    const topic = getRecommendedRevisionTopic() || getActiveRevisionTopic();
+    if (topic && identifyWeakCards(topic.id).length) {
+      startWeakCardReview(topic.id);
+    }
+    return;
+  }
+
+  if (action === "teacher") {
+    setAppSection("teacher");
   }
 }
 
@@ -3797,6 +4548,7 @@ async function startNeatQuiz(topicId) {
     questions,
     bestStreak: neatQuizProgress[topic.id]?.bestStreak || 0,
   };
+  trackEvent("quick_practice_started", { topicId: topic.id, questionCount: questions.length });
   renderRevisionPage();
 }
 
@@ -3812,7 +4564,12 @@ function answerNeatQuizQuestion(optionIndex) {
   neatQuizState.score += wasCorrect ? 1 : 0;
   neatQuizState.streak = wasCorrect ? neatQuizState.streak + 1 : 0;
   neatQuizState.bestStreak = Math.max(neatQuizState.bestStreak, neatQuizState.streak);
+  recordCardAttempt(`${neatQuizState.quizId}:${question.id}`, neatQuizState.quizId, wasCorrect ? "confident" : "needs_practice", {
+    quizCorrect: wasCorrect,
+    source: "quick_practice",
+  });
   persistNeatQuizBestStreak(neatQuizState.quizId, neatQuizState.bestStreak);
+  trackEvent("quick_practice_answered", { topicId: neatQuizState.quizId, correct: wasCorrect });
   renderNeatQuestions();
 }
 
@@ -3849,6 +4606,8 @@ function completeNeatQuiz() {
   };
   saveNeatQuizProgress();
   neatQuizState.completed = true;
+  recordActivityEvent({ type: "quiz_completed", topicId });
+  trackEvent("quick_practice_completed", { topicId, score: neatQuizState.score, total });
   renderNeatQuestions();
 }
 
@@ -4099,6 +4858,7 @@ async function flipRevisionCard(event) {
     flippedRevisionCards.delete(cardId);
   } else {
     flippedRevisionCards.add(cardId);
+    trackEvent("flashcard_flipped", { cardId, topicId: getRevisionTopicFromCardId(cardId)?.id });
   }
   renderRevisionPage();
 }
@@ -4121,10 +4881,18 @@ function handleRevisionCardKeydown(event) {
 }
 
 function rateRevisionCard(cardId, confidence) {
-  if (!cardId || !["confident", "needs_practice"].includes(confidence)) return;
+  const confidenceMap = {
+    again: "needs_practice",
+    needs_practice: "needs_practice",
+    good: "confident",
+    easy: "confident",
+    confident: "confident",
+  };
+  const storedConfidence = confidenceMap[confidence];
+  if (!cardId || !storedConfidence) return;
 
   const topic = getRevisionTopicFromCardId(cardId);
-  recordCardAttempt(cardId, topic?.id, confidence);
+  recordCardAttempt(cardId, topic?.id, storedConfidence, { difficulty: confidence });
   markRevisionCardDone(cardId, { recordStudy: true, awardBadge: false });
 }
 
@@ -4544,6 +5312,8 @@ function renderNoteIntelligencePanel(note) {
       ? "Ready for revision generation."
       : signals.definitions < 2
         ? "Add two precise definitions."
+        : signals.examples < 1
+          ? "Add one concrete example."
         : signals.revisionTasks < 2
           ? "Add revision tasks for follow-up."
           : "Add more OCR-linked examples.";
@@ -4558,9 +5328,10 @@ function renderNoteIntelligencePanel(note) {
       </div>
     </div>
     <div class="intelligence-grid">
+      <article><span>Words</span><strong>${signals.words}</strong></article>
       <article><span>Headings</span><strong>${signals.headings}</strong></article>
       <article><span>Definitions</span><strong>${signals.definitions}</strong></article>
-      <article><span>Key terms</span><strong>${signals.keyTerms}</strong></article>
+      <article><span>Examples</span><strong>${signals.examples || 0}</strong></article>
       <article><span>Tasks</span><strong>${signals.revisionTasks}</strong></article>
     </div>
     ${

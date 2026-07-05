@@ -45,6 +45,14 @@
             <span>A BreakellSystems product</span>
           </div>
         </div>
+        <nav class="landing-primary-links" aria-label="Public site sections">
+          <button type="button" data-landing-scroll="product">Product</button>
+          <button type="button" data-landing-scroll="students">Students</button>
+          <button type="button" data-landing-scroll="teachers">Teachers</button>
+          <button type="button" data-landing-scroll="schools">Schools</button>
+          <button type="button" data-landing-scroll="pricing">Pricing</button>
+          <button type="button" data-landing-action="contact">Contact</button>
+        </nav>
         <div class="landing-nav-actions">
           <button type="button" data-landing-action="demo">View demo workspace</button>
           <button type="button" data-landing-action="login">Login</button>
@@ -52,7 +60,7 @@
         </div>
       </header>
 
-      <section class="landing-hero">
+      <section id="landing-product" class="landing-hero">
         <div>
           <p class="eyebrow">OCR H446 revision workspace</p>
           <h1>OCR A-Level Computer Science revision, notes and progress tracking in one workspace.</h1>
@@ -71,20 +79,20 @@
           <strong>1.1.1 Structure of the Processor</strong>
           <p>Sample note, generated cards, Quick Practice questions, progress signals and a weak-topic recommendation.</p>
           <div>
-            <span>5 cards ready</span>
+            <span>8 cards next</span>
             <span>5 quiz checks</span>
             <span>OCR topic map</span>
           </div>
         </aside>
       </section>
 
-      <section class="landing-workflow" aria-label="Neat Notes workflow">
+      <section id="landing-students" class="landing-workflow" aria-label="Neat Notes workflow">
         <article><span>1</span><strong>Write or paste notes</strong><p>Structure OCR topic notes with headings, definitions, examples and revision tasks.</p></article>
         <article><span>2</span><strong>Generate revision</strong><p>Create summaries, flashcards, quiz checks, key terms and exam-style prompts from the note.</p></article>
         <article><span>3</span><strong>Revise smarter</strong><p>Use confidence ratings, streaks and recommendations to decide what to revise next.</p></article>
       </section>
 
-      <section class="landing-benefits-grid">
+      <section id="landing-teachers" class="landing-benefits-grid">
         <div>
           <p class="eyebrow">Students</p>
           <h2>Independent revision with structure.</h2>
@@ -107,7 +115,30 @@
         </div>
       </section>
 
-      <section class="landing-pricing-preview" aria-label="Pricing preview">
+      <section id="landing-schools" class="landing-schools" aria-label="For schools and colleges">
+        <div>
+          <p class="eyebrow">For schools</p>
+          <h2>Designed for teacher-led OCR Computer Science revision.</h2>
+          <p>
+            Neat Notes is being shaped for UK classrooms: teacher accounts, student join codes, topic insight,
+            activity exports and clear school setup conversations without making classroom data feel like admin noise.
+          </p>
+          <div class="landing-hero-actions">
+            <button class="primary-account-button" type="button" data-landing-action="teacher">Explore teacher mode</button>
+            <button type="button" data-landing-action="school-contact">Discuss school setup</button>
+          </div>
+        </div>
+        <div class="school-readiness-grid">
+          <article><span>Teacher accounts</span><strong>Class dashboards and assignment pathways</strong><p>Teachers can create classes, share join codes and review topic confidence.</p></article>
+          <article><span>Student join codes</span><strong>Simple classroom onboarding</strong><p>Students join a class with a code and keep personal revision separate from teacher-visible activity.</p></article>
+          <article><span>Data controls</span><strong>Export and deletion-ready structure</strong><p>Progress, class membership and support data are organised for future school data requests.</p></article>
+          <article><span>UK focus</span><strong>GDPR-conscious by design</strong><p>School rollout still needs formal agreements, but the product is already structured with UK education expectations in mind.</p></article>
+          <article><span>Invoices</span><strong>School purchasing pathway</strong><p>Institution conversations can support invoice requests, department rollout and procurement checks.</p></article>
+          <article><span>Procurement note</span><strong>Commercial readiness, not legal advice</strong><p>Final contracts, DPA wording and safeguarding review should be completed before larger deployments.</p></article>
+        </div>
+      </section>
+
+      <section id="landing-pricing" class="landing-pricing-preview" aria-label="Pricing preview">
         <div class="section-title"><span>Pricing preview</span><span>Cancel anytime · Secure billing through Stripe</span></div>
         <div class="landing-plan-row">
           <article><span>Free</span><strong>£0</strong><p>25 notes and one OCR deck of your choice.</p></article>
@@ -268,7 +299,8 @@
         </div>
         <nav class="topbar-section-switch" aria-label="Main app sections">
           <button class="active" type="button" data-app-section="notes">Notes</button>
-          <button type="button" data-app-section="revision">Revision</button>
+          <button type="button" data-app-section="revision">Student</button>
+          <button type="button" data-app-section="teacher">Teacher</button>
         </nav>
       </header>
 
@@ -536,6 +568,8 @@
         </header>
 
         <section id="student-class-panel" class="student-class-panel student-revision-section" aria-label="Student class membership"></section>
+
+        <section id="student-dashboard-panel" class="student-dashboard-panel student-revision-section" aria-label="Student revision dashboard"></section>
 
         <section id="quick-practice-section" class="neat-questions-section student-revision-section" aria-labelledby="neat-questions-title">
           <div class="neat-questions-head">
