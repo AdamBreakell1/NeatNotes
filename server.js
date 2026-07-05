@@ -17,6 +17,7 @@ const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const SESSION_COOKIE = "nn_session";
 const CONTACT_TO = process.env.CONTACT_TO || "neatnotescontact@gmail.com";
 const FREE_REVISION_DECK_LIMIT = Number(process.env.FREE_REVISION_DECK_LIMIT || 1);
+const DEFAULT_FREE_REVISION_DECK_ID = "cs-1-1-1";
 const DATA_DIR = path.join(__dirname, "data");
 const REQUESTED_DB_PATH = process.env.DATABASE_PATH || path.join(DATA_DIR, "neat-notes.sqlite");
 const DATABASE_CONFIG = prepareDatabasePath(REQUESTED_DB_PATH);
@@ -354,7 +355,7 @@ app.use(securityHeaders);
 app.use(corsMiddleware);
 app.post("/api/billing/stripe/webhook", express.raw({ type: "application/json" }), asyncHandler(handleStripeWebhook));
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "1mb" }));
-app.use(express.static(__dirname));
+registerPublicAssetRoutes();
 
 app.get("/api/session", requireUser, (req, res) => {
   res.json({
@@ -1263,6 +1264,78 @@ app.listen(PORT, () => {
 
 function asyncHandler(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+}
+
+function registerPublicAssetRoutes() {
+  const publicAssets = new Map([
+    ["/app.js", "application/javascript"],
+    ["/styles.css", "text/css"],
+    ["/revision-generator.js", "application/javascript"],
+    ["/neat-questions.js", "application/javascript"],
+    ["/favicon.svg", "image/svg+xml"],
+  ]);
+
+  publicAssets.forEach((contentType, publicPath) => {
+    app.get(publicPath, (req, res) => {
+      res.type(contentType);
+      res.sendFile(path.join(__dirname, publicPath.slice(1)));
+    });
+  });
+
+  app.get("/revision-topics.js", (req, res) => {
+    const user = getOptionalSessionUser(req);
+    const fullLibrary = Boolean(user && hasFeature(user, "fullRevisionLibrary"));
+    const selectedFreeDeckId = user ? user.free_revision_deck_id : DEFAULT_FREE_REVISION_DECK_ID;
+    const topics = loadRevisionTopicsFromAssets().map((topic) =>
+      createPublicRevisionTopic(topic, fullLibrary || topic.id === selectedFreeDeckId),
+    );
+
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("Vary", "Cookie");
+    res.type("application/javascript");
+    res.send(`window.REVISION_TOPICS = ${JSON.stringify(topics)};`);
+  });
+}
+
+function getOptionalSessionUser(req) {
+  const token = parseCookies(req.headers.cookie || "")[SESSION_COOKIE];
+  if (!token) return null;
+
+  const tokenHash = hashToken(token);
+  const session = db.prepare(`
+    SELECT sessions.*, users.*
+    FROM sessions
+    JOIN users ON users.id = sessions.user_id
+    WHERE sessions.token_hash = ?
+  `).get(tokenHash);
+
+  if (!session || new Date(session.expires_at) < new Date()) return null;
+  return session;
+}
+
+function createPublicRevisionTopic(topic, includeCards) {
+  const cards = Array.isArray(topic.cards) ? topic.cards : [];
+  return {
+    id: topic.id,
+    subject: topic.subject || "Computer Science",
+    code: topic.code || "",
+    title: topic.title || "Untitled deck",
+    summary: topic.summary || "",
+    cardCount: cards.length,
+    lockedPreview: !includeCards,
+    cards: includeCards ? cards.map((card) => decoratePublicRevisionCard(topic.id, card)) : [],
+  };
+}
+
+function decoratePublicRevisionCard(topicId, card) {
+  const cardKey = String(card.id || "");
+  return {
+    id: cardKey,
+    serverCardId: `${topicId}__${cardKey}`,
+    category: card.category || "Revision",
+    front: card.front || "",
+    back: card.back || "",
+  };
 }
 
 async function handleStripeWebhook(req, res) {

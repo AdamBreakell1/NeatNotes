@@ -1172,6 +1172,21 @@ input[aria-invalid="true"] {
   z-index: 1;
 }
 
+.topbar-section-switch button.locked-section:not(.active)::after {
+  content: "Locked";
+  display: inline-block;
+  margin-left: 8px;
+  border: 1px solid color-mix(in srgb, #f59e0b 55%, var(--line));
+  background: color-mix(in srgb, #fef3c7 74%, var(--surface));
+  color: #92400e;
+  padding: 2px 5px;
+  font-size: 0.58rem;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
 .topbar-section-switch button:hover,
 .topbar-section-switch button:focus-visible {
   background: var(--surface);
@@ -3915,6 +3930,31 @@ input[aria-invalid="true"] {
   background: linear-gradient(90deg, var(--muted), var(--accent));
 }
 
+.topic-lock-note {
+  display: grid;
+  gap: 4px;
+  border: 1px solid color-mix(in srgb, #f59e0b 48%, var(--line));
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, #fef3c7 54%, transparent), transparent 72%),
+    color-mix(in srgb, var(--surface-panel) 88%, transparent);
+  padding: 10px;
+}
+
+.topic-lock-note strong {
+  color: #92400e;
+  font-size: 0.72rem;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.topic-lock-note span {
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
 .question-card-topline {
   display: flex;
   align-items: center;
@@ -5165,6 +5205,103 @@ input[aria-invalid="true"] {
 .teacher-mode-panel {
   display: grid;
   gap: 16px;
+}
+
+.teacher-upgrade-panel {
+  display: grid;
+  gap: 20px;
+  border: 1px solid color-mix(in srgb, var(--accent) 54%, var(--line-dark));
+  border-radius: var(--radius);
+  background:
+    radial-gradient(circle at top right, color-mix(in srgb, #fef3c7 48%, transparent), transparent 34%),
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 72%, transparent), transparent 62%),
+    var(--surface);
+  padding: clamp(22px, 4vw, 34px);
+  box-shadow: 0 20px 42px rgba(23, 33, 31, 0.08);
+}
+
+.teacher-upgrade-panel h2 {
+  max-width: 780px;
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.6rem);
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.teacher-upgrade-panel p:not(.eyebrow) {
+  max-width: 720px;
+  margin: 10px 0 0;
+  color: var(--ink-soft);
+  line-height: 1.55;
+}
+
+.teacher-upgrade-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.teacher-upgrade-actions button {
+  min-height: 44px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: white;
+  padding: 0 16px;
+  font-weight: 900;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background-color 180ms ease;
+}
+
+.teacher-upgrade-actions button.secondary {
+  border-color: var(--line-dark);
+  background: var(--surface);
+  color: var(--accent-strong);
+}
+
+.teacher-upgrade-actions button:hover,
+.teacher-upgrade-actions button:focus-visible {
+  border-color: var(--accent-strong);
+  box-shadow: 0 12px 24px color-mix(in srgb, var(--accent) 16%, transparent);
+  transform: translateY(-1px);
+}
+
+.teacher-upgrade-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.teacher-upgrade-grid article {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  padding: 14px;
+}
+
+.teacher-upgrade-grid span {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.teacher-upgrade-grid strong {
+  font-size: 1rem;
+  letter-spacing: -0.02em;
+}
+
+.teacher-upgrade-grid p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .teacher-hero,
@@ -7663,8 +7800,13 @@ input[aria-invalid="true"] {
   }
 
   .teacher-hero,
-  .teacher-section {
+  .teacher-section,
+  .teacher-upgrade-panel {
     padding: 18px;
+  }
+
+  .teacher-upgrade-grid {
+    grid-template-columns: 1fr;
   }
 
   .student-class-panel {

@@ -16,6 +16,7 @@ const TEACHER_ASSIGNMENTS_KEY = "neat-notes-teacher-assignments";
 const LEARNING_MODE_KEY = "neat-notes-learning-mode";
 const APP_EVENT_LOG_KEY = "neat-notes-event-log";
 const DAILY_REVIEW_GOAL = 10;
+const DEFAULT_GUEST_REVISION_DECK_ID = "cs-1-1-1";
 const MIN_LAUNCH_OVERLAY_MS = 2100;
 const launchOverlayStartedAt = performance.now();
 const TOPBAR_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
@@ -419,6 +420,7 @@ function setAppSection(section) {
 
   document.querySelectorAll("[data-app-section]").forEach((button) => {
     button.classList.toggle("active", button.dataset.appSection === activeAppSection);
+    button.classList.toggle("locked-section", button.dataset.appSection === "teacher" && !canUseTeacherMode());
   });
 
   if (isRevision) {
@@ -555,7 +557,39 @@ function recordCardAttempt(cardId, topicId, confidence, options = {}) {
   cardAttempts = [attempt, ...cardAttempts].slice(0, 1200);
   saveLocalArray(CARD_ATTEMPTS_KEY, cardAttempts);
   recordActivityEvent({ type: "card_rated", topicId, classId: attempt.classId });
+  if (currentUser && !isGuestMode) {
+    void syncRevisionAttempt(attempt);
+  }
   return attempt;
+}
+
+async function syncRevisionAttempt(attempt) {
+  const topic = getQuizTopicById(attempt.topicId);
+  const localCardId = String(attempt.cardId || "").split(":").slice(1).join(":");
+  const card = getTopicCards(topic).find((candidate) => candidate.id === localCardId || candidate.serverCardId === localCardId);
+  const serverCardId = card?.serverCardId || (localCardId ? `${attempt.topicId}__${localCardId}` : "");
+  if (!topic || !serverCardId) return;
+
+  try {
+    await api("/api/revision/attempts", {
+      method: "POST",
+      body: {
+        deckId: topic.id,
+        cardId: serverCardId,
+        classId: attempt.classId || null,
+        confidence: attempt.confidence,
+        quizCorrect: attempt.quizCorrect,
+        responseTimeMs: attempt.responseTimeMs,
+        source: attempt.source || "flashcard",
+      },
+    });
+  } catch (error) {
+    trackEvent("revision_attempt_sync_failed", {
+      topicId: topic.id,
+      source: attempt.source,
+      reason: error.message,
+    });
+  }
 }
 
 function getAttemptsByTopic(topicId, attempts = cardAttempts) {
@@ -830,7 +864,7 @@ function getRecommendedRevisionTopic() {
   return topicPool
     .map((topic, index) => ({
       index,
-      progress: topic.cards.length ? getCompletedRevisionCount(topic) / topic.cards.length : 1,
+      progress: getRevisionTopicCardCount(topic) ? getCompletedRevisionCount(topic) / getRevisionTopicCardCount(topic) : 1,
       topic,
     }))
     .sort((a, b) => a.progress - b.progress || a.index - b.index)[0]?.topic;
@@ -917,7 +951,7 @@ function renderBadgeCollection() {
       <div>
         <span>${escapeHtml(topic.code)}</span>
         <h3>${escapeHtml(badge.name)}</h3>
-        <small>${topic.cards.length} cards · ${escapeHtml(earnedLabel)}</small>
+        <small>${getRevisionTopicCardCount(topic)} cards · ${escapeHtml(earnedLabel)}</small>
       </div>
     </article>`;
   }).join("");
@@ -946,7 +980,7 @@ function showAchievementModal(topic) {
   elements.achievementBadge.outerHTML = renderBadgeEmblem(badge, false, "achievement-badge");
   elements.achievementBadge = document.querySelector("#achievement-badge");
   elements.achievementTitle.textContent = `${badge.name} badge unlocked`;
-  elements.achievementText.textContent = `${topic.code} ${topic.title} is complete. ${topic.cards.length} Computer Science cards have been added to your total mastery.`;
+  elements.achievementText.textContent = `${topic.code} ${topic.title} is complete. ${getRevisionTopicCardCount(topic)} Computer Science cards have been added to your total mastery.`;
   elements.achievementModal.hidden = false;
   document.body.classList.add("modal-open");
 }
@@ -988,10 +1022,10 @@ function awardRevisionBadge(topic) {
 }
 
 function getRevisionAchievementTotals() {
-  const totalCards = REVISION_TOPICS.reduce((sum, topic) => sum + topic.cards.length, 0);
+  const totalCards = REVISION_TOPICS.reduce((sum, topic) => sum + getRevisionTopicCardCount(topic), 0);
   const earnedTopics = REVISION_TOPICS.filter((topic) => earnedRevisionBadges[topic.id]).length;
   const earnedCards = REVISION_TOPICS.reduce(
-    (sum, topic) => sum + (earnedRevisionBadges[topic.id] ? topic.cards.length : getCompletedRevisionCount(topic)),
+    (sum, topic) => sum + (earnedRevisionBadges[topic.id] ? getRevisionTopicCardCount(topic) : getCompletedRevisionCount(topic)),
     0,
   );
 
@@ -1578,7 +1612,7 @@ async function logout() {
   await api("/api/auth/logout", { method: "POST" }).catch(() => {});
   currentUser = null;
   isGuestMode = true;
-  loadGuestApp();
+  window.location.assign("/");
 }
 
 function setAuthMode(mode) {
@@ -1731,9 +1765,10 @@ function loadGuestApp(options = {}) {
   members = guestState.members;
   notes = guestState.notes.filter((note) => note.workspace_id === activeWorkspaceId);
   selectedId = notes[0]?.id || null;
+  pruneRevisionTopicCardsForCurrentPlan();
   if (activeWorkspaceId === "demo-ocr-workspace") {
-    activeRevisionTopicId = "cs-1-1-1";
-    saveFreeRevisionTopicId("cs-1-1-1");
+    activeRevisionTopicId = DEFAULT_GUEST_REVISION_DECK_ID;
+    saveFreeRevisionTopicId(DEFAULT_GUEST_REVISION_DECK_ID);
     seedDemoProgress();
   }
   elements.authView.hidden = true;
@@ -1754,6 +1789,8 @@ async function loadApp() {
   elements.appView.hidden = false;
   elements.userName.textContent = currentUser.name;
   elements.userEmail.textContent = currentUser.email;
+  await refreshAccessibleRevisionContent();
+  pruneRevisionTopicCardsForCurrentPlan();
   renderPlan();
 
   await loadWorkspaces();
@@ -1925,7 +1962,7 @@ function seedDemoProgress() {
   const now = Date.now();
   const demoClassId = seedDemoTeacherWorkspace();
 
-  topic.cards.slice(0, 18).forEach((card, index) => {
+  getTopicCards(topic).slice(0, 18).forEach((card, index) => {
     const cardKey = getRevisionCardKey(topic, card);
     completedRevisionCards.add(cardKey);
     if (!cardAttempts.some((attempt) => attempt.cardId === cardKey && attempt.source === "demo")) {
@@ -1945,7 +1982,7 @@ function seedDemoProgress() {
     }
   });
 
-  topic.cards.slice(0, 12).forEach((card, index) => {
+  getTopicCards(topic).slice(0, 12).forEach((card, index) => {
     const cardKey = getRevisionCardKey(topic, card);
     if (!cardAttempts.some((attempt) => attempt.cardId === cardKey && attempt.source === "demo-class")) {
       cardAttempts.unshift({
@@ -2620,7 +2657,8 @@ function renderRevisionMasteryMap() {
       ${REVISION_TOPICS.map((topic) => {
         const completed = getCompletedRevisionCount(topic);
         const earned = Boolean(earnedRevisionBadges[topic.id]);
-        const percent = earned ? 100 : topic.cards.length ? Math.round((completed / topic.cards.length) * 100) : 0;
+        const topicTotal = getRevisionTopicCardCount(topic);
+        const percent = earned ? 100 : topicTotal ? Math.round((completed / topicTotal) * 100) : 0;
         const activeClass = topic.id === activeRevisionTopicId ? " active" : "";
         const earnedClass = earned ? " earned" : "";
         const access = getRevisionTopicAccessState(topic.id);
@@ -2948,6 +2986,11 @@ function leaveStudentClass(classId) {
 }
 
 function renderTeacherMode() {
+  if (!canUseTeacherMode()) {
+    renderTeacherUpgradePanel();
+    return;
+  }
+
   if (!classGroups.some((group) => group.id === activeClassId)) {
     activeClassId = classGroups[0]?.id || null;
   }
@@ -2986,6 +3029,50 @@ function renderTeacherMode() {
       }).join("")}
     </nav>
     ${renderTeacherSection()}`;
+}
+
+function canUseTeacherMode() {
+  return Boolean(currentUser && !isGuestMode && hasFeature("teacherDashboard"));
+}
+
+function renderTeacherUpgradePanel() {
+  const isSignedIn = Boolean(currentUser) && !isGuestMode;
+  const primaryAction = isSignedIn
+    ? `<button type="button" data-open-teacher-plan>View Teacher plan</button>`
+    : `<button type="button" data-teacher-auth="signup">Create account</button>`;
+  const secondaryAction = isSignedIn
+    ? `<button class="secondary" type="button" data-app-section="revision">Back to student revision</button>`
+    : `<button class="secondary" type="button" data-teacher-auth="login">Log in</button>`;
+
+  elements.teacherModePanel.innerHTML = `
+    <section class="teacher-upgrade-panel" aria-label="Teacher mode locked">
+      <div>
+        <p class="eyebrow">Teacher Mode · Locked</p>
+        <h2>Classroom intelligence is part of the Teacher plan.</h2>
+        <p>Create classes, issue revision tasks, view weak-topic heatmaps, and export intervention reports once a Teacher or Institution plan is active.</p>
+      </div>
+      <div class="teacher-upgrade-actions">
+        ${primaryAction}
+        ${secondaryAction}
+      </div>
+      <div class="teacher-upgrade-grid" aria-label="Teacher plan preview">
+        <article>
+          <span>Classes</span>
+          <strong>Teacher-controlled groups</strong>
+          <p>Create OCR Computer Science classes and manage student joins securely.</p>
+        </article>
+        <article>
+          <span>Assignments</span>
+          <strong>Structured revision tasks</strong>
+          <p>Set deck-based tasks and track completion without opening the full teacher dashboard.</p>
+        </article>
+        <article>
+          <span>Insights</span>
+          <strong>Weak-topic heatmaps</strong>
+          <p>Spot whole-class misconceptions and individual students who need support.</p>
+        </article>
+      </div>
+    </section>`;
 }
 
 function renderTeacherSection() {
@@ -3680,6 +3767,26 @@ function csvEscape(value) {
 }
 
 function handleTeacherModeClick(event) {
+  const teacherPlanButton = event.target.closest("[data-open-teacher-plan]");
+  if (teacherPlanButton) {
+    openPlansModal();
+    return;
+  }
+
+  const teacherAuthButton = event.target.closest("[data-teacher-auth]");
+  if (teacherAuthButton) {
+    openAuthModal(teacherAuthButton.dataset.teacherAuth);
+    return;
+  }
+
+  const appSectionButton = event.target.closest("[data-app-section]");
+  if (appSectionButton) {
+    setAppSection(appSectionButton.dataset.appSection);
+    return;
+  }
+
+  if (!canUseTeacherMode()) return;
+
   if (event.target.closest("[data-export-interventions]")) {
     exportInterventionCsv();
     return;
@@ -3742,6 +3849,11 @@ function handleTeacherModeSubmit(event) {
   const centreForm = event.target.closest("[data-create-centre]");
   const joinCentreForm = event.target.closest("[data-join-centre]");
   if (!classForm && !assignmentForm && !centreForm && !joinCentreForm) return;
+  if (!canUseTeacherMode()) {
+    event.preventDefault();
+    openPlansModal();
+    return;
+  }
 
   event.preventDefault();
 
@@ -3944,15 +4056,16 @@ function renderRevisionPage() {
   }
 
   const order = getRevisionCardOrder(topic);
+  const topicCards = getTopicCards(topic);
   const sessionCardIds = revisionReviewMode?.topicId === topic.id ? new Set(revisionReviewMode.cardIds) : null;
   const deckOrder = sessionCardIds
-    ? order.filter((cardIndex) => sessionCardIds.has(getRevisionCardKey(topic, topic.cards[cardIndex])))
+    ? order.filter((cardIndex) => sessionCardIds.has(getRevisionCardKey(topic, topicCards[cardIndex])))
     : order;
-  const completedCount = deckOrder.filter((cardIndex) => completedRevisionCards.has(getRevisionCardKey(topic, topic.cards[cardIndex]))).length;
-  const deckTotal = deckOrder.length || topic.cards.length;
+  const completedCount = deckOrder.filter((cardIndex) => completedRevisionCards.has(getRevisionCardKey(topic, topicCards[cardIndex]))).length;
+  const deckTotal = deckOrder.length || getRevisionTopicCardCount(topic);
   const progress = deckTotal ? Math.round((completedCount / deckTotal) * 100) : 0;
   const remainingOrder = deckOrder.filter((cardIndex) => {
-    const card = topic.cards[cardIndex];
+    const card = topicCards[cardIndex];
     return !completedRevisionCards.has(getRevisionCardKey(topic, card));
   });
 
@@ -3966,7 +4079,7 @@ function renderRevisionPage() {
   if (completedCount === deckTotal && deckTotal) {
     elements.revisionCardGrid.innerHTML = renderDeckSessionSummary(topic);
     recordDeckCompleted(topic);
-    if (!sessionCardIds && getCompletedRevisionCount(topic) === topic.cards.length) {
+    if (!sessionCardIds && getCompletedRevisionCount(topic) === getRevisionTopicCardCount(topic)) {
       awardRevisionBadge(topic);
     }
     return;
@@ -3976,7 +4089,7 @@ function renderRevisionPage() {
 
   elements.revisionCardGrid.innerHTML = remainingOrder
     .map((cardIndex) => {
-      const card = topic.cards[cardIndex];
+      const card = topicCards[cardIndex];
       const cardKey = getRevisionCardKey(topic, card);
       const isFlipped = flippedRevisionCards.has(cardKey);
       return `<article class="revision-card${isFlipped ? " flipped" : ""}" data-card-id="${escapeHtml(cardKey)}" role="button" tabindex="0" aria-pressed="${String(isFlipped)}">
@@ -4024,7 +4137,7 @@ function renderRevisionTopicList() {
         <span class="revision-topic-code">${escapeHtml(revisionTopic.code)}</span>
         <strong>${escapeHtml(revisionTopic.title)}</strong>
       </span>
-      <span class="revision-topic-count">${revisionTopic.cards.length} cards${accessLabel}</span>
+      <span class="revision-topic-count">${getRevisionTopicCardCount(revisionTopic)} cards${accessLabel}</span>
     </button>`;
   }).join("");
 }
@@ -4050,7 +4163,7 @@ function renderRevisionAccessPanel(topic, access) {
     <article>
       <span>${escapeHtml(topic.code)}</span>
       <strong>${escapeHtml(topic.title)}</strong>
-      <small>${topic.cards.length} cards · ${access.canClaim ? "available as your free pick" : "locked on Free"}</small>
+      <small>${getRevisionTopicCardCount(topic)} cards · ${access.canClaim ? "available as your free pick" : "locked on Free"}</small>
     </article>
     <div class="revision-paywall-actions">
       ${button}
@@ -4188,7 +4301,7 @@ function renderRevisionDashboard(topic) {
   const totals = getRevisionAchievementTotals();
   const recommendedTopic = getRecommendedRevisionTopic() || topic;
   const recommendedCompleted = recommendedTopic ? getCompletedRevisionCount(recommendedTopic) : 0;
-  const recommendedTotal = recommendedTopic?.cards?.length || 0;
+  const recommendedTotal = getRevisionTopicCardCount(recommendedTopic);
 
   elements.revisionTodayStat.textContent = `${today.cards}/${DAILY_REVIEW_GOAL}`;
   elements.revisionTodayCopy.textContent =
@@ -4211,7 +4324,8 @@ function renderStudentDashboard(topic) {
   const totals = getRevisionAchievementTotals();
   const recommendedTopic = getRecommendedRevisionTopic() || topic;
   const recommendation = generateRevisionRecommendation(recommendedTopic?.id || topic?.id);
-  const activeTopicProgress = topic?.cards?.length ? Math.round((getCompletedRevisionCount(topic) / topic.cards.length) * 100) : 0;
+  const activeTopicTotal = getRevisionTopicCardCount(topic);
+  const activeTopicProgress = activeTopicTotal ? Math.round((getCompletedRevisionCount(topic) / activeTopicTotal) * 100) : 0;
   const weakCards = recommendedTopic ? identifyWeakCards(recommendedTopic.id) : [];
   const recentNote = [...notes].sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))[0];
   const recentQuiz = getMostRecentQuizProgress();
@@ -4258,7 +4372,7 @@ function renderStudentDashboard(topic) {
       </article>
       <article class="student-action-card">
         <span>Recent activity</span>
-        <strong>${recentQuiz ? `${recentQuiz.topic.code} quiz ${recentQuiz.progress.lastScore || recentQuiz.progress.bestScore || 0}/${recentQuiz.progress.totalQuestions || recentQuiz.topic.cards.length}` : recentNote ? recentNote.title || createTitle(recentNote.body) : "Demo ready"}</strong>
+        <strong>${recentQuiz ? `${recentQuiz.topic.code} quiz ${recentQuiz.progress.lastScore || recentQuiz.progress.bestScore || 0}/${recentQuiz.progress.totalQuestions || getRevisionTopicCardCount(recentQuiz.topic)}` : recentNote ? recentNote.title || createTitle(recentNote.body) : "Demo ready"}</strong>
         <p>${recentNote ? `Latest note edited ${getRelativeEditLabel(recentNote.updated_at || recentNote.created_at).toLowerCase()}.` : "Create your first note to see revision material appear here."}</p>
       </article>
       <article class="student-action-card quick-actions">
@@ -4388,10 +4502,11 @@ function renderNeatQuestions() {
     const quizLocked = !access.canAccess || !hasFeature("quickPractice");
     const quizProgress = neatQuizProgress[quiz.topic.id] || {};
     const completedCards = getCompletedRevisionCount(quiz.topic);
+    const topicCardCount = getRevisionTopicCardCount(quiz.topic);
     const topicPercent = earnedRevisionBadges[quiz.topic.id]
       ? 100
-      : quiz.topic.cards.length
-        ? Math.round((completedCards / quiz.topic.cards.length) * 100)
+      : topicCardCount
+        ? Math.round((completedCards / topicCardCount) * 100)
         : 0;
     const progressLabel = getNeatQuizProgressLabel(quiz.topic.id);
     const sourceLabel = quiz.sourceCount ? `${quiz.sourceCount} Forms reference${quiz.sourceCount === 1 ? "" : "s"}` : "Native Neat Notes quiz";
@@ -4408,6 +4523,12 @@ function renderNeatQuestions() {
             : "";
     const openLabel = access.canClaim ? "Choose deck" : locked ? "Preview plan" : "Open deck";
     const actionLabel = access.canClaim ? "Choose + practise" : quizLocked ? "Unlock Pro" : isRunning ? "Continue" : quizProgress.attempts ? "Retry quiz" : "Start quiz";
+    const lockedNote = locked
+      ? `<div class="topic-lock-note" aria-label="Locked topic">
+          <strong>Locked</strong>
+          <span>${escapeHtml(access.reason || "Upgrade to Pro to open this deck.")}</span>
+        </div>`
+      : "";
 
     return `<article class="neat-question-card${isActive ? " active" : ""}${isRunning ? " running" : ""}${locked ? " locked" : ""}${access.canClaim ? " claimable" : ""}">
       <div class="question-card-topline">
@@ -4416,8 +4537,9 @@ function renderNeatQuestions() {
       </div>
       <div class="neat-question-card-copy">
         <strong>${escapeHtml(quiz.topic.title)}</strong>
-        <span>${quiz.questionCount} questions · ${escapeHtml(sourceLabel)}</span>
+        <span>${topicCardCount} questions · ${escapeHtml(sourceLabel)}</span>
       </div>
+      ${lockedNote}
       <div class="topic-card-meter" aria-label="${topicPercent}% flashcard progress">
         <span style="width: ${topicPercent}%"></span>
       </div>
@@ -4440,7 +4562,7 @@ function getNeatQuizCatalog() {
     const sources = NEAT_QUESTIONS.filter((question) => question.code === topic.code);
     return {
       topic,
-      questionCount: topic.cards.length,
+      questionCount: getRevisionTopicCardCount(topic),
       sourceCount: sources.length,
       sources,
     };
@@ -4462,7 +4584,7 @@ function renderNeatQuizPanel() {
 
   if (!topic || !neatQuizState.questions.length) {
     const activeTopic = getActiveRevisionTopic();
-    const activeQuestionCount = activeTopic?.cards?.length || 0;
+    const activeQuestionCount = getRevisionTopicCardCount(activeTopic);
     const access = getRevisionTopicAccessState(activeTopic?.id);
     const actionLabel = access.canClaim ? "Choose free deck" : access.locked ? "Unlock Pro" : "Start quick practice";
     const description = access.canAccess
@@ -4725,7 +4847,7 @@ function persistNeatQuizBestStreak(topicId, bestStreak) {
     [topicId]: {
       ...previous,
       bestStreak: Math.max(Number(previous.bestStreak) || 0, bestStreak),
-      totalQuestions: previous.totalQuestions || getQuizTopicById(topicId)?.cards?.length || 0,
+      totalQuestions: previous.totalQuestions || getRevisionTopicCardCount(getQuizTopicById(topicId)) || 0,
     },
   };
   saveNeatQuizProgress();
@@ -4733,7 +4855,7 @@ function persistNeatQuizBestStreak(topicId, bestStreak) {
 
 function buildNativeQuizQuestions(topic) {
   const allCards = REVISION_TOPICS.flatMap((revisionTopic) =>
-    revisionTopic.cards.map((card) => ({
+    getTopicCards(revisionTopic).map((card) => ({
       ...card,
       topicId: revisionTopic.id,
       topicCode: revisionTopic.code,
@@ -4741,7 +4863,7 @@ function buildNativeQuizQuestions(topic) {
     }))
   );
 
-  return topic.cards.map((card) => {
+  return getTopicCards(topic).map((card) => {
     const distractors = getQuizDistractors(card, topic, allCards);
     const options = seededSort([card.back, ...distractors], `${topic.id}:${card.id}:options`);
     return {
@@ -4895,6 +5017,74 @@ function getQuizTopicById(topicId) {
   return REVISION_TOPICS.find((topic) => topic.id === topicId);
 }
 
+function getTopicCards(topic) {
+  return Array.isArray(topic?.cards) ? topic.cards : [];
+}
+
+function getRevisionTopicCardCount(topic) {
+  return Number(topic?.cardCount) || getTopicCards(topic).length;
+}
+
+function hasLoadedRevisionCards(topic) {
+  return getTopicCards(topic).length > 0;
+}
+
+function hydrateRevisionTopicFromDeck(deck) {
+  if (!deck?.id && !deck?.topicId) return;
+
+  const topic = getQuizTopicById(deck.topicId || deck.id);
+  if (!topic || !Array.isArray(deck.cards)) return;
+
+  topic.cardCount = Number(deck.cardCount) || deck.cards.length;
+  topic.lockedPreview = false;
+  topic.cards = deck.cards.map((card) => ({
+    id: card.cardKey || String(card.id || "").replace(`${topic.id}__`, ""),
+    serverCardId: card.id,
+    category: card.category || "Revision",
+    front: card.front || "",
+    back: card.back || "",
+  }));
+}
+
+async function refreshAccessibleRevisionContent() {
+  if (!currentUser || isGuestMode) return;
+
+  const targetDeckIds = hasFeature("fullRevisionLibrary")
+    ? REVISION_TOPICS.map((topic) => topic.id)
+    : currentUser.freeRevisionDeckId
+      ? [currentUser.freeRevisionDeckId]
+      : [];
+
+  const missingDeckIds = targetDeckIds.filter((topicId) => !hasLoadedRevisionCards(getQuizTopicById(topicId)));
+  if (!missingDeckIds.length) return;
+
+  await Promise.all(missingDeckIds.map(async (topicId) => {
+    try {
+      const response = await api(`/api/revision/decks/${encodeURIComponent(topicId)}`);
+      hydrateRevisionTopicFromDeck(response.deck);
+    } catch (error) {
+      trackEvent("revision_deck_hydration_failed", { topicId, reason: error.message });
+    }
+  }));
+}
+
+function pruneRevisionTopicCardsForCurrentPlan() {
+  if (currentUser && !isGuestMode && hasFeature("fullRevisionLibrary")) return;
+
+  const allowedTopicId = currentUser && !isGuestMode
+    ? currentUser.freeRevisionDeckId
+    : DEFAULT_GUEST_REVISION_DECK_ID;
+  const allowedTopics = allowedTopicId ? new Set([allowedTopicId]) : new Set();
+
+  REVISION_TOPICS.forEach((topic) => {
+    if (allowedTopics.has(topic.id)) return;
+
+    topic.cards = [];
+    topic.lockedPreview = true;
+    revisionCardOrder[topic.id] = [];
+  });
+}
+
 async function selectRevisionTopic(event) {
   const button = event.target.closest("[data-topic-id]");
   if (!button) return;
@@ -5010,7 +5200,7 @@ function markRevisionCardDone(cardId, options = {}) {
   if (options.recordStudy !== false) {
     recordStudyCard(topic);
   }
-  if (options.awardBadge !== false && topic && getCompletedRevisionCount(topic) === topic.cards.length) {
+  if (options.awardBadge !== false && topic && getCompletedRevisionCount(topic) === getRevisionTopicCardCount(topic)) {
     awardRevisionBadge(topic);
   }
   renderRevisionPage();
@@ -5019,7 +5209,7 @@ function markRevisionCardDone(cardId, options = {}) {
 function resetActiveRevisionCards() {
   const topic = getActiveRevisionTopic();
   clearRevisionAutoReset();
-  topic.cards.forEach((card) => {
+  getTopicCards(topic).forEach((card) => {
     const cardKey = getRevisionCardKey(topic, card);
     flippedRevisionCards.delete(cardKey);
     completedRevisionCards.delete(cardKey);
@@ -5038,7 +5228,7 @@ function shuffleActiveRevisionCards() {
     [order[index], order[swapIndex]] = [order[swapIndex], order[index]];
   }
 
-  topic.cards.forEach((card) => flippedRevisionCards.delete(getRevisionCardKey(topic, card)));
+  getTopicCards(topic).forEach((card) => flippedRevisionCards.delete(getRevisionCardKey(topic, card)));
   startRevisionSession(topic.id);
   renderRevisionPage();
 }
@@ -5053,8 +5243,9 @@ function getRevisionTopicFromCardId(cardId) {
 }
 
 function getRevisionCardOrder(topic) {
-  if (!revisionCardOrder[topic.id] || revisionCardOrder[topic.id].length !== topic.cards.length) {
-    revisionCardOrder[topic.id] = topic.cards.map((_, index) => index);
+  const cards = getTopicCards(topic);
+  if (!revisionCardOrder[topic.id] || revisionCardOrder[topic.id].length !== cards.length) {
+    revisionCardOrder[topic.id] = cards.map((_, index) => index);
   }
   return revisionCardOrder[topic.id];
 }
@@ -5064,7 +5255,7 @@ function getRevisionCardKey(topic, card) {
 }
 
 function getCompletedRevisionCount(topic) {
-  return topic.cards.filter((card) => completedRevisionCards.has(getRevisionCardKey(topic, card))).length;
+  return getTopicCards(topic).filter((card) => completedRevisionCards.has(getRevisionCardKey(topic, card))).length;
 }
 
 function scheduleRevisionAutoReset(topicId) {
@@ -5075,7 +5266,7 @@ function scheduleRevisionAutoReset(topicId) {
     if (activeRevisionTopicId !== topicId) return;
 
     const topic = getActiveRevisionTopic();
-    if (getCompletedRevisionCount(topic) === topic.cards.length) {
+    if (getCompletedRevisionCount(topic) === getRevisionTopicCardCount(topic)) {
       resetActiveRevisionCards();
     }
   }, 1400);
@@ -5982,17 +6173,19 @@ function getRevisionTopicAccessState(topicId) {
 
   if (hasFeature("fullRevisionLibrary")) {
     return {
-      canAccess: true,
+      canAccess: hasLoadedRevisionCards(topic),
       canClaim: false,
-      locked: false,
+      locked: !hasLoadedRevisionCards(topic),
       selectedFreeDeck: false,
       label: "Included",
-      reason: "Your plan includes the full OCR revision library.",
+      reason: hasLoadedRevisionCards(topic)
+        ? "Your plan includes the full OCR revision library."
+        : "This deck needs to be refreshed before it can be opened.",
     };
   }
 
   const selectedFreeDeck = getSelectedFreeRevisionTopicId();
-  if (selectedFreeDeck === topic.id) {
+  if (selectedFreeDeck === topic.id && hasLoadedRevisionCards(topic)) {
     return {
       canAccess: true,
       canClaim: false,
@@ -6003,14 +6196,28 @@ function getRevisionTopicAccessState(topicId) {
     };
   }
 
-  if (!selectedFreeDeck) {
+  if (selectedFreeDeck === topic.id && !hasLoadedRevisionCards(topic)) {
     return {
       canAccess: false,
-      canClaim: true,
-      locked: false,
+      canClaim: false,
+      locked: true,
+      selectedFreeDeck: true,
+      label: "Pro",
+      reason: "This deck is not loaded in this browser session. Log in or upgrade to unlock it securely.",
+    };
+  }
+
+  if (!selectedFreeDeck) {
+    const canClaim = Boolean(currentUser && !isGuestMode) || hasLoadedRevisionCards(topic);
+    return {
+      canAccess: false,
+      canClaim,
+      locked: !canClaim,
       selectedFreeDeck: false,
-      label: "Free pick",
-      reason: "Choose one OCR deck to revise for free. Pro unlocks the rest.",
+      label: canClaim ? "Free pick" : "Pro",
+      reason: canClaim
+        ? "Choose one OCR deck to revise for free. Pro unlocks the rest."
+        : "Create a free account to choose this as your one included OCR deck.",
     };
   }
 
@@ -6056,6 +6263,7 @@ async function claimFreeRevisionTopic(topicId) {
       body: { deckId: topic.id },
     });
     currentUser = response.user || currentUser;
+    hydrateRevisionTopicFromDeck(response.deck);
     saveFreeRevisionTopicId(currentUser.freeRevisionDeckId || topic.id);
     elements.upgradeMessage.textContent = response.message || `${topic.code} ${topic.title} is now your free revision deck.`;
     elements.upgradeMessage.className = "topbar-plan-message success";
