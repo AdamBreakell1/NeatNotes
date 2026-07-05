@@ -293,7 +293,13 @@
             <button id="topbar-signup-button" class="primary-account-button" type="button">Create an account</button>
           </div>
           <div id="signed-in-account-actions" class="account-actions" hidden>
-            <span id="topbar-user-label"></span>
+            <button id="account-profile-button" class="account-profile-button" type="button" aria-label="Open account settings">
+              <span id="topbar-profile-avatar" class="profile-avatar profile-avatar-small" data-avatar="notebook">NB</span>
+              <span class="profile-copy">
+                <strong id="topbar-user-label">Account</strong>
+                <small id="topbar-user-meta">Signed in</small>
+              </span>
+            </button>
             <button id="topbar-logout-button" class="secondary-account-button" type="button">Log out</button>
           </div>
         </div>
@@ -989,10 +995,28 @@
 
         <div class="settings-body">
           <nav class="settings-tabs" aria-label="Settings sections">
+            <button type="button" data-settings-tab="account">Account</button>
             <button class="active" type="button" data-settings-tab="general">General</button>
             <button type="button" data-settings-tab="editor">Editor</button>
             <button type="button" data-settings-tab="data">Data</button>
           </nav>
+
+          <section class="settings-panel" data-settings-panel="account">
+            <h3>Account identity</h3>
+            <p>Choose a simple education profile image for this device and review the account currently using Neat Notes.</p>
+            <div class="account-settings-card">
+              <span id="settings-profile-avatar" class="profile-avatar profile-avatar-large" data-avatar="notebook">NB</span>
+              <div>
+                <strong id="settings-account-name">Guest workspace</strong>
+                <span id="settings-account-email">Not signed in</span>
+                <small id="settings-account-plan">Local browser storage</small>
+              </div>
+            </div>
+            <div class="settings-row avatar-settings-row">
+              <label>Profile image</label>
+              <div id="avatar-choice-group" class="avatar-choice-grid" role="radiogroup" aria-label="Choose profile image"></div>
+            </div>
+          </section>
 
           <section class="settings-panel active" data-settings-panel="general">
             <h3>Appearance</h3>

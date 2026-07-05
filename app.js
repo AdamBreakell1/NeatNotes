@@ -45,11 +45,21 @@ const BADGE_BLUEPRINTS = [
   { mark: "LAW", a: "#f472b6", b: "#ec4899", c: "#3b0a2a" },
   { mark: "ETH", a: "#818cf8", b: "#4f46e5", c: "#17113f" },
 ];
+const PROFILE_AVATARS = [
+  { id: "notebook", mark: "NB", label: "Notebook", tone: "teal" },
+  { id: "code", mark: "CS", label: "Computer Science", tone: "blue" },
+  { id: "formula", mark: "FX", label: "Calculator", tone: "amber" },
+  { id: "revision", mark: "RV", label: "Revision", tone: "green" },
+  { id: "exam", mark: "A*", label: "Exam ready", tone: "rose" },
+  { id: "lab", mark: "LB", label: "Study lab", tone: "violet" },
+];
 const DEFAULT_SETTINGS = {
   theme: localStorage.getItem(THEME_KEY) || "system",
   density: "default",
   editorFontSize: "16",
   defaultTag: "inbox",
+  profileAvatar: "notebook",
+  profileAvatars: {},
 };
 
 let currentUser = null;
@@ -100,9 +110,11 @@ const elements = {
   allCount: document.querySelector("#all-count"),
   appView: document.querySelector("#app-view"),
   accountStatus: document.querySelector("#account-status"),
+  accountProfileButton: document.querySelector("#account-profile-button"),
   authMessage: document.querySelector("#auth-message"),
   authView: document.querySelector("#auth-view"),
   authCardTitle: document.querySelector("#auth-card-title"),
+  avatarChoiceGroup: document.querySelector("#avatar-choice-group"),
   landingView: document.querySelector("#landing-view"),
   autoTitle: document.querySelector("#auto-title"),
   achievementBadge: document.querySelector("#achievement-badge"),
@@ -206,6 +218,10 @@ const elements = {
   settingsEditorFont: document.querySelector("#settings-editor-font"),
   settingsMessage: document.querySelector("#settings-message"),
   settingsModal: document.querySelector("#settings-modal"),
+  settingsAccountEmail: document.querySelector("#settings-account-email"),
+  settingsAccountName: document.querySelector("#settings-account-name"),
+  settingsAccountPlan: document.querySelector("#settings-account-plan"),
+  settingsProfileAvatar: document.querySelector("#settings-profile-avatar"),
   settingsTabs: document.querySelector(".settings-tabs"),
   legalModal: document.querySelector("#legal-modal"),
   legalContent: document.querySelector("#legal-content"),
@@ -236,11 +252,13 @@ const elements = {
   themeChoiceGroup: document.querySelector("#theme-choice-group"),
   topbarLoginButton: document.querySelector("#topbar-login-button"),
   topbarLogoutButton: document.querySelector("#topbar-logout-button"),
+  topbarProfileAvatar: document.querySelector("#topbar-profile-avatar"),
   topbarSignupButton: document.querySelector("#topbar-signup-button"),
   topbarDate: document.querySelector("#topbar-date"),
   topbarSectionSwitch: document.querySelector(".topbar-section-switch"),
   topbarTime: document.querySelector("#topbar-time"),
   topbarUtilities: document.querySelector(".topbar-utilities"),
+  topbarUserMeta: document.querySelector("#topbar-user-meta"),
   topbarUserLabel: document.querySelector("#topbar-user-label"),
   upgradeMessage: document.querySelector("#upgrade-message"),
   userEmail: document.querySelector("#user-email"),
@@ -275,6 +293,7 @@ elements.signupForm.addEventListener("input", clearAuthMessageOnInput);
 elements.logoutButton.addEventListener("click", logout);
 elements.topbarLoginButton.addEventListener("click", () => openAuthModal("login"));
 elements.topbarSignupButton.addEventListener("click", () => openAuthModal("signup"));
+elements.accountProfileButton.addEventListener("click", () => openSettingsModal("account"));
 elements.topbarLogoutButton.addEventListener("click", logout);
 elements.closeAuthButton.addEventListener("click", closeAuthModal);
 elements.authView.addEventListener("click", handleAuthModalClick);
@@ -300,6 +319,7 @@ elements.legalModal.addEventListener("click", handleLegalModalClick);
 elements.siteFooter.addEventListener("click", handleFooterClick);
 elements.settingsTabs.addEventListener("click", switchSettingsTab);
 elements.themeChoiceGroup.addEventListener("click", chooseTheme);
+elements.avatarChoiceGroup.addEventListener("click", chooseProfileAvatar);
 elements.settingsDensity.addEventListener("change", updateSettingsFromControls);
 elements.settingsEditorFont.addEventListener("change", updateSettingsFromControls);
 elements.settingsDefaultTag.addEventListener("input", updateSettingsFromControls);
@@ -1161,6 +1181,8 @@ function renderSettingsControls() {
   elements.settingsDensity.value = appSettings.density;
   elements.settingsEditorFont.value = appSettings.editorFontSize;
   elements.settingsDefaultTag.value = appSettings.defaultTag;
+  renderAvatarChoiceGroup();
+  renderSettingsAccountPanel();
   document.querySelectorAll("[data-theme-choice]").forEach((button) => {
     button.classList.toggle("active", button.dataset.themeChoice === appSettings.theme);
   });
@@ -1185,8 +1207,78 @@ function chooseTheme(event) {
   renderSettingsControls();
 }
 
-function openSettingsModal() {
+function chooseProfileAvatar(event) {
+  const button = event.target.closest("[data-avatar-choice]");
+  if (!button) return;
+
+  const avatarId = getProfileAvatar(button.dataset.avatarChoice).id;
+  if (currentUser?.id && !isGuestMode) {
+    appSettings.profileAvatars = {
+      ...(appSettings.profileAvatars || {}),
+      [currentUser.id]: avatarId,
+    };
+  } else {
+    appSettings.profileAvatar = avatarId;
+  }
+  saveSettings();
   renderSettingsControls();
+  renderAccountChrome();
+}
+
+function renderAvatarChoiceGroup() {
+  if (!elements.avatarChoiceGroup) return;
+
+  const selectedAvatar = getProfileAvatar(getActiveProfileAvatarId());
+  elements.avatarChoiceGroup.innerHTML = PROFILE_AVATARS.map((avatar) => {
+    const isActive = avatar.id === selectedAvatar.id;
+    return `<button class="${isActive ? "active" : ""}" type="button" role="radio" aria-checked="${String(isActive)}" data-avatar-choice="${escapeHtml(avatar.id)}">
+      <span class="profile-avatar profile-avatar-choice" data-avatar="${escapeHtml(avatar.id)}">${escapeHtml(avatar.mark)}</span>
+      <strong>${escapeHtml(avatar.label)}</strong>
+    </button>`;
+  }).join("");
+}
+
+function renderSettingsAccountPanel() {
+  if (!elements.settingsAccountName) return;
+
+  const isSignedIn = Boolean(currentUser) && !isGuestMode;
+  const planName = getCurrentPlanLabel();
+  renderProfileAvatar(elements.settingsProfileAvatar);
+  elements.settingsAccountName.textContent = isSignedIn ? currentUser.name || "Neat Notes account" : "Guest workspace";
+  elements.settingsAccountEmail.textContent = isSignedIn ? currentUser.email : "Not signed in";
+  elements.settingsAccountPlan.textContent = isSignedIn
+    ? `${planName} · synced workspace`
+    : "Local browser storage · create an account to sync";
+}
+
+function getActiveProfileAvatarId() {
+  if (currentUser?.id && !isGuestMode) {
+    return appSettings.profileAvatars?.[currentUser.id] || appSettings.profileAvatar;
+  }
+  return appSettings.profileAvatar;
+}
+
+function getProfileAvatar(avatarId = getActiveProfileAvatarId()) {
+  return PROFILE_AVATARS.find((avatar) => avatar.id === avatarId) || PROFILE_AVATARS[0];
+}
+
+function renderProfileAvatar(target = elements.topbarProfileAvatar) {
+  if (!target) return;
+  const avatar = getProfileAvatar(getActiveProfileAvatarId());
+  target.dataset.avatar = avatar.id;
+  target.textContent = avatar.mark;
+  target.title = avatar.label;
+}
+
+function getCurrentPlanLabel() {
+  if (isGuestMode || !currentUser) return "Guest";
+  const plan = currentUser.entitlements || plans[currentUser.plan] || plans.free || {};
+  return currentUser.planName || plan.name || "Free";
+}
+
+function openSettingsModal(tab = "general") {
+  renderSettingsControls();
+  selectSettingsTab(tab);
   elements.settingsModal.hidden = false;
   document.body.classList.add("modal-open");
 }
@@ -1296,11 +1388,15 @@ function switchSettingsTab(event) {
   const button = event.target.closest("[data-settings-tab]");
   if (!button) return;
 
+  selectSettingsTab(button.dataset.settingsTab);
+}
+
+function selectSettingsTab(tabName = "general") {
   document.querySelectorAll("[data-settings-tab]").forEach((tab) => {
-    tab.classList.toggle("active", tab === button);
+    tab.classList.toggle("active", tab.dataset.settingsTab === tabName);
   });
   document.querySelectorAll("[data-settings-panel]").forEach((panel) => {
-    panel.classList.toggle("active", panel.dataset.settingsPanel === button.dataset.settingsTab);
+    panel.classList.toggle("active", panel.dataset.settingsPanel === tabName);
   });
 }
 
@@ -1662,6 +1758,7 @@ async function loadApp() {
 
   await loadWorkspaces();
   await selectWorkspace(activeWorkspaceId || workspaces[0]?.id);
+  renderAccountChrome();
   hideLaunchOverlay();
 }
 
@@ -2475,24 +2572,32 @@ function renderAccountChrome() {
   const isSignedIn = Boolean(currentUser) && !isGuestMode;
   elements.guestAccountActions.hidden = isSignedIn;
   elements.signedInAccountActions.hidden = !isSignedIn;
+  renderProfileAvatar(elements.topbarProfileAvatar);
 
   if (isSignedIn) {
-    elements.accountStatus.textContent = "Synced account";
-    elements.topbarUserLabel.textContent = currentUser.email;
+    const planLabel = getCurrentPlanLabel();
+    const displayName = currentUser.name || currentUser.email || "Account";
+    elements.accountStatus.textContent = `Signed in as ${displayName}`;
+    elements.topbarUserLabel.textContent = displayName;
+    elements.topbarUserMeta.textContent = `${planLabel} · synced`;
     elements.userName.textContent = currentUser.name;
     elements.userEmail.textContent = currentUser.email;
     const freeDeck = getSelectedFreeRevisionTopicId();
     const planSuffix = !hasFeature("fullRevisionLibrary") && freeDeck ? " · 1 deck" : "";
-    elements.userPlanLabel.textContent = `${currentUser.planName || "Account workspace"}${planSuffix}`;
+    elements.userPlanLabel.textContent = `${planLabel || "Account workspace"}${planSuffix}`;
     elements.logoutButton.hidden = false;
+    renderSettingsAccountPanel();
     return;
   }
 
   elements.accountStatus.textContent = "Local guest workspace";
+  elements.topbarUserLabel.textContent = "Guest";
+  elements.topbarUserMeta.textContent = "Local only";
   elements.userName.textContent = "Guest workspace";
   elements.userEmail.textContent = "Stored in this browser only";
   elements.userPlanLabel.textContent = "Guest";
   elements.logoutButton.hidden = true;
+  renderSettingsAccountPanel();
 }
 
 function renderRevisionMasteryMap() {
