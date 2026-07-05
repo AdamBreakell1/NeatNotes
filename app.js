@@ -1445,10 +1445,12 @@ async function boot() {
 
   try {
     const session = await api("/api/session");
-    currentUser = session.user;
-    plans = session.plans || {};
-    isGuestMode = false;
-    await loadApp();
+    applyAuthenticatedSession(session.user, session.plans);
+    try {
+      await loadApp();
+    } catch (error) {
+      handleAuthenticatedLoadError(error);
+    }
     if (checkoutStatus === "success") {
       elements.upgradeMessage.textContent = "Payment received. Your subscription will unlock as soon as Stripe confirms it.";
       elements.upgradeMessage.className = "topbar-plan-message success";
@@ -1562,12 +1564,14 @@ async function login(event) {
         password: form.get("login-password") || document.querySelector("#login-password").value,
       },
     });
-    currentUser = response.user;
-    plans = response.plans || plans;
-    isGuestMode = false;
+    applyAuthenticatedSession(response.user, response.plans);
     showAuthMessage("Login successful. Loading your workspace...", "success");
     closeAuthModal();
-    await loadApp();
+    try {
+      await loadApp();
+    } catch (error) {
+      handleAuthenticatedLoadError(error);
+    }
   } catch (error) {
     showAuthMessage(error.message, "error");
   } finally {
@@ -1613,6 +1617,26 @@ async function logout() {
   currentUser = null;
   isGuestMode = true;
   window.location.assign("/");
+}
+
+function applyAuthenticatedSession(user, nextPlans = null) {
+  currentUser = user;
+  plans = nextPlans || plans;
+  isGuestMode = false;
+  elements.authView.hidden = true;
+  elements.landingView.hidden = true;
+  elements.appView.hidden = false;
+  elements.userName.textContent = currentUser?.name || "Account";
+  elements.userEmail.textContent = currentUser?.email || "";
+  renderAccountChrome();
+  renderPlan();
+}
+
+function handleAuthenticatedLoadError(error) {
+  renderAccountChrome();
+  hideLaunchOverlay();
+  showWorkspaceMessage(`Signed in, but your workspace did not finish loading. Refresh the page or try again in a moment. ${error.message}`, "error");
+  trackEvent("authenticated_workspace_load_failed", { reason: error.message });
 }
 
 function setAuthMode(mode) {
@@ -6329,6 +6353,8 @@ async function api(path, options = {}) {
   try {
     response = await fetch(path, {
       method: options.method || "GET",
+      credentials: "same-origin",
+      cache: "no-store",
       headers: options.body ? { "content-type": "application/json" } : undefined,
       body: options.body ? JSON.stringify(options.body) : undefined,
     });

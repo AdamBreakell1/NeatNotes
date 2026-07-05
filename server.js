@@ -355,6 +355,10 @@ app.use(securityHeaders);
 app.use(corsMiddleware);
 app.post("/api/billing/stripe/webhook", express.raw({ type: "application/json" }), asyncHandler(handleStripeWebhook));
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "1mb" }));
+app.use("/api", (req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
 registerPublicAssetRoutes();
 
 app.get("/api/session", requireUser, (req, res) => {
