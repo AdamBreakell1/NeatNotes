@@ -110,7 +110,8 @@ label,
 .landing-page {
   min-height: 100vh;
   background:
-    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--accent-soft) 68%, transparent), transparent 28%),
+    radial-gradient(circle at 18% 12%, color-mix(in srgb, var(--accent-soft) 54%, transparent), transparent 30%),
+    radial-gradient(circle at 82% 4%, rgba(15, 118, 110, 0.08), transparent 24%),
     linear-gradient(180deg, var(--surface), var(--page));
 }
 
@@ -128,11 +129,11 @@ label,
 
 .landing-nav {
   display: flex;
-  min-height: 74px;
+  min-height: 82px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px 0;
+  padding: 18px 0 12px;
 }
 
 .landing-actions,
@@ -214,19 +215,19 @@ label,
 
 .landing-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1.12fr) minmax(300px, 0.78fr);
-  gap: 34px;
+  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.78fr);
+  gap: clamp(28px, 5vw, 64px);
   align-items: center;
-  padding: 48px 0 34px;
+  padding: clamp(48px, 8vw, 92px) 0 clamp(38px, 6vw, 70px);
 }
 
 .landing-hero h1 {
-  max-width: 900px;
+  max-width: 860px;
   margin: 0;
-  font-size: clamp(3rem, 7vw, 6.6rem);
+  font-size: clamp(3.15rem, 6.5vw, 6rem);
   font-weight: 900;
-  letter-spacing: -0.065em;
-  line-height: 0.88;
+  letter-spacing: -0.06em;
+  line-height: 0.9;
 }
 
 .landing-hero-copy {
@@ -238,16 +239,17 @@ label,
 }
 
 .landing-hero > div > p:not(.eyebrow) {
-  max-width: 720px;
-  margin: 22px 0 0;
+  max-width: 680px;
+  margin: 24px 0 0;
   color: var(--ink-soft);
   font-size: clamp(1.05rem, 1.7vw, 1.25rem);
-  line-height: 1.55;
+  line-height: 1.6;
 }
 
 .landing-hero-actions {
   justify-content: flex-start;
-  margin-top: 24px;
+  gap: 10px;
+  margin-top: 28px;
 }
 
 .landing-cta-row,
@@ -280,7 +282,7 @@ label,
   border: 1px solid var(--line-dark);
   border-radius: var(--radius);
   background: color-mix(in srgb, var(--surface) 90%, transparent);
-  box-shadow: 0 16px 34px color-mix(in srgb, var(--ink) 6%, transparent);
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
 .landing-card {
@@ -291,8 +293,18 @@ label,
 
 .landing-demo-card {
   display: grid;
-  gap: 13px;
-  padding: 22px;
+  gap: 14px;
+  padding: clamp(22px, 3vw, 30px);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 58%, transparent), transparent 64%),
+    color-mix(in srgb, var(--surface) 94%, transparent);
+}
+
+.landing-workflow article,
+.landing-benefits-grid > div,
+.landing-plan-row article,
+.landing-trust article {
+  padding: clamp(20px, 2.6vw, 28px);
 }
 
 .landing-demo-card > span,
@@ -308,9 +320,9 @@ label,
 
 .landing-demo-card strong {
   color: var(--ink);
-  font-size: 1.55rem;
+  font-size: clamp(1.35rem, 2vw, 1.7rem);
   letter-spacing: -0.03em;
-  line-height: 1.08;
+  line-height: 1.1;
 }
 
 .landing-demo-card div {
@@ -390,7 +402,7 @@ label,
 .landing-schools,
 .landing-pricing-preview,
 .landing-trust-faq {
-  padding: 28px 0;
+  padding: clamp(34px, 5vw, 58px) 0;
 }
 
 .landing-section h2 {
@@ -399,6 +411,28 @@ label,
   font-size: clamp(2rem, 4vw, 3.4rem);
   letter-spacing: -0.055em;
   line-height: 0.98;
+}
+
+.landing-section-head {
+  display: grid;
+  grid-column: 1 / -1;
+  max-width: 760px;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.landing-section-head h2 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.7rem);
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.landing-section-head p:not(.eyebrow) {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  line-height: 1.55;
 }
 
 .landing-grid {
@@ -427,21 +461,81 @@ label,
 .landing-benefits-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 18px;
+}
+
+.landing-workflow {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.landing-workflow article {
+  position: relative;
+  display: grid;
+  min-height: 176px;
+  align-content: start;
+  gap: 12px;
+}
+
+.landing-workflow article > span {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 62%, var(--line));
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 0.78rem;
+  letter-spacing: 0;
+}
+
+.landing-workflow article strong {
+  display: block;
+  color: var(--ink);
+  font-size: clamp(1.18rem, 2vw, 1.5rem);
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+}
+
+.landing-workflow article p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.52;
 }
 
 .landing-benefits-grid ul {
-  margin: 16px 0 0;
-  padding-left: 18px;
+  display: grid;
+  gap: 10px;
+  margin: 20px 0 0;
+  padding-left: 0;
   color: var(--ink-soft);
-  line-height: 1.55;
+  line-height: 1.45;
+  list-style: none;
+}
+
+.landing-benefits-grid li {
+  position: relative;
+  padding-left: 20px;
+}
+
+.landing-benefits-grid li::before {
+  content: "";
+  position: absolute;
+  top: 0.62em;
+  left: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--accent);
 }
 
 .landing-benefits-grid h2 {
+  max-width: 760px;
   margin: 0;
-  font-size: clamp(2rem, 4vw, 3.25rem);
-  letter-spacing: -0.055em;
-  line-height: 1;
+  font-size: clamp(2.1rem, 4.2vw, 4.2rem);
+  letter-spacing: -0.06em;
+  line-height: 0.96;
 }
 
 .landing-schools {
@@ -520,18 +614,43 @@ label,
 
 .landing-plan-row {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
 }
 
 .landing-pricing-preview .section-title {
-  margin-bottom: 14px;
+  align-items: end;
+  margin-bottom: 16px;
+}
+
+.landing-plan-row article {
+  display: grid;
+  min-height: 210px;
+  align-content: start;
+  gap: 12px;
+}
+
+.landing-plan-row article.featured-plan {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--line-dark));
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--accent-soft) 70%, transparent), transparent 64%),
+    var(--surface);
+  box-shadow:
+    inset 0 4px 0 var(--accent),
+    0 18px 38px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .landing-plan-row article strong {
   display: block;
-  margin-top: 8px;
   color: var(--accent-strong);
-  font-size: 1.35rem;
-  letter-spacing: -0.03em;
+  font-size: clamp(1.8rem, 3vw, 2.45rem);
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.landing-plan-row article p {
+  margin: 0;
+  color: var(--ink-soft);
+  line-height: 1.48;
 }
 
 .landing-pricing-card.featured {
@@ -563,23 +682,42 @@ label,
 
 .landing-trust-faq {
   display: grid;
-  gap: 18px;
+  gap: 22px;
 }
 
 .landing-trust article strong {
   display: block;
-  margin-top: 8px;
+  margin-top: 9px;
   font-size: 0.98rem;
-  line-height: 1.25;
+  line-height: 1.32;
 }
 
 .landing-faq {
   grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.landing-faq > .eyebrow {
+  grid-column: 1 / -1;
+  margin-bottom: -2px;
 }
 
 .landing-faq summary {
   cursor: pointer;
+  color: var(--ink);
   font-weight: 900;
+  line-height: 1.25;
+}
+
+.landing-faq details {
+  min-height: 96px;
+  padding: 20px 22px;
+}
+
+.landing-faq details[open] {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-soft) 48%, transparent), transparent 70%),
+    var(--surface);
 }
 
 .auth-page {
