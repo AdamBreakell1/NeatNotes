@@ -16,6 +16,7 @@ const PORT = Number(process.env.PORT || 4173);
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 const SESSION_COOKIE = "nn_session";
 const CONTACT_TO = process.env.CONTACT_TO || "neatnotescontact@gmail.com";
+const CONTACT_RETRY_INTERVAL_MS = Number(process.env.CONTACT_RETRY_INTERVAL_MS || 10 * 60 * 1000);
 const FREE_REVISION_DECK_LIMIT = Number(process.env.FREE_REVISION_DECK_LIMIT || 1);
 const DEFAULT_FREE_REVISION_DECK_ID = "cs-1-1-1";
 const DATA_DIR = path.join(__dirname, "data");
@@ -212,6 +213,19 @@ db.exec(`
     processed_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS contact_enquiries (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    message TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    delivery_error TEXT,
+    delivered_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS student_profiles (
     user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     year_group TEXT,
@@ -392,25 +406,32 @@ app.post("/api/contact", contactRateLimiter, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Add a little more detail so the enquiry can be routed properly." });
   }
 
+  const enquiry = createContactEnquiry({ name, email, reason, message });
   const smtpConfigError = getSmtpConfigError();
   if (smtpConfigError) {
-    console.log(`Contact enquiry for ${CONTACT_TO}:`, { name, email, reason, message });
-    return res.status(503).json({
-      error: smtpConfigError,
+    updateContactEnquiryDelivery(enquiry.id, "queued", smtpConfigError);
+    console.warn(`Contact enquiry saved for ${CONTACT_TO}; email delivery is not ready: ${smtpConfigError}`, { enquiryId: enquiry.id, reason });
+    return res.status(202).json({
+      message: "Thanks. Your enquiry has been received by Neat Notes. It has been saved and queued for email delivery.",
+      delivery: "queued",
     });
   }
 
   try {
-    await sendContactEmail({ name, email, reason, message });
+    await sendContactEmail(enquiry);
+    updateContactEnquiryDelivery(enquiry.id, "sent");
   } catch (error) {
     console.error("Contact email delivery failed:", sanitizeMailerError(error));
-    return res.status(502).json({
-      error: getEmailDeliveryErrorMessage(error),
+    updateContactEnquiryDelivery(enquiry.id, "delivery_failed", getEmailDeliveryErrorMessage(error));
+    return res.status(202).json({
+      message: "Thanks. Your enquiry has been received by Neat Notes. Email delivery is being retried automatically.",
+      delivery: "queued",
     });
   }
 
   res.status(202).json({
     message: "Thanks. Your enquiry has been sent to the Neat Notes team.",
+    delivery: "sent",
   });
 }));
 
@@ -1274,7 +1295,18 @@ app.listen(PORT, () => {
   if (!isGoogleConfigured()) {
     console.log("Google OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable it.");
   }
+  retryQueuedContactEnquiries().catch((error) => {
+    console.error("Initial contact enquiry retry failed:", sanitizeMailerError(error));
+  });
 });
+
+if (CONTACT_RETRY_INTERVAL_MS > 0) {
+  setInterval(() => {
+    retryQueuedContactEnquiries().catch((error) => {
+      console.error("Contact enquiry retry failed:", sanitizeMailerError(error));
+    });
+  }, CONTACT_RETRY_INTERVAL_MS).unref();
+}
 
 function asyncHandler(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
@@ -2121,14 +2153,7 @@ async function createAndSendVerification(userId, email, name) {
   `).run(tokenHash, userId, expiresAt.toISOString(), now.toISOString());
 
   if (hasSmtpConfig()) {
-    const transport = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: process.env.SMTP_SECURE === "true",
-      auth: process.env.SMTP_USER
-        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-        : undefined,
-    });
+    const transport = createMailTransport();
 
     await transport.sendMail({
       from: getEmailFromAddress(),
@@ -2146,14 +2171,7 @@ async function createAndSendVerification(userId, email, name) {
 }
 
 async function sendContactEmail({ name, email, reason, message }) {
-  const transport = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: process.env.SMTP_SECURE === "true",
-    auth: process.env.SMTP_USER
-      ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-      : undefined,
-  });
+  const transport = createMailTransport();
 
   const submittedAt = new Date().toISOString();
   const subject = `Neat Notes enquiry: ${reason}`;
@@ -2183,6 +2201,89 @@ async function sendContactEmail({ name, email, reason, message }) {
       <h3>Message</h3>
       <p>${escapeHtml(message).replaceAll("\n", "<br>")}</p>`,
   });
+}
+
+function createMailTransport() {
+  const settings = getSmtpSettings();
+  return nodemailer.createTransport({
+    host: settings.host,
+    port: settings.port,
+    secure: settings.secure,
+    auth: settings.user
+      ? { user: settings.user, pass: settings.pass }
+      : undefined,
+  });
+}
+
+function getSmtpSettings() {
+  const user = String(process.env.SMTP_USER || "").trim();
+  const host = String(process.env.SMTP_HOST || inferSmtpHost(user) || "").trim();
+  const port = Number(process.env.SMTP_PORT || (isGmailHost(host) ? 465 : 587));
+  const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === "true" : port === 465;
+  const rawPass = String(process.env.SMTP_PASS || "");
+  const pass = isGmailHost(host) ? rawPass.replace(/\s+/g, "") : rawPass;
+
+  return { host, port, secure, user, pass };
+}
+
+function inferSmtpHost(user) {
+  return user.toLowerCase().endsWith("@gmail.com") ? "smtp.gmail.com" : "";
+}
+
+function isGmailHost(host) {
+  return String(host || "").toLowerCase().includes("gmail.com");
+}
+
+function createContactEnquiry({ name, email, reason, message }) {
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+
+  db.prepare(`
+    INSERT INTO contact_enquiries (id, name, email, reason, message, status, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)
+  `).run(id, name, email, reason, message, now, now);
+
+  return { id, name, email, reason, message, status: "queued", created_at: now, updated_at: now };
+}
+
+function updateContactEnquiryDelivery(id, status, deliveryError = null) {
+  const now = new Date().toISOString();
+  const deliveredAt = status === "sent" ? now : null;
+  db.prepare(`
+    UPDATE contact_enquiries
+    SET status = ?, delivery_error = ?, delivered_at = ?, updated_at = ?
+    WHERE id = ?
+  `).run(status, deliveryError, deliveredAt, now, id);
+}
+
+let contactRetryInProgress = false;
+
+async function retryQueuedContactEnquiries(limit = 10) {
+  if (contactRetryInProgress || getSmtpConfigError()) return;
+  contactRetryInProgress = true;
+
+  try {
+    const enquiries = db.prepare(`
+      SELECT id, name, email, reason, message
+      FROM contact_enquiries
+      WHERE status IN ('queued', 'delivery_failed')
+      ORDER BY datetime(created_at) ASC
+      LIMIT ?
+    `).all(limit);
+
+    for (const enquiry of enquiries) {
+      try {
+        await sendContactEmail(enquiry);
+        updateContactEnquiryDelivery(enquiry.id, "sent");
+        console.log("Queued contact enquiry sent:", { enquiryId: enquiry.id, to: CONTACT_TO });
+      } catch (error) {
+        updateContactEnquiryDelivery(enquiry.id, "delivery_failed", getEmailDeliveryErrorMessage(error));
+        console.error("Queued contact enquiry delivery failed:", sanitizeMailerError(error));
+      }
+    }
+  } finally {
+    contactRetryInProgress = false;
+  }
 }
 
 function upsertGoogleUser(profile) {
@@ -2417,15 +2518,21 @@ function hasSmtpConfig() {
 }
 
 function getSmtpConfigError() {
-  if (!process.env.SMTP_HOST) {
+  const settings = getSmtpSettings();
+
+  if (!settings.host) {
     return "Email delivery is not configured on the server yet. Add SMTP settings in Render and try again.";
   }
 
-  if (process.env.SMTP_USER && !process.env.SMTP_PASS) {
+  if (settings.user && !settings.pass) {
     return "SMTP is missing its password or app password. Add SMTP_PASS in Render, then try again.";
   }
 
-  if (process.env.SMTP_USER?.toLowerCase() === "resend" && !process.env.EMAIL_FROM) {
+  if (isGmailHost(settings.host) && (!settings.user || !settings.pass)) {
+    return "Gmail SMTP needs SMTP_USER and a Google app password in SMTP_PASS.";
+  }
+
+  if (settings.user.toLowerCase() === "resend" && !process.env.EMAIL_FROM) {
     return "EMAIL_FROM must be set to a verified sender address when using Resend SMTP.";
   }
 
@@ -2433,12 +2540,18 @@ function getSmtpConfigError() {
 }
 
 function getEmailFromAddress() {
+  const settings = getSmtpSettings();
+
+  if (isGmailHost(settings.host) && settings.user.includes("@")) {
+    return `Neat Notes <${settings.user}>`;
+  }
+
   if (process.env.EMAIL_FROM) {
     return process.env.EMAIL_FROM;
   }
 
-  if (process.env.SMTP_USER?.includes("@")) {
-    return `Neat Notes <${process.env.SMTP_USER}>`;
+  if (settings.user.includes("@")) {
+    return `Neat Notes <${settings.user}>`;
   }
 
   return "Neat Notes <no-reply@localhost>";
