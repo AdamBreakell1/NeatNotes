@@ -148,6 +148,8 @@ const elements = {
   loginCapsWarning: document.querySelector("#login-caps-warning"),
   logoutButton: document.querySelector("#logout-button"),
   memberList: document.querySelector("#member-list"),
+  mobileNotesButton: document.querySelector("#mobile-notes-button"),
+  mobileSidebarClose: document.querySelector("#mobile-sidebar-close"),
   neatQuestionsCount: document.querySelector("#neat-questions-count"),
   neatQuestionsCurrentLink: document.querySelector("#neat-questions-current-link"),
   neatQuestionsGrid: document.querySelector("#neat-questions-grid"),
@@ -296,6 +298,8 @@ elements.logoutButton.addEventListener("click", logout);
 elements.topbarLoginButton.addEventListener("click", () => openAuthModal("login"));
 elements.topbarSignupButton.addEventListener("click", () => openAuthModal("signup"));
 elements.topbarBrandButton.addEventListener("click", handleTopbarBrandAction);
+elements.mobileNotesButton.addEventListener("click", toggleMobileNotesSidebar);
+elements.mobileSidebarClose.addEventListener("click", closeMobileNotesSidebar);
 elements.accountProfileButton.addEventListener("click", () => openSettingsModal("account"));
 elements.topbarLogoutButton.addEventListener("click", logout);
 elements.closeAuthButton.addEventListener("click", closeAuthModal);
@@ -397,6 +401,7 @@ function switchAppSection(event) {
 }
 
 function setAppSection(section) {
+  closeMobileNotesSidebar();
   activeAppSection = ["revision", "teacher", "contact"].includes(section) ? section : "notes";
   const isNotes = activeAppSection === "notes";
   const isRevision = activeAppSection === "revision" || activeAppSection === "teacher";
@@ -421,7 +426,11 @@ function setAppSection(section) {
   elements.appView.classList.toggle("contact-mode", isContact);
 
   document.querySelectorAll("[data-app-section]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.appSection === activeAppSection);
+    const isActiveSection = button.dataset.appSection === activeAppSection;
+    button.classList.toggle("active", isActiveSection);
+    if (button.closest(".topbar-section-switch")) {
+      button.setAttribute("aria-current", isActiveSection ? "page" : "false");
+    }
     button.classList.toggle("locked-section", button.dataset.appSection === "teacher" && !canUseTeacherMode());
   });
 
@@ -435,6 +444,19 @@ function setAppSection(section) {
   if (isContact) {
     renderContactPage();
   }
+}
+
+function toggleMobileNotesSidebar() {
+  const isOpen = elements.appView.classList.toggle("mobile-sidebar-open");
+  elements.mobileNotesButton.setAttribute("aria-expanded", String(isOpen));
+  if (isOpen) {
+    elements.mobileSidebarClose.focus();
+  }
+}
+
+function closeMobileNotesSidebar() {
+  elements.appView.classList.remove("mobile-sidebar-open");
+  elements.mobileNotesButton.setAttribute("aria-expanded", "false");
 }
 
 function renderTopbarClock() {
@@ -1429,10 +1451,15 @@ function switchSettingsTab(event) {
 
 function selectSettingsTab(tabName = "general") {
   document.querySelectorAll("[data-settings-tab]").forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.settingsTab === tabName);
+    const isActive = tab.dataset.settingsTab === tabName;
+    tab.classList.toggle("active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+    tab.tabIndex = isActive ? 0 : -1;
   });
   document.querySelectorAll("[data-settings-panel]").forEach((panel) => {
-    panel.classList.toggle("active", panel.dataset.settingsPanel === tabName);
+    const isActive = panel.dataset.settingsPanel === tabName;
+    panel.classList.toggle("active", isActive);
+    panel.hidden = !isActive;
   });
 }
 
@@ -2436,6 +2463,10 @@ function handlePricingModalClick(event) {
 }
 
 function handleGlobalKeydown(event) {
+  if (event.key === "Escape" && elements.appView.classList.contains("mobile-sidebar-open")) {
+    closeMobileNotesSidebar();
+    elements.mobileNotesButton.focus();
+  }
   if (event.key === "Escape" && !elements.achievementModal.hidden) {
     closeAchievementModal();
   }
@@ -3065,8 +3096,8 @@ function renderTeacherMode() {
     <header class="teacher-hero">
       <div>
         <p class="eyebrow">Teacher Mode</p>
-        <h2>Learning intelligence for OCR Computer Science</h2>
-        <p>See class confidence, spot topics that need intervention, and prepare structured revision support.</p>
+        <h2>Class progress for OCR Computer Science</h2>
+        <p>Review confidence, find topics that need intervention, and set the next revision task.</p>
       </div>
       <div class="teacher-preview-card">
         <span>${isGuestMode ? "Preview mode" : "Teacher workspace"}</span>

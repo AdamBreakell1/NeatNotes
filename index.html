@@ -23,7 +23,7 @@
           storedTheme && storedTheme !== "system" ? storedTheme : prefersDark ? "dark" : "light";
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=20260705-saas-pass" />
+    <link rel="stylesheet" href="styles.css?v=20260711-design-reset" />
   </head>
   <body>
     <div id="launch-overlay" class="launch-overlay" role="status" aria-live="polite" aria-label="Loading Neat Notes">
@@ -54,8 +54,8 @@
           <button type="button" data-landing-action="contact">Contact</button>
         </nav>
         <div class="landing-nav-actions">
-          <button type="button" data-landing-action="demo">View demo workspace</button>
-          <button type="button" data-landing-action="login">Login</button>
+          <button type="button" data-landing-action="demo">Open demo</button>
+          <button type="button" data-landing-action="login">Log in</button>
           <button class="primary-account-button" type="button" data-landing-action="signup">Start free</button>
         </div>
       </header>
@@ -70,7 +70,7 @@
           </p>
           <div class="landing-hero-actions">
             <button class="primary-account-button" type="button" data-landing-action="signup">Start free</button>
-            <button type="button" data-landing-action="demo">View demo workspace</button>
+            <button type="button" data-landing-action="demo">Open demo workspace</button>
             <button type="button" data-landing-action="teacher">Explore teacher tools</button>
           </div>
         </div>
@@ -282,6 +282,7 @@
             <time id="topbar-date" class="topbar-date" datetime=""></time>
           </div>
           <p id="account-status" class="account-status">Using a local guest workspace</p>
+          <button id="mobile-notes-button" class="mobile-notes-button" type="button" aria-controls="notes-sidebar" aria-expanded="false">Browse notes</button>
         </div>
         <div class="topbar-utilities">
           <button class="theme-toggle topbar-theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">
@@ -294,8 +295,8 @@
           <button class="topbar-utility-button" type="button" data-app-section="contact">Contact</button>
           <button class="topbar-utility-button" id="settings-button" type="button">Settings</button>
           <div id="guest-account-actions" class="account-actions">
-            <button id="topbar-login-button" class="secondary-account-button" type="button">Login</button>
-            <button id="topbar-signup-button" class="primary-account-button" type="button">Create an account</button>
+            <button id="topbar-login-button" class="secondary-account-button" type="button">Log in</button>
+            <button id="topbar-signup-button" class="primary-account-button" type="button">Create account</button>
           </div>
           <div id="signed-in-account-actions" class="account-actions" hidden>
             <button id="account-profile-button" class="account-profile-button" type="button" aria-label="Open account settings">
@@ -315,8 +316,9 @@
         </nav>
       </header>
 
-      <aside class="sidebar" aria-label="Workspaces and note folders">
+      <aside id="notes-sidebar" class="sidebar" aria-label="Workspaces and note folders">
         <div class="sidebar-tools" aria-label="Quick actions">
+          <button id="mobile-sidebar-close" class="mobile-sidebar-close" type="button" aria-label="Close notes navigation">Close</button>
           <div class="brand-controls">
             <button class="icon-button" id="new-note-button" title="New note" aria-label="New note">+</button>
           </div>
@@ -553,11 +555,7 @@
               <button id="revision-continue-button" class="revision-primary-action" type="button">Continue revision</button>
               <button id="revision-progress-jump-button" class="revision-secondary-action" type="button">View progress</button>
             </div>
-            <div class="revision-tier-strip" aria-label="Subscription tiers">
-              <span class="tier-chip tier-free">Free starter</span>
-              <span class="tier-chip tier-pro">Student Pro</span>
-              <span class="tier-chip tier-teacher">Teacher and college tools</span>
-            </div>
+            <p class="revision-access-note">Start with one free topic. Pro opens the full OCR course.</p>
           </div>
           <div class="revision-summary-grid" aria-label="Revision summary">
             <article class="revision-summary-card">
@@ -577,8 +575,6 @@
             </article>
           </div>
         </header>
-
-        <section id="student-class-panel" class="student-class-panel student-revision-section" aria-label="Student class membership"></section>
 
         <section id="student-dashboard-panel" class="student-dashboard-panel student-revision-section" aria-label="Student revision dashboard"></section>
 
@@ -676,6 +672,8 @@
             </article>
           </div>
         </section>
+
+        <section id="student-class-panel" class="student-class-panel student-revision-section" aria-label="Student class membership"></section>
 
         <section id="teacher-mode-panel" class="teacher-mode-panel" aria-label="Teacher learning intelligence" hidden></section>
       </section>
@@ -999,14 +997,14 @@
         </header>
 
         <div class="settings-body">
-          <nav class="settings-tabs" aria-label="Settings sections">
-            <button type="button" data-settings-tab="account">Account</button>
-            <button class="active" type="button" data-settings-tab="general">General</button>
-            <button type="button" data-settings-tab="editor">Editor</button>
-            <button type="button" data-settings-tab="data">Data</button>
+          <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
+            <button type="button" role="tab" aria-selected="false" aria-controls="settings-account-panel" data-settings-tab="account">Account</button>
+            <button class="active" type="button" role="tab" aria-selected="true" aria-controls="settings-general-panel" data-settings-tab="general">General</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="settings-editor-panel" data-settings-tab="editor">Editor</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="settings-data-panel" data-settings-tab="data">Data</button>
           </nav>
 
-          <section class="settings-panel" data-settings-panel="account">
+          <section id="settings-account-panel" class="settings-panel" role="tabpanel" data-settings-panel="account" hidden>
             <h3>Account identity</h3>
             <p>Choose a simple education profile image for this device and review the account currently using Neat Notes.</p>
             <div class="account-settings-card">
@@ -1023,7 +1021,7 @@
             </div>
           </section>
 
-          <section class="settings-panel active" data-settings-panel="general">
+          <section id="settings-general-panel" class="settings-panel active" role="tabpanel" data-settings-panel="general">
             <h3>Appearance</h3>
             <p>Choose a theme and interface density for this device.</p>
             <div class="settings-row">
@@ -1043,7 +1041,7 @@
             </div>
           </section>
 
-          <section class="settings-panel" data-settings-panel="editor">
+          <section id="settings-editor-panel" class="settings-panel" role="tabpanel" data-settings-panel="editor" hidden>
             <h3>Writing</h3>
             <p>Tune the editor for longer revision sessions or dense classroom work.</p>
             <div class="settings-row">
@@ -1060,7 +1058,7 @@
             </div>
           </section>
 
-          <section class="settings-panel" data-settings-panel="data">
+          <section id="settings-data-panel" class="settings-panel" role="tabpanel" data-settings-panel="data" hidden>
             <h3>Local data tools</h3>
             <p>Export the current workspace for review or clear local preferences on this device.</p>
             <div class="settings-actions">
@@ -1093,9 +1091,9 @@
       <button type="button" data-open-pricing-footer>Pricing</button>
     </footer>
 
-    <script src="revision-generator.js?v=20260705-saas-pass"></script>
-    <script src="revision-topics.js?v=20260705-saas-pass"></script>
-    <script src="neat-questions.js?v=20260705-saas-pass"></script>
-    <script src="app.js?v=20260705-saas-pass"></script>
+    <script src="revision-generator.js?v=20260711-design-reset"></script>
+    <script src="revision-topics.js?v=20260711-design-reset"></script>
+    <script src="neat-questions.js?v=20260711-design-reset"></script>
+    <script src="app.js?v=20260711-design-reset"></script>
   </body>
 </html>
