@@ -19,6 +19,18 @@ services:
         value: 1mb
       - key: AUTH_RATE_LIMIT
         value: "25"
+      - key: JOIN_RATE_LIMIT
+        value: "12"
+      - key: REVISION_RATE_LIMIT
+        value: "90"
+      - key: BILLING_RATE_LIMIT
+        value: "12"
+      - key: MAX_NOTE_BODY_BYTES
+        value: "98304"
+      - key: MAX_NOTE_VERSIONS
+        value: "40"
+      - key: MAX_NOTE_VERSION_BYTES
+        value: "1048576"
       - key: CONTACT_TO
         value: neatnotescontact@gmail.com
       - key: CONTACT_RATE_LIMIT

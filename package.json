@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
-    "check": "node --check server.js && node --check app.js && node --check revision-generator.js && node --check backend/services/learningAnalytics.js",
+    "check": "node --check server.js && node --check app.js && node --check learning-model.js && node --check revision-generator.js && node --check service-worker.js && node --check theme-init.js && node --check backend/services/learningAnalytics.js",
     "test": "node --test backend/**/*.test.js"
   },
   "keywords": [],

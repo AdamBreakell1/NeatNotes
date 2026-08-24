@@ -1,0 +1,20 @@
+{
+  "name": "Neat Notes - OCR Computer Science Revision",
+  "short_name": "Neat Notes",
+  "description": "Teacher-built OCR A-Level Computer Science revision, notes and progress tracking.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f7faf8",
+  "theme_color": "#0f766e",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

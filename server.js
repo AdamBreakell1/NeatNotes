@@ -10,6 +10,12 @@ const express = require("express");
 const nodemailer = require("nodemailer");
 const Stripe = require("stripe");
 const { buildRevisionRecommendations, calculateConfidenceSummary } = require("./backend/services/learningAnalytics");
+const {
+  buildSession: buildAdaptiveSession,
+  calculateMastery,
+  calculateRetrievability,
+  updateMemoryState,
+} = require("./learning-model");
 
 const app = express();
 const PORT = Number(process.env.PORT || 4173);
@@ -18,6 +24,9 @@ const SESSION_COOKIE = "nn_session";
 const CONTACT_TO = process.env.CONTACT_TO || "neatnotescontact@gmail.com";
 const CONTACT_RETRY_INTERVAL_MS = Number(process.env.CONTACT_RETRY_INTERVAL_MS || 10 * 60 * 1000);
 const FREE_REVISION_DECK_LIMIT = Number(process.env.FREE_REVISION_DECK_LIMIT || 1);
+const MAX_NOTE_BODY_BYTES = Number(process.env.MAX_NOTE_BODY_BYTES || 96 * 1024);
+const MAX_NOTE_VERSIONS = Number(process.env.MAX_NOTE_VERSIONS || 40);
+const MAX_NOTE_VERSION_BYTES = Number(process.env.MAX_NOTE_VERSION_BYTES || 1024 * 1024);
 const DEFAULT_FREE_REVISION_DECK_ID = "cs-1-1-1";
 const DATA_DIR = path.join(__dirname, "data");
 const REQUESTED_DB_PATH = process.env.DATABASE_PATH || path.join(DATA_DIR, "neat-notes.sqlite");
@@ -35,6 +44,18 @@ const authRateLimiter = createRateLimiter({
 const contactRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: Number(process.env.CONTACT_RATE_LIMIT || 8),
+});
+const joinRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.JOIN_RATE_LIMIT || 12),
+});
+const revisionRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  max: Number(process.env.REVISION_RATE_LIMIT || 90),
+});
+const billingRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.BILLING_RATE_LIMIT || 12),
 });
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
@@ -324,6 +345,9 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
+  CREATE INDEX IF NOT EXISTS flashcard_attempts_user_deck_idx
+    ON flashcard_attempts(user_id, deck_id, created_at);
+
   CREATE TABLE IF NOT EXISTS topic_confidence (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -359,6 +383,62 @@ db.exec(`
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS learning_evidence (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    class_id TEXT REFERENCES class_groups(id) ON DELETE SET NULL,
+    concept_id TEXT NOT NULL,
+    deck_id TEXT REFERENCES flashcard_decks(id) ON DELETE SET NULL,
+    card_id TEXT REFERENCES flashcards(id) ON DELETE SET NULL,
+    activity_type TEXT NOT NULL,
+    score REAL,
+    difficulty REAL,
+    response_type TEXT,
+    confidence TEXT,
+    previous_due_at TEXT,
+    feedback_code TEXT,
+    misconception_id TEXT,
+    correction_successful INTEGER,
+    response_time_ms INTEGER,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS learning_evidence_user_concept_idx
+    ON learning_evidence(user_id, concept_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS review_schedules (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    concept_id TEXT NOT NULL,
+    deck_id TEXT REFERENCES flashcard_decks(id) ON DELETE SET NULL,
+    difficulty REAL NOT NULL,
+    stability_days REAL NOT NULL,
+    retrievability REAL NOT NULL,
+    last_review_at TEXT NOT NULL,
+    next_review_at TEXT NOT NULL,
+    successful_retrievals INTEGER NOT NULL DEFAULT 0,
+    lapses INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, concept_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS review_schedules_due_idx
+    ON review_schedules(user_id, next_review_at);
+
+  CREATE TABLE IF NOT EXISTS mistake_journal (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    class_id TEXT REFERENCES class_groups(id) ON DELETE SET NULL,
+    concept_id TEXT NOT NULL,
+    deck_id TEXT REFERENCES flashcard_decks(id) ON DELETE SET NULL,
+    card_id TEXT REFERENCES flashcards(id) ON DELETE SET NULL,
+    activity_type TEXT NOT NULL,
+    explanation TEXT NOT NULL,
+    misconception_id TEXT,
+    corrected_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
 `);
 
 migrateSchema();
@@ -369,6 +449,7 @@ app.use(securityHeaders);
 app.use(corsMiddleware);
 app.post("/api/billing/stripe/webhook", express.raw({ type: "application/json" }), asyncHandler(handleStripeWebhook));
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "1mb" }));
+app.use("/api", enforceSameOriginMutation);
 app.use("/api", (req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
   next();
@@ -449,7 +530,7 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-app.post("/api/billing/checkout-session", requireUser, asyncHandler(async (req, res) => {
+app.post("/api/billing/checkout-session", billingRateLimiter, requireUser, asyncHandler(async (req, res) => {
   const plan = normalizePlanId(req.body.plan);
   if (!["pro", "teacher"].includes(plan)) {
     return res.status(400).json({ error: "Choose Pro or Teacher to start checkout." });
@@ -491,7 +572,7 @@ app.post("/api/billing/checkout-session", requireUser, asyncHandler(async (req, 
   res.json({ url: session.url });
 }));
 
-app.post("/api/billing/customer-portal", requireUser, asyncHandler(async (req, res) => {
+app.post("/api/billing/customer-portal", billingRateLimiter, requireUser, asyncHandler(async (req, res) => {
   if (!stripe) {
     return res.status(503).json({ error: "Stripe is not configured yet." });
   }
@@ -526,25 +607,30 @@ app.post("/api/billing/mock-upgrade", requireUser, (req, res) => {
 });
 
 app.post("/api/auth/signup", authRateLimiter, asyncHandler(async (req, res) => {
-  const name = String(req.body.name || "").trim();
+  const name = String(req.body.name || "").trim().slice(0, 120);
   const email = normalizeEmail(req.body.email);
   const password = String(req.body.password || "");
 
-  if (!name || !email || password.length < 8) {
-    return res.status(400).json({ error: "Enter a name, valid email, and password with at least 8 characters." });
+  if (!name || !email || password.length < 8 || password.length > 128) {
+    return res.status(400).json({ error: "Enter a name, valid email, and password between 8 and 128 characters." });
   }
 
   const existing = getUserByEmail(email);
   if (existing) {
     if (!existing.email_verified) {
-      const verification = await createAndSendVerification(existing.id, existing.email, existing.name);
+      const passwordMatches = existing.password_hash
+        && verifyPassword(password, existing.password_salt, existing.password_hash);
+      if (passwordMatches) {
+        await createAndSendVerification(existing.id, existing.email, existing.name);
+      }
       return res.status(202).json({
-        message: "That account already exists but is not verified yet. I sent a fresh verification link.",
-        devVerificationUrl: verification.devVerificationUrl,
+        message: "If an account can be created or verified for that email, a verification message is on its way.",
       });
     }
 
-    return res.status(409).json({ error: "An account with that email already exists." });
+    return res.status(202).json({
+      message: "If an account can be created or verified for that email, a verification message is on its way.",
+    });
   }
 
   const now = new Date().toISOString();
@@ -670,6 +756,9 @@ app.get("/api/auth/google/callback", asyncHandler(async (req, res) => {
   }
 
   const profile = await profileResponse.json();
+  if (!profile.email || profile.email_verified !== true) {
+    return res.status(400).send(renderMessagePage("Google sign-in failed", "Google did not confirm a verified email address."));
+  }
   const user = upsertGoogleUser(profile);
   issueSession(res, user.id);
   res.clearCookie("google_oauth_state");
@@ -685,7 +774,9 @@ app.get("/api/workspaces", requireUser, (req, res) => {
     JOIN workspace_members ON workspace_members.workspace_id = workspaces.id
     WHERE workspace_members.user_id = ?
     ORDER BY workspaces.updated_at DESC
-  `).all(req.user.id);
+  `).all(req.user.id).filter((workspace) =>
+    workspace.role === "owner" || ownerHasWorkspaceCollaboration(workspace.id),
+  );
 
   res.json({ workspaces });
 });
@@ -808,6 +899,9 @@ app.post("/api/notes", requireUser, (req, res) => {
   }
 
   const body = String(req.body.body || "");
+  if (!isNoteBodyWithinLimit(body)) {
+    return res.status(413).json({ error: `Notes can be up to ${Math.floor(MAX_NOTE_BODY_BYTES / 1024)} KB.` });
+  }
   const tag = normalizeTag(req.body.tag || "inbox");
   const now = new Date().toISOString();
   const note = {
@@ -836,6 +930,9 @@ app.patch("/api/notes/:id", requireUser, (req, res) => {
   if (!note) return res.status(404).json({ error: "Note not found." });
 
   const body = "body" in req.body ? String(req.body.body || "") : note.body;
+  if (!isNoteBodyWithinLimit(body)) {
+    return res.status(413).json({ error: `Notes can be up to ${Math.floor(MAX_NOTE_BODY_BYTES / 1024)} KB.` });
+  }
   const tag = "tag" in req.body ? normalizeTag(req.body.tag) : note.tag;
   const now = new Date().toISOString();
   const title = createTitle(body);
@@ -977,7 +1074,7 @@ app.post("/api/centres", requireUser, requireTeacher, (req, res) => {
   res.status(201).json({ centre: { ...centre, membership_role: "owner" } });
 });
 
-app.post("/api/centres/join", requireUser, requireTeacher, (req, res) => {
+app.post("/api/centres/join", joinRateLimiter, requireUser, requireTeacher, (req, res) => {
   const code = normaliseClassCode(req.body.code);
   if (!code) return res.status(400).json({ error: "Enter a centre code." });
 
@@ -1051,7 +1148,7 @@ app.post("/api/classes", requireUser, requireTeacher, (req, res) => {
   res.status(201).json({ class: decorateClassGroup(classGroup) });
 });
 
-app.post("/api/classes/join", requireUser, (req, res) => {
+app.post("/api/classes/join", joinRateLimiter, requireUser, (req, res) => {
   const code = normaliseClassCode(req.body.code);
   if (!code) return res.status(400).json({ error: "Enter a class code to continue." });
   if (!isValidClassCode(code)) {
@@ -1188,12 +1285,13 @@ app.get("/api/revision/decks/:id", requireUser, (req, res) => {
   res.json({ deck });
 });
 
-app.post("/api/revision/attempts", requireUser, (req, res) => {
+app.post("/api/revision/attempts", revisionRateLimiter, requireUser, (req, res) => {
   const deckId = String(req.body.deckId || "").trim();
   const cardId = String(req.body.cardId || "").trim();
   const confidence = normalizeConfidence(req.body.confidence);
   const classId = String(req.body.classId || "").trim() || null;
   const source = String(req.body.source || "flashcard").trim().slice(0, 40) || "flashcard";
+  const rating = normalizeReviewRating(req.body.rating || req.body.difficulty, confidence);
 
   if (!deckId || !cardId || !confidence) {
     return res.status(400).json({ error: "Deck, card and confidence are required." });
@@ -1241,11 +1339,14 @@ app.post("/api/revision/attempts", requireUser, (req, res) => {
   );
 
   const confidenceSummary = updateTopicConfidence(req.user.id, classId, deckId);
+  const learning = recordLearningEvidenceFromAttempt(req.user.id, attempt, card, rating);
   recordStudentActivity(req.user.id, classId, deckId, "card_attempt", { confidence, source, quizCorrect });
+  pruneLearningHistory(req.user.id, card.id, learning.conceptId);
 
   res.status(201).json({
     attempt,
     confidence: confidenceSummary,
+    learning,
     recommendations: getRevisionRecommendations(req.user.id, classId).slice(0, 3),
   });
 });
@@ -1273,6 +1374,34 @@ app.get("/api/revision/activity", requireUser, (req, res) => {
   res.json({ activity });
 });
 
+app.get("/api/learning/dashboard", requireUser, (req, res) => {
+  res.json(getLearningDashboard(req.user));
+});
+
+app.post("/api/learning/session", requireUser, (req, res) => {
+  const requestedDuration = Number(req.body.durationMinutes || 15);
+  const durationMinutes = [5, 15, 25].includes(requestedDuration)
+    ? requestedDuration
+    : Math.min(60, Math.max(5, requestedDuration || 15));
+  const dashboard = getLearningDashboard(req.user, durationMinutes);
+
+  recordStudentActivity(req.user.id, null, dashboard.session.items[0]?.deckId || null, "adaptive_session_started", {
+    durationMinutes,
+    itemCount: dashboard.session.items.length,
+  });
+  res.status(201).json({ session: dashboard.session, summary: dashboard.summary });
+});
+
+app.post("/api/learning/mistakes/:id/correct", requireUser, (req, res) => {
+  const mistake = db.prepare("SELECT * FROM mistake_journal WHERE id = ? AND user_id = ?").get(req.params.id, req.user.id);
+  if (!mistake) return res.status(404).json({ error: "Mistake entry not found." });
+
+  const now = new Date().toISOString();
+  db.prepare("UPDATE mistake_journal SET corrected_at = ?, updated_at = ? WHERE id = ? AND user_id = ?")
+    .run(now, now, mistake.id, req.user.id);
+  res.json({ mistake: { ...mistake, corrected_at: now, updated_at: now } });
+});
+
 app.use((req, res, next) => {
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ error: "API route not found." });
@@ -1282,15 +1411,21 @@ app.use((req, res, next) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error(err);
-  res.status(500).json({ error: "Something went wrong." });
+  console.error("Request failed:", {
+    method: req.method,
+    path: req.path,
+    name: err?.name || "Error",
+    message: String(err?.message || "Unexpected error").slice(0, 300),
+    status: Number(err?.status || 500),
+  });
+  res.status(Number(err?.status || 500)).json({ error: "Something went wrong." });
 });
 
 app.listen(PORT, () => {
   console.log(`Neat Notes running at ${BASE_URL}`);
   const smtpConfigError = getSmtpConfigError();
   if (smtpConfigError) {
-    console.log(`${smtpConfigError} Verification links will be printed to the server console and returned in dev responses.`);
+    console.log(`${smtpConfigError} Development verification links are available only outside production.`);
   }
   if (!isGoogleConfigured()) {
     console.log("Google OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable it.");
@@ -1315,6 +1450,10 @@ function asyncHandler(handler) {
 function registerPublicAssetRoutes() {
   const publicAssets = new Map([
     ["/app.js", "application/javascript"],
+    ["/theme-init.js", "application/javascript"],
+    ["/learning-model.js", "application/javascript"],
+    ["/service-worker.js", "application/javascript"],
+    ["/manifest.webmanifest", "application/manifest+json"],
     ["/styles.css", "text/css"],
     ["/revision-generator.js", "application/javascript"],
     ["/neat-questions.js", "application/javascript"],
@@ -1340,6 +1479,16 @@ function registerPublicAssetRoutes() {
     res.setHeader("Vary", "Cookie");
     res.type("application/javascript");
     res.send(`window.REVISION_TOPICS = ${JSON.stringify(topics)};`);
+  });
+
+  app.get("/robots.txt", (req, res) => {
+    res.type("text/plain").send(`User-agent: *\nAllow: /\nSitemap: ${BASE_URL}/sitemap.xml\n`);
+  });
+
+  app.get("/sitemap.xml", (req, res) => {
+    res.type("application/xml").send(
+      `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${escapeHtml(BASE_URL)}</loc></url></urlset>`,
+    );
   });
 }
 
@@ -1419,8 +1568,7 @@ async function handleStripeWebhook(req, res) {
 
 async function handleCheckoutCompleted(session) {
   const userId = session.metadata?.userId || session.client_reference_id;
-  const plan = normalizePlanId(session.metadata?.plan);
-  if (!userId || !PLAN_CATALOG[plan]) return;
+  if (!userId) return;
 
   const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
   let subscription = null;
@@ -1428,7 +1576,10 @@ async function handleCheckoutCompleted(session) {
     subscription = await stripe.subscriptions.retrieve(subscriptionId);
   }
 
-  const status = subscription?.status || "active";
+  const status = subscription?.status || "inactive";
+  const activeStatuses = new Set(["active", "trialing"]);
+  const pricedPlan = getPlanFromStripeSubscription(subscription);
+  const plan = activeStatuses.has(status) ? pricedPlan : "free";
   const currentPeriodEnd = subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null;
   applyUserPlan(userId, plan, status, subscriptionId, currentPeriodEnd);
   db.prepare("INSERT INTO billing_events (id, user_id, plan, provider, status, created_at) VALUES (?, ?, ?, 'stripe', ?, ?)")
@@ -1436,12 +1587,13 @@ async function handleCheckoutCompleted(session) {
 }
 
 async function handleSubscriptionChanged(subscription) {
+  if (stripe && subscription?.id) {
+    subscription = await stripe.subscriptions.retrieve(subscription.id);
+  }
   const subscriptionId = subscription.id;
   const user = db.prepare("SELECT * FROM users WHERE stripe_subscription_id = ? OR stripe_customer_id = ?")
     .get(subscriptionId, subscription.customer);
-  const metadataPlan = normalizePlanId(subscription.metadata?.plan);
-  const priceId = subscription.items?.data?.[0]?.price?.id || "";
-  const plan = metadataPlan !== "free" ? metadataPlan : getPlanFromStripePrice(priceId);
+  const plan = getPlanFromStripeSubscription(subscription);
   if (!user || !PLAN_CATALOG[plan]) return;
 
   const status = subscription.status || "inactive";
@@ -1482,6 +1634,13 @@ function securityHeaders(req, res, next) {
   res.setHeader("X-Frame-Options", "SAMEORIGIN");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; base-uri 'self'; form-action 'self' https://accounts.google.com; frame-ancestors 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'",
+  );
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
   next();
 }
 
@@ -1504,11 +1663,29 @@ function corsMiddleware(req, res, next) {
   next();
 }
 
+function enforceSameOriginMutation(req, res, next) {
+  if (!["POST", "PATCH", "PUT", "DELETE"].includes(req.method)) return next();
+
+  const origin = req.headers.origin;
+  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+    return res.status(403).json({ error: "This request did not originate from Neat Notes." });
+  }
+
+  next();
+}
+
 function createRateLimiter({ windowMs, max }) {
   const hits = new Map();
+  let requestCount = 0;
 
   return (req, res, next) => {
     const now = Date.now();
+    requestCount += 1;
+    if (requestCount % 250 === 0) {
+      for (const [storedKey, storedRecord] of hits) {
+        if (storedRecord.resetAt <= now) hits.delete(storedKey);
+      }
+    }
     const key = `${req.ip}:${req.path}`;
     const record = hits.get(key) || { count: 0, resetAt: now + windowMs };
 
@@ -1544,6 +1721,18 @@ function migrateSchema() {
   db.prepare("UPDATE workspaces SET kind = 'personal' WHERE kind = 'project' AND name LIKE ?").run("%'s Notes");
   db.prepare("UPDATE users SET plan = 'pro' WHERE plan = 'plus'").run();
   db.prepare("UPDATE users SET role = 'teacher' WHERE role = 'student' AND plan IN ('teacher', 'institution')").run();
+  db.prepare("SELECT id, join_code FROM class_groups").all().forEach((classGroup) => {
+    if (String(classGroup.join_code || "").length < 35) {
+      db.prepare("UPDATE class_groups SET join_code = ?, updated_at = ? WHERE id = ?")
+        .run(createJoinCode("NN"), new Date().toISOString(), classGroup.id);
+    }
+  });
+  db.prepare("SELECT id, code FROM centres").all().forEach((centre) => {
+    if (String(centre.code || "").length < 39) {
+      db.prepare("UPDATE centres SET code = ?, updated_at = ? WHERE id = ?")
+        .run(createJoinCode("CENTRE"), new Date().toISOString(), centre.id);
+    }
+  });
 }
 
 function addColumnIfMissing(table, column, definition) {
@@ -1633,6 +1822,9 @@ function requireTeacher(req, res, next) {
 function requireClassTeacher(req, res, next) {
   const classGroup = getClassGroup(req.params.id);
   if (!classGroup) return res.status(404).json({ error: "Class not found." });
+  if (!hasFeature(req.user, "teacherDashboard")) {
+    return res.status(402).json({ error: "An active Teacher plan is required to manage classes." });
+  }
   if (!canManageClass(classGroup, req.user.id)) {
     return res.status(403).json({ error: "You cannot manage this class." });
   }
@@ -1663,7 +1855,8 @@ function normalizeCentreType(type) {
 }
 
 function isTeacherUser(user) {
-  return ["teacher", "centre_admin", "admin"].includes(user?.role) || hasFeature(user, "teacherDashboard");
+  return hasFeature(user, "teacherDashboard")
+    && ["teacher", "centre_admin", "admin"].includes(user?.role);
 }
 
 function ensureAccountProfiles(user) {
@@ -1707,8 +1900,8 @@ function isValidClassCode(code) {
 function createJoinCode(prefix) {
   let code;
   do {
-    const left = crypto.randomBytes(2).toString("hex").toUpperCase();
-    const right = crypto.randomBytes(2).toString("hex").toUpperCase();
+    const left = crypto.randomBytes(8).toString("hex").toUpperCase();
+    const right = crypto.randomBytes(8).toString("hex").toUpperCase();
     code = `${normaliseClassCode(prefix)}-${left}-${right}`;
   } while (
     db.prepare("SELECT 1 FROM class_groups WHERE join_code = ?").get(code) ||
@@ -1814,16 +2007,17 @@ function getClassStudents(classId) {
   return db.prepare(`
     SELECT users.id, users.name, users.email, users.last_accessed_at,
       class_memberships.joined_at,
-      COUNT(flashcard_attempts.id) AS attempt_count,
-      MAX(student_activity_events.created_at) AS last_activity
+      (SELECT COUNT(*) FROM flashcard_attempts
+        WHERE flashcard_attempts.user_id = users.id AND flashcard_attempts.class_id = class_memberships.class_id
+      ) AS attempt_count,
+      (SELECT MAX(student_activity_events.created_at) FROM student_activity_events
+        WHERE student_activity_events.user_id = users.id AND student_activity_events.class_id = class_memberships.class_id
+      ) AS last_activity
     FROM class_memberships
     JOIN users ON users.id = class_memberships.user_id
-    LEFT JOIN flashcard_attempts ON flashcard_attempts.user_id = users.id AND flashcard_attempts.class_id = class_memberships.class_id
-    LEFT JOIN student_activity_events ON student_activity_events.user_id = users.id AND student_activity_events.class_id = class_memberships.class_id
     WHERE class_memberships.class_id = ?
       AND class_memberships.role = 'student'
       AND class_memberships.status = 'active'
-    GROUP BY users.id
     ORDER BY users.name
   `).all(classId);
 }
@@ -1915,6 +2109,7 @@ function getDeckAttempts(deckId, userId = null, classId = null) {
     SELECT * FROM flashcard_attempts
     WHERE ${where.join(" AND ")}
     ORDER BY datetime(created_at) DESC
+    LIMIT 500
   `).all(...params);
 }
 
@@ -1923,6 +2118,300 @@ function normalizeConfidence(confidence) {
   if (["confident", "thumbs_up", "up", "correct"].includes(normalized)) return "confident";
   if (["needs_practice", "thumbs_down", "down", "incorrect"].includes(normalized)) return "needs_practice";
   return "";
+}
+
+function normalizeReviewRating(rating, confidence) {
+  const normalized = String(rating || "").trim().toLowerCase();
+  if (["again", "hard", "good", "easy"].includes(normalized)) return normalized;
+  return confidence === "needs_practice" ? "again" : "good";
+}
+
+function getLearningActivityType(source) {
+  const normalized = String(source || "flashcard").trim().toLowerCase();
+  const activityTypes = {
+    flashcard: "flashcard_rating",
+    quick_practice: "multiple_choice",
+    quick_quiz: "multiple_choice",
+    free_recall: "free_recall",
+    short_answer: "short_answer",
+    exam_response: "exam_response",
+    correction: "correction",
+  };
+  return activityTypes[normalized] || "flashcard_rating";
+}
+
+function recordLearningEvidenceFromAttempt(userId, attempt, card, rating) {
+  const conceptId = `${attempt.deck_id}:${card.card_key}`;
+  const existingSchedule = db.prepare("SELECT * FROM review_schedules WHERE user_id = ? AND concept_id = ?")
+    .get(userId, conceptId);
+  const previousState = existingSchedule
+    ? {
+        difficulty: existingSchedule.difficulty,
+        stabilityDays: existingSchedule.stability_days,
+        retrievability: existingSchedule.retrievability,
+        lastReviewAt: existingSchedule.last_review_at,
+        nextReviewAt: existingSchedule.next_review_at,
+        successfulRetrievals: existingSchedule.successful_retrievals,
+        lapses: existingSchedule.lapses,
+      }
+    : {};
+  const memoryState = updateMemoryState(previousState, rating, attempt.created_at);
+  const activityType = getLearningActivityType(attempt.source);
+  const score = attempt.quiz_correct === null
+    ? ({ again: 0.18, hard: 0.5, good: 0.72, easy: 0.86 }[rating] || 0.5)
+    : attempt.quiz_correct ? 1 : 0;
+  const now = attempt.created_at;
+  const evidenceId = crypto.randomUUID();
+
+  db.prepare(`
+    INSERT INTO learning_evidence (
+      id, user_id, class_id, concept_id, deck_id, card_id, activity_type, score, difficulty,
+      response_type, confidence, previous_due_at, feedback_code, misconception_id,
+      correction_successful, response_time_ms, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    evidenceId,
+    userId,
+    attempt.class_id,
+    conceptId,
+    attempt.deck_id,
+    attempt.card_id,
+    activityType,
+    score,
+    Number(attempt.difficulty) || 1,
+    activityType === "multiple_choice" ? "selected_option" : "self_rating",
+    rating,
+    existingSchedule?.next_review_at || null,
+    score < 0.5 ? "retry_scheduled" : "retrieval_recorded",
+    null,
+    score >= 0.5 ? 1 : 0,
+    attempt.response_time_ms,
+    now,
+  );
+
+  db.prepare(`
+    INSERT INTO review_schedules (
+      user_id, concept_id, deck_id, difficulty, stability_days, retrievability, last_review_at,
+      next_review_at, successful_retrievals, lapses, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, concept_id) DO UPDATE SET
+      deck_id = excluded.deck_id,
+      difficulty = excluded.difficulty,
+      stability_days = excluded.stability_days,
+      retrievability = excluded.retrievability,
+      last_review_at = excluded.last_review_at,
+      next_review_at = excluded.next_review_at,
+      successful_retrievals = excluded.successful_retrievals,
+      lapses = excluded.lapses,
+      updated_at = excluded.updated_at
+  `).run(
+    userId,
+    conceptId,
+    attempt.deck_id,
+    memoryState.difficulty,
+    memoryState.stabilityDays,
+    memoryState.retrievability,
+    memoryState.lastReviewAt,
+    memoryState.nextReviewAt,
+    memoryState.successfulRetrievals,
+    memoryState.lapses,
+    now,
+  );
+
+  if (score < 0.5) {
+    upsertMistakeJournalEntry(userId, attempt, card, conceptId, activityType, now);
+  } else {
+    db.prepare(`
+      UPDATE mistake_journal
+      SET corrected_at = COALESCE(corrected_at, ?), updated_at = ?
+      WHERE user_id = ? AND concept_id = ? AND corrected_at IS NULL
+    `).run(now, now, userId, conceptId);
+  }
+
+  const evidence = getConceptEvidence(userId, conceptId);
+  return {
+    conceptId,
+    mastery: calculateMastery(evidence),
+    schedule: {
+      ...memoryState,
+      retrievability: calculateRetrievability(memoryState),
+    },
+  };
+}
+
+function upsertMistakeJournalEntry(userId, attempt, card, conceptId, activityType, now) {
+  const existing = db.prepare(`
+    SELECT id FROM mistake_journal
+    WHERE user_id = ? AND concept_id = ? AND corrected_at IS NULL
+    ORDER BY datetime(created_at) DESC LIMIT 1
+  `).get(userId, conceptId);
+  const explanation = card.back || "Review the concept and retry the question.";
+
+  if (existing) {
+    db.prepare(`
+      UPDATE mistake_journal
+      SET explanation = ?, activity_type = ?, class_id = ?, updated_at = ?
+      WHERE id = ? AND user_id = ?
+    `).run(explanation, activityType, attempt.class_id, now, existing.id, userId);
+    return existing.id;
+  }
+
+  const id = crypto.randomUUID();
+  db.prepare(`
+    INSERT INTO mistake_journal (
+      id, user_id, class_id, concept_id, deck_id, card_id, activity_type, explanation,
+      misconception_id, corrected_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)
+  `).run(id, userId, attempt.class_id, conceptId, attempt.deck_id, attempt.card_id, activityType, explanation, now, now);
+  return id;
+}
+
+function pruneLearningHistory(userId, cardId, conceptId) {
+  db.prepare(`
+    DELETE FROM flashcard_attempts
+    WHERE id IN (
+      SELECT id FROM flashcard_attempts
+      WHERE user_id = ? AND card_id = ?
+      ORDER BY datetime(created_at) DESC
+      LIMIT -1 OFFSET 150
+    )
+  `).run(userId, cardId);
+  db.prepare(`
+    DELETE FROM learning_evidence
+    WHERE id IN (
+      SELECT id FROM learning_evidence
+      WHERE user_id = ? AND concept_id = ?
+      ORDER BY datetime(created_at) DESC
+      LIMIT -1 OFFSET 150
+    )
+  `).run(userId, conceptId);
+  db.prepare(`
+    DELETE FROM student_activity_events
+    WHERE id IN (
+      SELECT id FROM student_activity_events
+      WHERE user_id = ?
+      ORDER BY datetime(created_at) DESC
+      LIMIT -1 OFFSET 1200
+    )
+  `).run(userId);
+}
+
+function getConceptEvidence(userId, conceptId) {
+  return db.prepare(`
+    SELECT activity_type AS activityType, score, difficulty, confidence,
+      created_at AS occurredAt, misconception_id AS misconceptionId
+    FROM learning_evidence
+    WHERE user_id = ? AND concept_id = ?
+    ORDER BY datetime(created_at)
+  `).all(userId, conceptId);
+}
+
+function getLearningDashboard(user, durationMinutes = 15) {
+  const accessibleDecks = listRevisionDecks(user).filter((deck) => !deck.locked);
+  const allowedDeckIds = new Set(accessibleDecks.map((deck) => deck.id));
+  const schedules = db.prepare(`
+    SELECT review_schedules.*
+    FROM review_schedules
+    WHERE review_schedules.user_id = ?
+    ORDER BY datetime(review_schedules.next_review_at)
+  `).all(user.id).filter((row) => allowedDeckIds.has(row.deck_id));
+
+  const scheduledByConcept = new Map(schedules.map((row) => [row.concept_id, row]));
+  const cards = accessibleDecks.flatMap((deck) => db.prepare(`
+    SELECT flashcards.*, flashcard_decks.code, flashcard_decks.title
+    FROM flashcards JOIN flashcard_decks ON flashcard_decks.id = flashcards.deck_id
+    WHERE flashcards.deck_id = ? ORDER BY flashcards.position
+  `).all(deck.id));
+  const evidenceByConcept = new Map();
+  db.prepare(`
+    SELECT concept_id, activity_type AS activityType, score, difficulty, confidence,
+      created_at AS occurredAt, misconception_id AS misconceptionId
+    FROM learning_evidence
+    WHERE user_id = ?
+    ORDER BY datetime(created_at)
+  `).all(user.id).forEach((entry) => {
+    const entries = evidenceByConcept.get(entry.concept_id) || [];
+    entries.push(entry);
+    evidenceByConcept.set(entry.concept_id, entries);
+  });
+
+  const items = cards.map((card) => {
+    const conceptId = `${card.deck_id}:${card.card_key}`;
+    const schedule = scheduledByConcept.get(conceptId);
+    const evidence = evidenceByConcept.get(conceptId) || [];
+    const mastery = calculateMastery(evidence);
+    return {
+      conceptId,
+      cardId: card.id,
+      deckId: card.deck_id,
+      topicId: card.deck_id,
+      code: card.code,
+      topicTitle: card.title,
+      prompt: card.front,
+      answer: card.back,
+      category: card.category,
+      nextReviewAt: schedule?.next_review_at || null,
+      due: !schedule || new Date(schedule.next_review_at).getTime() <= Date.now(),
+      memoryState: schedule
+        ? {
+            difficulty: schedule.difficulty,
+            stabilityDays: schedule.stability_days,
+            lastReviewAt: schedule.last_review_at,
+            nextReviewAt: schedule.next_review_at,
+            successfulRetrievals: schedule.successful_retrievals,
+            lapses: schedule.lapses,
+          }
+        : {},
+      mastery,
+    };
+  });
+  const session = buildAdaptiveSession({ items, durationMinutes });
+  const mistakes = db.prepare(`
+    SELECT mistake_journal.*, flashcards.front, flashcard_decks.code, flashcard_decks.title
+    FROM mistake_journal
+    LEFT JOIN flashcards ON flashcards.id = mistake_journal.card_id
+    LEFT JOIN flashcard_decks ON flashcard_decks.id = mistake_journal.deck_id
+    WHERE mistake_journal.user_id = ? AND mistake_journal.corrected_at IS NULL
+    ORDER BY datetime(mistake_journal.updated_at) DESC LIMIT 20
+  `).all(user.id).filter((row) => allowedDeckIds.has(row.deck_id));
+  const started = items.filter((item) => item.mastery.evidenceCount > 0);
+
+  return {
+    summary: {
+      conceptsAvailable: items.length,
+      conceptsStarted: started.length,
+      conceptsSecure: started.filter((item) => item.mastery.state === "Secure").length,
+      conceptsDue: session.items.filter((item) => item.due).length,
+      mistakesToRepair: mistakes.length,
+      evidenceCount: started.reduce((total, item) => total + item.mastery.evidenceCount, 0),
+    },
+    session,
+    topics: accessibleDecks.map((deck) => {
+      const topicItems = items.filter((item) => item.deckId === deck.id);
+      const topicEvidence = topicItems.filter((item) => item.mastery.evidenceCount > 0);
+      return {
+        id: deck.id,
+        code: deck.code,
+        title: deck.title,
+        state: topicEvidence.length ? calculateTopicLearningState(topicEvidence) : "New",
+        evidenceScore: topicEvidence.length
+          ? Math.round(topicEvidence.reduce((sum, item) => sum + item.mastery.score, 0) / topicEvidence.length)
+          : 0,
+        conceptsDue: topicItems.filter((item) => item.due).length,
+        lastPractisedAt: topicEvidence.map((item) => item.mastery.lastPractisedAt).filter(Boolean).sort().at(-1) || null,
+      };
+    }),
+    mistakes,
+  };
+}
+
+function calculateTopicLearningState(items) {
+  if (items.some((item) => item.mastery.state === "Misconception detected")) return "Misconception detected";
+  if (items.some((item) => item.due)) return "Due for review";
+  const average = items.reduce((sum, item) => sum + item.mastery.score, 0) / items.length;
+  if (average >= 78 && items.some((item) => item.mastery.state === "Secure")) return "Secure";
+  if (average >= 52) return "Fragile";
+  return "Learning";
 }
 
 function updateTopicConfidence(userId, classId, deckId) {
@@ -2147,6 +2636,7 @@ async function createAndSendVerification(userId, email, name) {
   const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24);
   const verificationUrl = `${BASE_URL}/api/auth/verify?token=${encodeURIComponent(rawToken)}`;
 
+  db.prepare("DELETE FROM email_verification_tokens WHERE user_id = ?").run(userId);
   db.prepare(`
     INSERT INTO email_verification_tokens (token_hash, user_id, expires_at, created_at)
     VALUES (?, ?, ?, ?)
@@ -2166,7 +2656,9 @@ async function createAndSendVerification(userId, email, name) {
     return {};
   }
 
-  console.log(`Verification link for ${email}: ${verificationUrl}`);
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`Development verification link for ${email}: ${verificationUrl}`);
+  }
   return process.env.NODE_ENV === "production" ? {} : { devVerificationUrl: verificationUrl };
 }
 
@@ -2288,6 +2780,9 @@ async function retryQueuedContactEnquiries(limit = 10) {
 
 function upsertGoogleUser(profile) {
   const email = normalizeEmail(profile.email);
+  if (!email || profile.email_verified !== true) {
+    throw new Error("Google did not provide a verified email address.");
+  }
   const now = new Date().toISOString();
   const existingByGoogle = db.prepare("SELECT * FROM users WHERE google_id = ?").get(profile.sub);
   if (existingByGoogle) {
@@ -2297,8 +2792,27 @@ function upsertGoogleUser(profile) {
 
   const existingByEmail = getUserByEmail(email);
   if (existingByEmail) {
-    db.prepare("UPDATE users SET google_id = ?, email_verified = 1, updated_at = ? WHERE id = ?")
-      .run(profile.sub, now, existingByEmail.id);
+    const wasUnverified = !existingByEmail.email_verified;
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      db.prepare(`
+        UPDATE users
+        SET google_id = ?,
+          email_verified = 1,
+          password_hash = CASE WHEN ? THEN NULL ELSE password_hash END,
+          password_salt = CASE WHEN ? THEN NULL ELSE password_salt END,
+          updated_at = ?
+        WHERE id = ?
+      `).run(profile.sub, wasUnverified ? 1 : 0, wasUnverified ? 1 : 0, now, existingByEmail.id);
+      if (wasUnverified) {
+        db.prepare("DELETE FROM sessions WHERE user_id = ?").run(existingByEmail.id);
+        db.prepare("DELETE FROM email_verification_tokens WHERE user_id = ?").run(existingByEmail.id);
+      }
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
     const user = getUserByEmail(email);
     ensureAccountProfiles(user);
     return user;
@@ -2321,7 +2835,7 @@ function requireWorkspaceMember(req, res) {
     SELECT * FROM workspace_members WHERE workspace_id = ? AND user_id = ?
   `).get(req.params.id, req.user.id);
 
-  if (!membership) {
+  if (!membership || (membership.role !== "owner" && !ownerHasWorkspaceCollaboration(req.params.id))) {
     res.status(403).json({ error: "You do not have access to that workspace." });
     return null;
   }
@@ -2334,16 +2848,24 @@ function getWorkspace(workspaceId) {
 }
 
 function isWorkspaceMember(workspaceId, userId) {
-  return Boolean(db.prepare("SELECT 1 FROM workspace_members WHERE workspace_id = ? AND user_id = ?").get(workspaceId, userId));
+  const membership = db.prepare("SELECT role FROM workspace_members WHERE workspace_id = ? AND user_id = ?")
+    .get(workspaceId, userId);
+  return Boolean(membership && (membership.role === "owner" || ownerHasWorkspaceCollaboration(workspaceId)));
 }
 
 function getAccessibleNote(noteId, userId) {
-  return db.prepare(`
-    SELECT notes.*
-    FROM notes
-    JOIN workspace_members ON workspace_members.workspace_id = notes.workspace_id
-    WHERE notes.id = ? AND workspace_members.user_id = ?
-  `).get(noteId, userId);
+  const note = db.prepare("SELECT * FROM notes WHERE id = ?").get(noteId);
+  return note && isWorkspaceMember(note.workspace_id, userId) ? note : null;
+}
+
+function ownerHasWorkspaceCollaboration(workspaceId) {
+  const owner = db.prepare(`
+    SELECT users.*
+    FROM workspaces
+    JOIN users ON users.id = workspaces.owner_id
+    WHERE workspaces.id = ?
+  `).get(workspaceId);
+  return Boolean(owner && hasFeature(owner, "collaboration"));
 }
 
 function touchWorkspace(workspaceId) {
@@ -2366,6 +2888,27 @@ function saveNoteVersion(note, userId) {
     note.updated_at,
     new Date().toISOString(),
   );
+
+  const versions = db.prepare(`
+    SELECT id, length(CAST(body AS BLOB)) AS body_bytes
+    FROM note_versions
+    WHERE note_id = ?
+    ORDER BY datetime(created_at) DESC
+  `).all(note.id);
+  let retainedBytes = 0;
+  const expiredIds = [];
+  versions.forEach((version, index) => {
+    retainedBytes += Number(version.body_bytes || 0);
+    if (index >= MAX_NOTE_VERSIONS || retainedBytes > MAX_NOTE_VERSION_BYTES) {
+      expiredIds.push(version.id);
+    }
+  });
+  const deleteVersion = db.prepare("DELETE FROM note_versions WHERE id = ?");
+  expiredIds.forEach((id) => deleteVersion.run(id));
+}
+
+function isNoteBodyWithinLimit(body) {
+  return Buffer.byteLength(String(body || ""), "utf8") <= MAX_NOTE_BODY_BYTES;
 }
 
 function countUserNotes(userId) {
@@ -2383,7 +2926,11 @@ function normalizePlanId(plan) {
 }
 
 function getPlan(user) {
-  return PLAN_CATALOG[normalizePlanId(user?.plan)] || PLAN_CATALOG.free;
+  const planId = normalizePlanId(user?.plan);
+  if (planId !== "free" && !["active", "trialing"].includes(String(user?.plan_status || user?.subscription_status || ""))) {
+    return PLAN_CATALOG.free;
+  }
+  return PLAN_CATALOG[planId] || PLAN_CATALOG.free;
 }
 
 function hasFeature(user, feature) {
@@ -2392,6 +2939,13 @@ function hasFeature(user, feature) {
 
 function getPlanFromStripePrice(priceId) {
   return Object.entries(STRIPE_PRICE_IDS).find(([, value]) => value && value === priceId)?.[0] || "free";
+}
+
+function getPlanFromStripeSubscription(subscription) {
+  const plans = (subscription?.items?.data || [])
+    .map((item) => getPlanFromStripePrice(item?.price?.id || ""))
+    .filter((plan) => plan !== "free");
+  return ["institution", "teacher", "pro"].find((plan) => plans.includes(plan)) || "free";
 }
 
 async function ensureStripeCustomer(user) {

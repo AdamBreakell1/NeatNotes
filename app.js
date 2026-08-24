@@ -15,6 +15,8 @@ const CENTRES_KEY = "neat-notes-centres";
 const TEACHER_ASSIGNMENTS_KEY = "neat-notes-teacher-assignments";
 const LEARNING_MODE_KEY = "neat-notes-learning-mode";
 const APP_EVENT_LOG_KEY = "neat-notes-event-log";
+const REVIEW_SCHEDULES_KEY = "neat-notes-review-schedules";
+const MISTAKE_JOURNAL_KEY = "neat-notes-mistake-journal";
 const DAILY_REVIEW_GOAL = 10;
 const DEFAULT_GUEST_REVISION_DECK_ID = "cs-1-1-1";
 const MIN_LAUNCH_OVERLAY_MS = 2100;
@@ -74,7 +76,7 @@ let activeTag = "all";
 let selectedId = null;
 let saveTimer = null;
 let isGuestMode = true;
-let activeAppSection = "notes";
+let activeAppSection = "home";
 let activeRevisionTopicId = "cs-1-1-1";
 let revisionCardOrder = {};
 let earnedRevisionBadges = loadRevisionBadges();
@@ -102,9 +104,13 @@ let revisionSession = createRevisionSession(activeRevisionTopicId);
 let revisionReviewMode = null;
 let studentClassJoinMessage = { text: "", type: "" };
 let studentClassCodeDraft = "";
+let reviewSchedules = loadLocalObject(REVIEW_SCHEDULES_KEY);
+let mistakeJournal = loadLocalArray(MISTAKE_JOURNAL_KEY);
+let activeAdaptiveSession = null;
 
 const REVISION_TOPICS = window.REVISION_TOPICS || [];
 const NEAT_QUESTIONS = window.NEAT_QUESTIONS || [];
+const LEARNING_MODEL = window.NEAT_LEARNING_MODEL;
 
 const elements = {
   activeFolderLabel: document.querySelector("#active-folder-label"),
@@ -148,6 +154,7 @@ const elements = {
   loginCapsWarning: document.querySelector("#login-caps-warning"),
   logoutButton: document.querySelector("#logout-button"),
   memberList: document.querySelector("#member-list"),
+  mistakeJournalPanel: document.querySelector("#mistake-journal-panel"),
   mobileNotesButton: document.querySelector("#mobile-notes-button"),
   mobileSidebarClose: document.querySelector("#mobile-sidebar-close"),
   neatQuestionsCount: document.querySelector("#neat-questions-count"),
@@ -161,6 +168,7 @@ const elements = {
   noteCount: document.querySelector("#note-count"),
   noteDate: document.querySelector("#note-date"),
   noteIntelligencePanel: document.querySelector("#note-intelligence-panel"),
+  studyOutputDisclosure: document.querySelector("#study-output-disclosure"),
   notesColumn: document.querySelector(".notes-column"),
   notesList: document.querySelector("#notes-list"),
   closePlansButton: document.querySelector("#close-plans-button"),
@@ -346,6 +354,7 @@ elements.studentClassPanel.addEventListener("click", handleStudentClassPanelClic
 elements.studentClassPanel.addEventListener("submit", handleStudentClassPanelSubmit);
 elements.studentClassPanel.addEventListener("change", handleStudentClassPanelChange);
 elements.studentDashboardPanel.addEventListener("click", handleStudentDashboardClick);
+elements.mistakeJournalPanel.addEventListener("click", handleMistakeJournalClick);
 elements.teacherModePanel.addEventListener("click", handleTeacherModeClick);
 elements.teacherModePanel.addEventListener("submit", handleTeacherModeSubmit);
 elements.teacherModePanel.addEventListener("change", handleTeacherModeChange);
@@ -402,15 +411,19 @@ function switchAppSection(event) {
 
 function setAppSection(section) {
   closeMobileNotesSidebar();
-  activeAppSection = ["revision", "teacher", "contact"].includes(section) ? section : "notes";
+  const normalizedSection = section === "revision" ? "revise" : section;
+  activeAppSection = ["home", "revise", "practice", "progress", "notes", "teacher", "contact"].includes(normalizedSection)
+    ? normalizedSection
+    : "home";
   const isNotes = activeAppSection === "notes";
-  const isRevision = activeAppSection === "revision" || activeAppSection === "teacher";
+  const isStudent = ["home", "revise", "practice", "progress"].includes(activeAppSection);
+  const isRevision = isStudent || activeAppSection === "teacher";
   const isTeacher = activeAppSection === "teacher";
   const isContact = activeAppSection === "contact";
 
   if (isTeacher) {
     activeLearningMode = "teacher";
-  } else if (activeAppSection === "revision") {
+  } else if (isStudent) {
     activeLearningMode = "student";
   }
   localStorage.setItem(LEARNING_MODE_KEY, activeLearningMode);
@@ -424,9 +437,11 @@ function setAppSection(section) {
   elements.appView.classList.toggle("revision-mode", isRevision);
   elements.appView.classList.toggle("teacher-app-mode", isTeacher);
   elements.appView.classList.toggle("contact-mode", isContact);
+  elements.revisionView.dataset.studentView = isStudent ? activeAppSection : "";
 
   document.querySelectorAll("[data-app-section]").forEach((button) => {
-    const isActiveSection = button.dataset.appSection === activeAppSection;
+    const buttonSection = button.dataset.appSection === "revision" ? "revise" : button.dataset.appSection;
+    const isActiveSection = buttonSection === activeAppSection;
     button.classList.toggle("active", isActiveSection);
     if (button.closest(".topbar-section-switch")) {
       button.setAttribute("aria-current", isActiveSection ? "page" : "false");
@@ -538,6 +553,15 @@ function loadLocalArray(key) {
   }
 }
 
+function loadLocalObject(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key) || "{}");
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  } catch {
+    return {};
+  }
+}
+
 function saveLocalArray(key, value) {
   localStorage.setItem(key, JSON.stringify(value));
 }
@@ -580,11 +604,135 @@ function recordCardAttempt(cardId, topicId, confidence, options = {}) {
 
   cardAttempts = [attempt, ...cardAttempts].slice(0, 1200);
   saveLocalArray(CARD_ATTEMPTS_KEY, cardAttempts);
+  updateLocalLearningState(attempt);
   recordActivityEvent({ type: "card_rated", topicId, classId: attempt.classId });
   if (currentUser && !isGuestMode) {
     void syncRevisionAttempt(attempt);
   }
   return attempt;
+}
+
+function updateLocalLearningState(attempt) {
+  if (!LEARNING_MODEL || !attempt?.cardId) return;
+  const rating = ["again", "hard", "good", "easy"].includes(attempt.difficulty)
+    ? attempt.difficulty
+    : attempt.confidence === "needs_practice" ? "again" : "good";
+  const previous = reviewSchedules[attempt.cardId] || {};
+  const memoryState = LEARNING_MODEL.updateMemoryState(previous, rating, attempt.createdAt);
+  reviewSchedules = { ...reviewSchedules, [attempt.cardId]: memoryState };
+  localStorage.setItem(REVIEW_SCHEDULES_KEY, JSON.stringify(reviewSchedules));
+
+  const incorrect = attempt.quizCorrect === false || rating === "again";
+  const existingIndex = mistakeJournal.findIndex((entry) => entry.conceptId === attempt.cardId && !entry.correctedAt);
+  if (incorrect) {
+    const topic = getQuizTopicById(attempt.topicId);
+    const cardId = String(attempt.cardId).split(":").slice(1).join(":");
+    const card = getTopicCards(topic).find((candidate) => candidate.id === cardId);
+    const entry = {
+      id: existingIndex >= 0 ? mistakeJournal[existingIndex].id : createLocalId("mistake"),
+      conceptId: attempt.cardId,
+      topicId: attempt.topicId,
+      prompt: card?.front || "Revision question",
+      explanation: card?.back || "Review this concept, then try a nearby question.",
+      activityType: attempt.source || "flashcard",
+      createdAt: existingIndex >= 0 ? mistakeJournal[existingIndex].createdAt : attempt.createdAt,
+      updatedAt: attempt.createdAt,
+      correctedAt: null,
+    };
+    if (existingIndex >= 0) mistakeJournal.splice(existingIndex, 1, entry);
+    else mistakeJournal.unshift(entry);
+  } else if (existingIndex >= 0) {
+    mistakeJournal[existingIndex] = { ...mistakeJournal[existingIndex], correctedAt: attempt.createdAt, updatedAt: attempt.createdAt };
+  }
+  mistakeJournal = mistakeJournal.slice(0, 100);
+  saveLocalArray(MISTAKE_JOURNAL_KEY, mistakeJournal);
+}
+
+function getLearningActivityType(attempt) {
+  const types = {
+    quick_practice: "multiple_choice",
+    quick_quiz: "multiple_choice",
+    free_recall: "free_recall",
+    short_answer: "short_answer",
+    exam_response: "exam_response",
+  };
+  return types[attempt.source] || "flashcard_rating";
+}
+
+function getAdaptiveLearningItems() {
+  if (!LEARNING_MODEL) return [];
+  return REVISION_TOPICS
+    .filter((topic) => canAccessRevisionTopic(topic.id))
+    .flatMap((topic) => getTopicCards(topic).map((card) => {
+      const conceptId = getRevisionCardKey(topic, card);
+      const evidence = cardAttempts
+        .filter((attempt) => attempt.cardId === conceptId)
+        .map((attempt) => ({
+          activityType: getLearningActivityType(attempt),
+          score: typeof attempt.quizCorrect === "boolean"
+            ? (attempt.quizCorrect ? 1 : 0)
+            : ({ again: 0.18, hard: 0.5, good: 0.72, easy: 0.86 }[attempt.difficulty] || (attempt.confidence === "confident" ? 0.72 : 0.18)),
+          confidence: attempt.difficulty || attempt.confidence,
+          difficulty: 1,
+          occurredAt: attempt.createdAt,
+          memoryState: reviewSchedules[conceptId],
+        }));
+      const memoryState = reviewSchedules[conceptId] || {};
+      return {
+        conceptId,
+        cardId: conceptId,
+        topicId: topic.id,
+        deckId: topic.id,
+        code: topic.code,
+        topicTitle: topic.title,
+        category: card.category,
+        prompt: card.front,
+        answer: card.back,
+        nextReviewAt: memoryState.nextReviewAt || null,
+        memoryState,
+        evidence,
+        mastery: LEARNING_MODEL.calculateMastery(evidence),
+      };
+    }));
+}
+
+function getAdaptiveSessionPlan(durationMinutes = 15) {
+  if (!LEARNING_MODEL) return { durationMinutes, itemBudget: 0, items: [], reasons: [] };
+  return LEARNING_MODEL.buildSession({ items: getAdaptiveLearningItems(), durationMinutes });
+}
+
+function startAdaptiveRevisionSession(durationMinutes = 15) {
+  const plan = getAdaptiveSessionPlan(durationMinutes);
+  if (!plan.items.length) {
+    setAppSection("revise");
+    return;
+  }
+
+  activeAdaptiveSession = {
+    ...plan,
+    id: createLocalId("adaptive"),
+    startedAt: new Date().toISOString(),
+    completedConceptIds: [],
+  };
+  openNextAdaptiveSessionTopic();
+  setAppSection("revise");
+  trackEvent("adaptive_session_started", { durationMinutes, itemCount: plan.items.length });
+}
+
+function openNextAdaptiveSessionTopic() {
+  const nextItem = activeAdaptiveSession?.items.find((item) => !completedRevisionCards.has(item.cardId));
+  if (!nextItem) {
+    if (activeAdaptiveSession) activeAdaptiveSession.completedAt = new Date().toISOString();
+    return false;
+  }
+
+  activeRevisionTopicId = nextItem.topicId;
+  const topicCardIds = activeAdaptiveSession.items
+    .filter((item) => item.topicId === nextItem.topicId && !completedRevisionCards.has(item.cardId))
+    .map((item) => item.cardId);
+  startRevisionSession(nextItem.topicId, "adaptive", topicCardIds);
+  revisionReviewMode = { topicId: nextItem.topicId, cardIds: topicCardIds, mode: "adaptive" };
+  return true;
 }
 
 async function syncRevisionAttempt(attempt) {
@@ -605,6 +753,7 @@ async function syncRevisionAttempt(attempt) {
         quizCorrect: attempt.quizCorrect,
         responseTimeMs: attempt.responseTimeMs,
         source: attempt.source || "flashcard",
+        rating: attempt.difficulty || undefined,
       },
     });
   } catch (error) {
@@ -899,45 +1048,20 @@ function isRevisionTopicRecommendable(topicId) {
 }
 
 function startDailyReview() {
-  const topic = getRecommendedRevisionTopic();
-  if (topic) {
-    activeRevisionTopicId = topic.id;
-    if (canAccessRevisionTopic(topic.id)) {
-      startRevisionSession(topic.id);
-    }
-  }
-
-  setAppSection("revision");
+  startAdaptiveRevisionSession(15);
   setTimeout(() => {
     elements.revisionCardGrid.querySelector("[data-card-id]")?.focus();
   }, 0);
 }
 
 async function continueRevisionJourney() {
-  const runningTopic = getQuizTopicById(neatQuizState.quizId);
-  const recommendedTopic = getRecommendedRevisionTopic();
-  const nextTopic = runningTopic && !neatQuizState.completed ? runningTopic : recommendedTopic || getActiveRevisionTopic();
-
-  if (nextTopic?.id) {
-    activeRevisionTopicId = nextTopic.id;
-    if (canAccessRevisionTopic(nextTopic.id)) {
-      startRevisionSession(nextTopic.id);
-    }
-  }
-
-  if (!runningTopic || neatQuizState.completed) {
-    await startNeatQuiz(nextTopic?.id);
-  } else {
-    renderRevisionPage();
-  }
-
-  window.setTimeout(() => {
-    elements.quickPracticeSection.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, 80);
+  startAdaptiveRevisionSession(15);
+  window.setTimeout(() => elements.revisionCardGrid.querySelector("[data-card-id]")?.focus(), 80);
 }
 
 function scrollToRevisionProgress() {
-  elements.revisionProgressSection.scrollIntoView({ behavior: "smooth", block: "start" });
+  setAppSection("progress");
+  window.setTimeout(() => elements.revisionProgressSection.focus?.(), 0);
 }
 
 function renderAchievementSummary() {
@@ -1537,7 +1661,7 @@ function handleLandingClick(event) {
     return;
   }
 
-  openDemoWorkspace({ section: "notes" });
+  openDemoWorkspace({ section: "home" });
 }
 
 function showLandingPage() {
@@ -1553,12 +1677,12 @@ function handleTopbarBrandAction() {
     return;
   }
 
-  setAppSection("notes");
+  setAppSection("home");
 }
 
 function exitDemoWorkspace() {
   localStorage.removeItem(LANDING_DISMISSED_KEY);
-  activeAppSection = "notes";
+  activeAppSection = "home";
   activeLearningMode = "student";
   localStorage.setItem(LEARNING_MODE_KEY, activeLearningMode);
   elements.authView.hidden = true;
@@ -1578,12 +1702,12 @@ function openDemoWorkspace(options = {}) {
     activeLearningMode = "teacher";
     localStorage.setItem(LEARNING_MODE_KEY, "teacher");
   }
-  setAppSection(options.section || "notes");
+  setAppSection(options.section || "home");
   render();
   if (options.teacher) {
     renderRevisionPage();
   }
-  trackEvent("demo_workspace_opened", { section: options.section || "notes", teacher: Boolean(options.teacher) });
+  trackEvent("demo_workspace_opened", { section: options.section || "home", teacher: Boolean(options.teacher) });
 }
 
 function hideLaunchOverlay() {
@@ -2720,13 +2844,14 @@ function renderAccountChrome() {
 
 function renderRevisionMasteryMap() {
   const recommendedTopic = getRecommendedRevisionTopic();
-  const earnedCount = REVISION_TOPICS.filter((topic) => earnedRevisionBadges[topic.id]).length;
+  const learningItems = getAdaptiveLearningItems();
+  const secureTopics = REVISION_TOPICS.filter((topic) => getTopicLearningSummary(topic.id, learningItems).state === "Secure").length;
 
   elements.revisionMasteryMap.innerHTML = `
     <div class="mastery-map-head">
       <div>
-        <span>Mastery map</span>
-        <strong>${earnedCount}/${REVISION_TOPICS.length} decks complete</strong>
+        <span>OCR Component 01 evidence map</span>
+        <strong>${secureTopics}/${REVISION_TOPICS.length} topics currently secure</strong>
       </div>
       ${
         recommendedTopic
@@ -2736,22 +2861,34 @@ function renderRevisionMasteryMap() {
     </div>
     <div class="mastery-map-grid">
       ${REVISION_TOPICS.map((topic) => {
-        const completed = getCompletedRevisionCount(topic);
-        const earned = Boolean(earnedRevisionBadges[topic.id]);
-        const topicTotal = getRevisionTopicCardCount(topic);
-        const percent = earned ? 100 : topicTotal ? Math.round((completed / topicTotal) * 100) : 0;
+        const summary = getTopicLearningSummary(topic.id, learningItems);
         const activeClass = topic.id === activeRevisionTopicId ? " active" : "";
-        const earnedClass = earned ? " earned" : "";
+        const earnedClass = summary.state === "Secure" ? " earned" : "";
         const access = getRevisionTopicAccessState(topic.id);
         const accessClass = access.locked ? " locked" : access.canClaim ? " claimable" : access.selectedFreeDeck ? " free-selected" : "";
-        const title = `${topic.code} ${topic.title} · ${percent}% · ${access.label}`;
+        const title = `${topic.code} ${topic.title} · ${summary.state} · ${access.label}`;
 
-        return `<button class="mastery-dot${activeClass}${earnedClass}${accessClass}" type="button" data-jump-topic="${escapeHtml(topic.id)}" title="${escapeHtml(title)}">
+        return `<button class="mastery-dot${activeClass}${earnedClass}${accessClass}" type="button" data-jump-topic="${escapeHtml(topic.id)}" title="${escapeHtml(title)}" aria-label="${escapeHtml(title)}">
           <span>${escapeHtml(topic.code)}</span>
-          <small>${percent}%</small>
+          <small>${escapeHtml(summary.state)}</small>
         </button>`;
       }).join("")}
     </div>`;
+}
+
+function getTopicLearningSummary(topicId, items = getAdaptiveLearningItems()) {
+  const topicItems = items.filter((item) => item.topicId === topicId);
+  const started = topicItems.filter((item) => item.mastery.evidenceCount > 0);
+  if (!started.length) return { state: "New", score: 0, conceptsDue: topicItems.length };
+  if (started.some((item) => item.mastery.state === "Misconception detected")) {
+    return { state: "Misconception", score: 0, conceptsDue: started.length };
+  }
+  const score = Math.round(started.reduce((sum, item) => sum + item.mastery.score, 0) / started.length);
+  const conceptsDue = topicItems.filter((item) => !item.nextReviewAt || new Date(item.nextReviewAt) <= new Date()).length;
+  if (conceptsDue && score >= 52) return { state: "Due", score, conceptsDue };
+  if (score >= 78 && started.some((item) => item.mastery.state === "Secure")) return { state: "Secure", score, conceptsDue };
+  if (score >= 52) return { state: "Fragile", score, conceptsDue };
+  return { state: "Learning", score, conceptsDue };
 }
 
 function renderLearningMode() {
@@ -4116,6 +4253,7 @@ function renderRevisionPage() {
   renderDailyStudyPanel();
   renderRevisionDashboard(topic);
   renderStudentDashboard(topic);
+  renderMistakeJournal();
   renderStudentClassPanel();
   elements.revisionTopicCode.textContent = topic.code;
   elements.revisionTopicTitle.textContent = topic.title;
@@ -4196,6 +4334,58 @@ function renderRevisionPage() {
       </article>`;
     })
     .join("");
+}
+
+function renderMistakeJournal() {
+  if (!elements.mistakeJournalPanel) return;
+  const openEntries = mistakeJournal.filter((entry) => !entry.correctedAt).slice(0, 8);
+  const correctedCount = mistakeJournal.filter((entry) => entry.correctedAt).length;
+
+  elements.mistakeJournalPanel.innerHTML = `
+    <div class="mistake-journal-head">
+      <div>
+        <p class="eyebrow">Mistake journal</p>
+        <h3>Repair what went wrong</h3>
+        <p>Incorrect and “Again” responses are collected automatically. A successful retry marks the entry as corrected.</p>
+      </div>
+      <span>${openEntries.length} to repair · ${correctedCount} corrected</span>
+    </div>
+    ${openEntries.length ? `<div class="mistake-journal-list">
+      ${openEntries.map((entry) => {
+        const topic = getQuizTopicById(entry.topicId);
+        return `<article>
+          <div>
+            <span>${escapeHtml(topic?.code || "OCR")} · ${escapeHtml(formatActivityType(entry.activityType))}</span>
+            <strong>${escapeHtml(entry.prompt)}</strong>
+            <p>${escapeHtml(entry.explanation)}</p>
+          </div>
+          <button type="button" data-review-mistake="${escapeHtml(entry.id)}">Retry</button>
+        </article>`;
+      }).join("")}
+    </div>` : `<div class="mistake-journal-empty">
+      <strong>No mistakes waiting for repair</strong>
+      <p>When an answer needs another attempt, it will appear here with the correct reasoning and a scheduled retry.</p>
+      <button type="button" data-app-section="practice">Start Quick Practice</button>
+    </div>`}`;
+}
+
+function handleMistakeJournalClick(event) {
+  const button = event.target.closest("[data-review-mistake]");
+  if (!button) return;
+  const entry = mistakeJournal.find((candidate) => candidate.id === button.dataset.reviewMistake);
+  if (!entry) return;
+
+  const topic = getQuizTopicById(entry.topicId);
+  if (!topic || !canAccessRevisionTopic(topic.id)) {
+    promptRevisionUpgrade(topic);
+    return;
+  }
+  completedRevisionCards.delete(entry.conceptId);
+  flippedRevisionCards.delete(entry.conceptId);
+  activeRevisionTopicId = topic.id;
+  startRevisionSession(topic.id, "mistake", [entry.conceptId]);
+  revisionReviewMode = { topicId: topic.id, cardIds: [entry.conceptId], mode: "mistake" };
+  setAppSection("revise");
 }
 
 function renderRevisionTopicList() {
@@ -4379,21 +4569,21 @@ function recordDeckCompleted(topic) {
 
 function renderRevisionDashboard(topic) {
   const today = getTodayStudyStats();
-  const totals = getRevisionAchievementTotals();
-  const recommendedTopic = getRecommendedRevisionTopic() || topic;
-  const recommendedCompleted = recommendedTopic ? getCompletedRevisionCount(recommendedTopic) : 0;
-  const recommendedTotal = getRevisionTopicCardCount(recommendedTopic);
+  const learningItems = getAdaptiveLearningItems();
+  const startedItems = learningItems.filter((item) => item.mastery.evidenceCount > 0);
+  const session = getAdaptiveSessionPlan(15);
+  const recommended = session.items[0];
 
   elements.revisionTodayStat.textContent = `${today.cards}/${DAILY_REVIEW_GOAL}`;
   elements.revisionTodayCopy.textContent =
-    today.cards >= DAILY_REVIEW_GOAL ? "Daily mission complete" : `${Math.max(0, DAILY_REVIEW_GOAL - today.cards)} cards to today's goal`;
-  elements.revisionMasteryStat.textContent = `${totals.earnedCards}/${totals.totalCards}`;
-  elements.revisionMasteryCopy.textContent = `${totals.earnedTopics}/${totals.totalTopics} topic badges unlocked`;
+    today.cards >= DAILY_REVIEW_GOAL ? "Today’s retrieval complete" : `${Math.max(0, DAILY_REVIEW_GOAL - today.cards)} activities to today’s goal`;
+  elements.revisionMasteryStat.textContent = `${startedItems.length}/${learningItems.length}`;
+  elements.revisionMasteryCopy.textContent = "Concepts with learning evidence";
 
-  if (recommendedTopic) {
-    elements.revisionRecommendedNext.textContent = `${recommendedTopic.code} ${recommendedTopic.title}`;
-    elements.revisionRecommendedMeta.textContent = `${recommendedCompleted}/${recommendedTotal} cards complete`;
-    elements.revisionWeakTopic.textContent = `${recommendedTopic.code} ${recommendedTopic.title}`;
+  if (recommended) {
+    elements.revisionRecommendedNext.textContent = `${recommended.code} ${recommended.topicTitle}`;
+    elements.revisionRecommendedMeta.textContent = recommended.reason;
+    elements.revisionWeakTopic.textContent = `${recommended.code} ${recommended.topicTitle}`;
   }
 }
 
@@ -4402,80 +4592,61 @@ function renderStudentDashboard(topic) {
 
   const today = getTodayStudyStats();
   const streak = getStudyStreak();
-  const totals = getRevisionAchievementTotals();
-  const recommendedTopic = getRecommendedRevisionTopic() || topic;
-  const recommendation = generateRevisionRecommendation(recommendedTopic?.id || topic?.id);
-  const activeTopicTotal = getRevisionTopicCardCount(topic);
-  const activeTopicProgress = activeTopicTotal ? Math.round((getCompletedRevisionCount(topic) / activeTopicTotal) * 100) : 0;
-  const weakCards = recommendedTopic ? identifyWeakCards(recommendedTopic.id) : [];
+  const session = getAdaptiveSessionPlan(15);
+  const recommended = session.items[0];
+  const dueItems = session.items.filter((item) => item.due);
+  const openMistakes = mistakeJournal.filter((entry) => !entry.correctedAt);
   const recentNote = [...notes].sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))[0];
   const recentQuiz = getMostRecentQuizProgress();
-  const missionRemaining = Math.max(0, DAILY_REVIEW_GOAL - today.cards);
-  const missionPercent = Math.min(100, Math.round((today.cards / DAILY_REVIEW_GOAL) * 100));
-  const recentActivity = activityEvents.slice(0, 3);
+  const activeAssignments = teacherAssignments.filter((assignment) => !assignment.completedAt).slice(0, 2);
+  const sessionPreview = session.items.slice(0, 4);
 
   elements.studentDashboardPanel.innerHTML = `
-    <div class="student-dashboard-head">
-      <div>
-        <p class="eyebrow">Student dashboard</p>
-        <h3>Today’s revision plan</h3>
-        <p>Start with the highest-value task, then let Neat Notes update your weak-topic recommendation as you revise.</p>
+    <section class="today-session" aria-labelledby="today-session-title">
+      <div class="today-session-copy">
+        <p class="eyebrow">Recommended session</p>
+        <h3 id="today-session-title">15 minutes. ${session.items.length} focused retrieval activities.</h3>
+        <p>${recommended ? escapeHtml(recommended.reason) : "Choose your free OCR deck to create a revision plan."}</p>
+        <div class="today-session-actions">
+          <button type="button" data-session-duration="15">Start revision</button>
+          <details class="session-duration-menu">
+            <summary>Change length</summary>
+            <div>
+              <button type="button" data-session-duration="5">Quick · 5 min</button>
+              <button type="button" data-session-duration="25">Focused · 25 min</button>
+            </div>
+          </details>
+        </div>
       </div>
-      <button type="button" data-student-action="continue">Continue revision</button>
-    </div>
-    <div class="student-dashboard-grid">
-      <article class="student-action-card primary-path">
-        <span>Recommended next</span>
-        <strong>${escapeHtml(recommendation.title || `${recommendedTopic?.code || ""} ${recommendedTopic?.title || ""}`)}</strong>
-        <p>${escapeHtml(recommendation.reason || "Continue your next OCR revision task.")}</p>
-        <div class="student-card-actions">
-          <button type="button" data-student-action="continue">${escapeHtml(recommendation.actionLabel || "Start")}</button>
-          <button type="button" data-student-action="cards">Review cards</button>
-        </div>
-      </article>
-      <article class="student-action-card">
-        <span>Daily mission</span>
-        <strong>${today.cards}/${DAILY_REVIEW_GOAL} cards</strong>
-        <p>${missionRemaining ? `${missionRemaining} cards left today. Current streak: ${streak} day${streak === 1 ? "" : "s"}.` : "Daily mission complete. Nice, clean progress banked."}</p>
-        <div class="mini-meter" aria-label="${missionPercent}% daily mission complete"><i style="width: ${missionPercent}%"></i></div>
-      </article>
-      <article class="student-action-card">
-        <span>OCR mastery</span>
-        <strong>${totals.earnedCards}/${totals.totalCards}</strong>
-        <p>${totals.earnedTopics}/${totals.totalTopics} topic badges unlocked. Current deck is ${activeTopicProgress}% complete.</p>
-        <button type="button" data-student-action="progress">View progress map</button>
-      </article>
-      <article class="student-action-card">
-        <span>Weak-topic signal</span>
-        <strong>${weakCards.length ? `${weakCards.length} cards need practice` : "No urgent weakness"}</strong>
-        <p>${weakCards.length ? `Best short review: ${recommendedTopic.code} ${recommendedTopic.title}.` : "Rate cards as you revise and this becomes more precise."}</p>
-        <button type="button" data-student-action="weak" ${weakCards.length ? "" : "disabled"}>Review weak cards</button>
-      </article>
-      <article class="student-action-card">
-        <span>Recent activity</span>
-        <strong>${recentQuiz ? `${recentQuiz.topic.code} quiz ${recentQuiz.progress.lastScore || recentQuiz.progress.bestScore || 0}/${recentQuiz.progress.totalQuestions || getRevisionTopicCardCount(recentQuiz.topic)}` : recentNote ? recentNote.title || createTitle(recentNote.body) : "Demo ready"}</strong>
-        <p>${recentNote ? `Latest note edited ${getRelativeEditLabel(recentNote.updated_at || recentNote.created_at).toLowerCase()}.` : "Create your first note to see revision material appear here."}</p>
-      </article>
-      <article class="student-action-card quick-actions">
-        <span>Quick actions</span>
-        <div class="student-quick-action-grid">
-          <button type="button" data-student-action="note">Create note</button>
-          <button type="button" data-student-action="quick">Quick Practice</button>
-          <button type="button" data-student-action="teacher">Teacher mode</button>
-          <button type="button" data-student-action="progress">Progress</button>
-        </div>
-      </article>
-    </div>
-    ${
-      recentActivity.length
-        ? `<div class="student-recent-strip" aria-label="Recent revision events">
-            ${recentActivity.map((event) => {
-              const eventTopic = event.topicId ? getQuizTopicById(event.topicId) : null;
-              return `<span>${escapeHtml(formatActivityType(event.type))}${eventTopic ? ` · ${escapeHtml(eventTopic.code)}` : ""}</span>`;
-            }).join("")}
-          </div>`
-        : ""
-    }`;
+      <ol class="today-session-list" aria-label="Session preview">
+        ${sessionPreview.length ? sessionPreview.map((item) => `<li>
+          <span>${escapeHtml(item.code)} · ${escapeHtml(item.category)}</span>
+          <strong>${escapeHtml(item.prompt)}</strong>
+          <small>${escapeHtml(item.reason)}</small>
+        </li>`).join("") : `<li><strong>Choose a topic to begin</strong><small>Your first completed activity creates the learning baseline.</small></li>`}
+      </ol>
+    </section>
+    <div class="student-home-sections">
+      <section>
+        <div class="section-title"><span>Due for review</span><span>${dueItems.length}</span></div>
+        ${dueItems.length ? `<p><strong>${escapeHtml(dueItems[0].code)} ${escapeHtml(dueItems[0].topicTitle)}</strong><br>${dueItems.length} concept${dueItems.length === 1 ? " is" : "s are"} ready for retrieval.</p>` : `<p>Nothing is overdue. New activity will be scheduled as you revise.</p>`}
+        <button type="button" data-session-duration="5">Review due knowledge</button>
+      </section>
+      <section>
+        <div class="section-title"><span>Continue</span><span>${streak} day streak</span></div>
+        <p><strong>${recentQuiz ? `${escapeHtml(recentQuiz.topic.code)} Quick Practice` : recentNote ? escapeHtml(recentNote.title || createTitle(recentNote.body)) : "Start your first activity"}</strong><br>${today.cards} retrieval activities completed today.</p>
+        <button type="button" data-student-action="${recentQuiz ? "quick" : recentNote ? "note" : "cards"}">${recentQuiz ? "Continue practice" : recentNote ? "Open note" : "Choose a topic"}</button>
+      </section>
+      <section>
+        <div class="section-title"><span>Assignments</span><span>${activeAssignments.length}</span></div>
+        ${activeAssignments.length ? `<p><strong>${escapeHtml(activeAssignments[0].title)}</strong><br>${escapeHtml(activeAssignments[0].instructions || "Teacher-set revision")}</p>` : `<p>No teacher assignments are waiting. Independent revision stays separate.</p>`}
+      </section>
+      <section>
+        <div class="section-title"><span>Mistake repair</span><span>${openMistakes.length}</span></div>
+        <p>${openMistakes.length ? `<strong>${escapeHtml(openMistakes[0].prompt)}</strong><br>Revisit an answer that needs correcting.` : "Mistakes you make in revision will be collected here automatically."}</p>
+        <button type="button" data-student-action="progress">Open progress</button>
+      </section>
+    </div>`;
 }
 
 function getMostRecentQuizProgress() {
@@ -4490,6 +4661,12 @@ function getMostRecentQuizProgress() {
 }
 
 async function handleStudentDashboardClick(event) {
+  const sessionButton = event.target.closest("[data-session-duration]");
+  if (sessionButton) {
+    startAdaptiveRevisionSession(Number(sessionButton.dataset.sessionDuration) || 15);
+    return;
+  }
+
   const button = event.target.closest("[data-student-action]");
   if (!button) return;
 
@@ -4504,6 +4681,7 @@ async function handleStudentDashboardClick(event) {
     if (topic?.id) {
       activeRevisionTopicId = topic.id;
       if (canAccessRevisionTopic(topic.id)) startRevisionSession(topic.id);
+      setAppSection("revise");
       renderRevisionPage();
     }
     document.querySelector(".revision-stage")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -4511,6 +4689,7 @@ async function handleStudentDashboardClick(event) {
   }
 
   if (action === "quick") {
+    setAppSection("practice");
     await startActiveTopicQuiz();
     elements.quickPracticeSection.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
@@ -5284,6 +5463,13 @@ function markRevisionCardDone(cardId, options = {}) {
   if (options.awardBadge !== false && topic && getCompletedRevisionCount(topic) === getRevisionTopicCardCount(topic)) {
     awardRevisionBadge(topic);
   }
+  if (activeAdaptiveSession && activeAdaptiveSession.items.some((item) => item.cardId === cardId)) {
+    activeAdaptiveSession.completedConceptIds = [...new Set([...activeAdaptiveSession.completedConceptIds, cardId])];
+    const currentTopicRemaining = activeAdaptiveSession.items.some(
+      (item) => item.topicId === topic?.id && !completedRevisionCards.has(item.cardId),
+    );
+    if (!currentTopicRemaining) openNextAdaptiveSessionTopic();
+  }
   renderRevisionPage();
 }
 
@@ -5817,6 +6003,7 @@ async function exportSelectedPdf() {
 function showInstantCards() {
   const note = getSelectedNote();
   if (!note) return;
+  revealStudyOutput();
 
   generatedCardFlips.clear();
   generatedNoteCards = getRevisionGenerator().generateFlashcards(note.body || "");
@@ -6010,6 +6197,7 @@ function renderGeneratedStudyAction(action, pack) {
 }
 
 function renderGeneratedStudyPack(pack, title = "Study pack") {
+  revealStudyOutput();
   elements.insightsPanel.hidden = false;
   elements.insightsPanel.innerHTML = `
     <div class="section-title">
@@ -6128,21 +6316,24 @@ async function showStudyPack() {
   const note = getSelectedNote();
   if (!note) return;
 
-  let pack = null;
-  let source = "local";
-
-  try {
-    if (!isGuestMode && hasFeature("studyPack")) {
-      const response = await api(`/api/notes/${note.id}/study-pack`);
-      pack = normalizeStudyPack(response.studyPack, note.body || "");
-      source = "server";
-    }
-  } catch (error) {
-    pack = null;
+  if (isGuestMode || !hasFeature("studyPack")) {
+    showInsightsMessage("Study Packs are included with Student Pro. Upgrade to generate synced revision resources from your notes.", "upgrade");
+    openPlansModal();
+    return;
   }
 
-  pack ||= getRevisionGenerator().generateStudyPack(note.body || "");
-  renderGeneratedStudyPack(pack, source === "server" ? "Synced study pack" : "Study pack");
+  let pack = null;
+  let source = "server";
+
+  try {
+    const response = await api(`/api/notes/${note.id}/study-pack`);
+    pack = normalizeStudyPack(response.studyPack, note.body || "");
+  } catch (error) {
+    showInsightsMessage(error.message || "The Study Pack could not be generated.", "error");
+    return;
+  }
+
+  renderGeneratedStudyPack(pack, "Synced study pack");
   trackEvent("study_pack_generated", { source, noteQuality: pack.quality.score });
 }
 
@@ -6209,8 +6400,13 @@ async function showTeacherDashboard() {
 }
 
 function showInsightsMessage(message, type = "") {
+  revealStudyOutput();
   elements.insightsPanel.hidden = false;
   elements.insightsPanel.innerHTML = `<p class="status-message ${type}">${escapeHtml(message)}</p>`;
+}
+
+function revealStudyOutput() {
+  if (elements.studyOutputDisclosure) elements.studyOutputDisclosure.open = true;
 }
 
 function getSelectedNote() {
@@ -6602,4 +6798,12 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+if ("serviceWorker" in navigator && (window.isSecureContext || location.hostname === "localhost")) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/service-worker.js").catch(() => {
+      // Offline installation is optional; the core web app remains available.
+    });
+  });
 }

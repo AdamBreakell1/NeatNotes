@@ -13,19 +13,15 @@
       content="Write lesson notes, generate revision materials, practise OCR Computer Science topics and track progress in one workspace."
     />
     <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#0f766e" />
     <title>Neat Notes | OCR A-Level Computer Science revision</title>
     <link rel="icon" href="/favicon.svg?v=20260705-brand" type="image/svg+xml" />
-    <script>
-      (() => {
-        const storedTheme = localStorage.getItem("neat-notes-theme");
-        const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
-        document.documentElement.dataset.theme =
-          storedTheme && storedTheme !== "system" ? storedTheme : prefersDark ? "dark" : "light";
-      })();
-    </script>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <script src="/theme-init.js?v=20260824-relaunch"></script>
     <link rel="stylesheet" href="styles.css?v=20260711-design-reset" />
   </head>
   <body>
+    <a class="skip-link" href="#app-view">Skip to main content</a>
     <div id="launch-overlay" class="launch-overlay" role="status" aria-live="polite" aria-label="Loading Neat Notes">
       <div class="launch-product" aria-hidden="true">
         <span class="brand-mark">NN</span>
@@ -265,7 +261,7 @@
       </section>
     </main>
 
-    <main id="app-view" class="app-shell" hidden>
+    <main id="app-view" class="app-shell" tabindex="-1" hidden>
       <header class="app-topbar">
         <div class="topbar-center">
           <button id="topbar-brand-button" class="topbar-product topbar-brand-button" type="button" aria-label="Exit demo and return to the Neat Notes homepage" title="Exit demo">
@@ -294,6 +290,7 @@
           <span id="upgrade-message" class="topbar-plan-message" role="status"></span>
           <button class="topbar-utility-button" type="button" data-app-section="contact">Contact</button>
           <button class="topbar-utility-button" id="settings-button" type="button">Settings</button>
+          <button class="topbar-utility-button teacher-entry-button" type="button" data-app-section="teacher">Teacher</button>
           <div id="guest-account-actions" class="account-actions">
             <button id="topbar-login-button" class="secondary-account-button" type="button">Log in</button>
             <button id="topbar-signup-button" class="primary-account-button" type="button">Create account</button>
@@ -309,10 +306,12 @@
             <button id="topbar-logout-button" class="secondary-account-button" type="button">Log out</button>
           </div>
         </div>
-        <nav class="topbar-section-switch" aria-label="Main app sections">
-          <button class="active" type="button" data-app-section="notes">Notes</button>
-          <button type="button" data-app-section="revision">Student</button>
-          <button type="button" data-app-section="teacher">Teacher</button>
+        <nav class="topbar-section-switch" aria-label="Student navigation">
+          <button class="active" type="button" data-app-section="home">Home</button>
+          <button type="button" data-app-section="revise">Revise</button>
+          <button type="button" data-app-section="practice">Practice</button>
+          <button type="button" data-app-section="progress">Progress</button>
+          <button type="button" data-app-section="notes">Notes</button>
         </nav>
       </header>
 
@@ -453,23 +452,31 @@
         </header>
 
         <div class="editor-actionbar">
-          <div class="format-toolbar" aria-label="Formatting tools">
-            <button type="button" data-format="heading">Topic</button>
-            <button type="button" data-format="subheading">Key point</button>
-            <button type="button" data-format="definition">Definition</button>
-            <button type="button" data-format="example">Example</button>
-            <button type="button" data-format="examtip">Exam tip</button>
-            <button type="button" data-format="bullet">Bullet</button>
-            <button type="button" data-format="numbered">Steps</button>
-            <button type="button" data-format="check">Revision task</button>
-            <button type="button" data-format="divider">Divider</button>
-          </div>
-          <div class="editor-toolbar">
-            <button id="instant-cards-button" class="revision-action-primary" type="button">Instant Cards</button>
-            <button id="study-pack-button" class="revision-action-primary" type="button">Study Pack</button>
-            <button id="export-pdf-button" type="button">Export PDF</button>
-            <button id="history-button" type="button">History</button>
-            <button id="dashboard-button" type="button">Dashboard</button>
+          <button id="instant-cards-button" class="revision-action-primary" type="button">Turn into revision</button>
+          <div class="editor-control-groups">
+            <details class="editor-control-menu">
+              <summary>Formatting</summary>
+              <div class="format-toolbar" aria-label="Formatting tools">
+                <button type="button" data-format="heading">Topic</button>
+                <button type="button" data-format="subheading">Key point</button>
+                <button type="button" data-format="definition">Definition</button>
+                <button type="button" data-format="example">Example</button>
+                <button type="button" data-format="examtip">Exam tip</button>
+                <button type="button" data-format="bullet">Bullet</button>
+                <button type="button" data-format="numbered">Steps</button>
+                <button type="button" data-format="check">Revision task</button>
+                <button type="button" data-format="divider">Divider</button>
+              </div>
+            </details>
+            <details class="editor-control-menu">
+              <summary>More</summary>
+              <div class="editor-toolbar">
+                <button id="study-pack-button" class="revision-action-primary" type="button">Study Pack <span>Pro</span></button>
+                <button id="export-pdf-button" type="button">Export PDF</button>
+                <button id="history-button" type="button">History</button>
+                <button id="dashboard-button" type="button">Workspace dashboard</button>
+              </div>
+            </details>
           </div>
         </div>
 
@@ -500,6 +507,12 @@
           </section>
 
           <aside class="study-pane" aria-label="Study output">
+            <details id="study-output-disclosure">
+              <summary>
+                <span>Revision tools and note insights</span>
+                <small>Summary, quality checks and generated resources</small>
+              </summary>
+              <div class="study-pane-content">
             <div class="summary-box">
               <span>Auto summary</span>
               <div id="summary-text" class="summary-text">Start writing and a tidy summary is built here.</div>
@@ -531,11 +544,13 @@
               </div>
               <article id="formatted-preview" class="formatted-preview"></article>
             </div>
+              </div>
+            </details>
           </aside>
         </div>
       </section>
 
-      <section id="revision-view" class="revision-view" aria-label="Revision flashcards" hidden>
+      <section id="revision-view" class="revision-view" aria-label="Student revision" hidden>
         <div class="learning-mode-bar" aria-label="Student and teacher mode">
           <span>Viewing as:</span>
           <div id="learning-mode-switch" class="learning-mode-switch" role="tablist" aria-label="Learning mode">
@@ -547,26 +562,26 @@
         <header class="revision-hero student-revision-section">
           <div class="revision-hero-copy">
             <p class="eyebrow">OCR A-Level Computer Science</p>
-            <h2>OCR Computer Science Revision</h2>
+            <h2>Today’s revision</h2>
             <p>
-              Master every OCR A-Level Computer Science topic through smart quizzes, flashcards and progress tracking.
+              Neat Notes chooses due knowledge, recent weaknesses and older topics so you can start without planning a session.
             </p>
             <div class="revision-hero-actions">
-              <button id="revision-continue-button" class="revision-primary-action" type="button">Continue revision</button>
+              <button id="revision-continue-button" class="revision-primary-action" type="button">Start 15-minute revision</button>
               <button id="revision-progress-jump-button" class="revision-secondary-action" type="button">View progress</button>
             </div>
-            <p class="revision-access-note">Start with one free topic. Pro opens the full OCR course.</p>
+            <p class="revision-access-note">Built around OCR H446 retrieval, feedback and adaptive review.</p>
           </div>
           <div class="revision-summary-grid" aria-label="Revision summary">
             <article class="revision-summary-card">
-              <span>Today</span>
+              <span>Completed today</span>
               <strong id="revision-today-stat">0/10</strong>
-              <p id="revision-today-copy">Daily study mission</p>
+              <p id="revision-today-copy">Retrieval activities</p>
             </article>
             <article class="revision-summary-card">
-              <span>Mastery</span>
+              <span>Evidence</span>
               <strong id="revision-mastery-stat">0/316</strong>
-              <p id="revision-mastery-copy">Cards mastered</p>
+              <p id="revision-mastery-copy">Concepts practised</p>
             </article>
             <article class="revision-summary-card recommended">
               <span>Recommended next</span>
@@ -654,23 +669,8 @@
             </div>
           </div>
 
-          <div class="revision-retention-grid" aria-label="Study pathways">
-            <article class="retention-card" data-tier="free">
-              <span>Continue where you left off</span>
-              <strong id="revision-weak-topic">Recommended topic is shown here</strong>
-              <p>Neat Notes can steer students back into the weakest or next incomplete pack.</p>
-            </article>
-            <article class="retention-card premium-ready" data-tier="student-pro">
-              <span>Weekly revision missions</span>
-              <strong>Build consistent study habits</strong>
-              <p>Pro expands missions across the complete OCR library with streak and completion history.</p>
-            </article>
-            <article class="retention-card premium-ready" data-tier="teacher-college">
-              <span>Exam mode and assignments</span>
-              <strong>Teacher/College pathway</strong>
-              <p>Teacher plans add class tasks, exam-mode practice and completion dashboards.</p>
-            </article>
-          </div>
+          <section id="mistake-journal-panel" class="mistake-journal-panel" aria-label="Mistake journal"></section>
+          <span id="revision-weak-topic" hidden></span>
         </section>
 
         <section id="student-class-panel" class="student-class-panel student-revision-section" aria-label="Student class membership"></section>
@@ -1093,7 +1093,8 @@
 
     <script src="revision-generator.js?v=20260711-design-reset"></script>
     <script src="revision-topics.js?v=20260711-design-reset"></script>
-    <script src="neat-questions.js?v=20260711-design-reset"></script>
-    <script src="app.js?v=20260711-design-reset"></script>
+    <script src="neat-questions.js?v=20260824-relaunch"></script>
+    <script src="learning-model.js?v=20260824-relaunch"></script>
+    <script src="app.js?v=20260824-relaunch"></script>
   </body>
 </html>
