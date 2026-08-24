@@ -9,8 +9,9 @@
   "scripts": {
     "dev": "node --watch server.js",
     "start": "node server.js",
-    "check": "node --check server.js && node --check app.js && node --check learning-model.js && node --check revision-generator.js && node --check service-worker.js && node --check theme-init.js && node --check backend/services/learningAnalytics.js",
-    "test": "node --test backend/**/*.test.js"
+    "check": "node --check server.js && node --check app.js && node --check learning-model.js && node --check ocr-content.js && node --check exam-content.js && node --check cs-labs.js && node --check revision-generator.js && node --check service-worker.js && node --check theme-init.js && node --check backend/services/learningAnalytics.js",
+    "validate:content": "node scripts/validate-content.js",
+    "test": "node --test backend/*.test.js backend/**/*.test.js"
   },
   "keywords": [],
   "author": "",

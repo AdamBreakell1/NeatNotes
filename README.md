@@ -41,7 +41,7 @@ Optional production integrations:
 
 Without SMTP, local verification links are printed to the server console and returned in development API responses. Contact enquiries are saved to the database first, routed to `neatnotescontact@gmail.com` by default, and queued for retry if SMTP delivery is temporarily unavailable.
 
-## Backend Architecture
+## Product Architecture
 
 The backend currently uses:
 
@@ -57,8 +57,12 @@ Important files:
 
 - `server.js` - HTTP routes, schema migration, auth, classroom and revision APIs.
 - `backend/services/learningAnalytics.js` - confidence summaries and recommendation logic.
-- `revision-topics.js` - source data seeded into backend flashcard decks.
+- `ocr-content.js` - versioned OCR H446 content model derived from reviewed topic data.
+- `exam-content.js` and `cs-labs.js` - original deterministic exam and interactive-practice content.
+- `revision-topics.js` - teacher-authored source data seeded into backend flashcard decks.
 - `data/neat-notes.sqlite` - local SQLite database.
+
+The current service is intentionally a single-instance architecture. See `docs/PRODUCT_ARCHITECTURE.md` for boundaries and the staged PostgreSQL scale path.
 
 ## API Summary
 
@@ -67,9 +71,18 @@ Auth:
 - `POST /api/auth/signup`
 - `POST /api/auth/login`
 - `POST /api/auth/logout`
+- `POST /api/auth/forgot-password`
+- `POST /api/auth/reset-password`
 - `GET /api/auth/verify`
 - `GET /api/auth/google`
 - `GET /api/session`
+
+Account lifecycle:
+
+- `GET /api/account/sessions`
+- `DELETE /api/account/sessions/others`
+- `GET /api/account/export`
+- `DELETE /api/account`
 
 Profile:
 
@@ -111,31 +124,30 @@ Revision:
 - `POST /api/revision/attempts`
 - `GET /api/revision/recommendations`
 - `GET /api/revision/activity`
+- `GET /api/learning/dashboard`
+- `POST /api/learning/session`
+- `GET /api/exam/questions`
+- `POST /api/exam/attempts`
+- `GET /api/labs`
+- `POST /api/labs/attempts`
 
-## Demo Flow
+## Product Verification
 
-1. Create and verify an account.
-2. Use Plans to mock-upgrade to Teacher.
-3. Create a centre with `POST /api/centres`.
-4. Create a class with `POST /api/classes`.
-5. Use the returned `joinCode` from a student account with `POST /api/classes/join`.
-6. Submit flashcard confidence via `POST /api/revision/attempts`.
-7. Review teacher analytics via `GET /api/classes/:id/dashboard`.
+The integration suite creates isolated temporary accounts and checks authentication, free-plan enforcement, teacher classes, student joining, assignments and insight permissions. Mock billing exists only when explicitly enabled outside production.
 
 ## Checks
 
 ```bash
 npm run check
+npm run validate:content
 npm test
 ```
 
-## Production Notes
+## Production Operations
 
-Still required before a full paid public launch:
-
-- Replace mock billing with Stripe or another payment provider.
-- Use managed production storage with backups. SQLite is suitable for local/dev and small early pilots, but a hosted Postgres service is safer for scale.
-- Add a proper migration runner if the schema starts changing frequently.
-- Add CSRF protection for cookie-authenticated state-changing requests before cross-origin production deployment.
-- Add hosted email delivery, monitoring, structured logging and database backup routines.
-- Complete frontend sync for all new classroom/revision APIs. Guest/local mode remains intentionally available.
+- Stripe Checkout, Customer Portal and signed webhooks are implemented; production Price IDs and webhook secrets must be configured in the host.
+- SMTP verification, password reset and contact delivery are implemented; the sender must be an authenticated mailbox or verified provider identity.
+- Cross-origin credentials are not required: authenticated mutations are checked against the configured same origin.
+- SQLite with a persistent disk is appropriate for one early production instance. It must not be scaled horizontally. Move to managed PostgreSQL before multiple application instances or materially higher write volume.
+- Mock billing is rejected in production. Keep `ALLOW_MOCK_BILLING=false`.
+- Follow `docs/DEPLOYMENT.md` and `docs/RELEASE_CHECKLIST.md`; do not treat a successful build alone as a release sign-off.

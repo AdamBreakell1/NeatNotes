@@ -19,8 +19,14 @@
 - Route-specific throttles for auth, contact, billing, joins and revision evidence.
 - Stripe signature validation, event ID deduplication and current-subscription reconciliation.
 - Note body, version and learning-history retention limits.
+- Password reset tokens, account export/deletion and revocation of other sessions.
+- Human-readable high-entropy class codes, code regeneration/disable controls and join throttling.
+- Consent-gated, allow-listed analytics events with bounded per-user retention.
+
+## Relaunch security review
+
+The 24 August 2026 working-tree diff review identified seven issues in its captured pre-remediation snapshot: reset-token URL exposure, collaboration-suspended export access, missing recent authentication for OAuth account deletion, a password-reset response discrepancy, unbounded exam/lab attempt retention and archived assignment mutation. All seven were remediated before the release commit. The integration suite now covers the free entitlement boundary and archived-assignment workflow; browser QA confirms reset queries are removed immediately. This internal review does not replace independent penetration testing.
 
 ## Required before national scale
 
-Move rate limits and jobs to shared infrastructure, add password reset/session revocation/account deletion, deploy managed PostgreSQL with point-in-time recovery, add centralised redacted logging and alerting, commission penetration testing, and complete a DPIA plus safeguarding review for school deployment.
-
+Move rate limits and jobs to shared infrastructure, deploy managed PostgreSQL with point-in-time recovery, add centralised redacted logging and alerting, commission independent penetration testing, verify restore drills, and complete legal review, a DPIA and safeguarding assessment for school deployment. Introduce verified institutional ownership and teacher eligibility checks before enabling broad self-service classroom provisioning.

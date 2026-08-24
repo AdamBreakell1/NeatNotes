@@ -20,17 +20,16 @@ Updated: 24 August 2026
 - Added stronger join codes, join/billing/revision throttles, same-origin mutation checks and security headers.
 - Added field limits, bounded note-version retention and bounded learning-event retention.
 
-## Resume here
+## Relaunch completion status
 
-The next coherent release should begin with the remaining master-brief stages, in this order:
+The seven remaining master-brief stages have now been implemented: onboarding and exam preferences, original deterministic Exam Practice, a validated OCR content model, separate teacher workflows, account lifecycle controls, consent-gated product analytics and the documented QA/release process.
 
-1. Add first-run onboarding and persist OCR paper/year/exam-date preferences.
-2. Build the original Exam Practice question bank, rubric-based answer coach and exam simulator.
-3. Add the versioned OCR H446 specification/content model and content validation pipeline.
-4. Complete the separate Teacher shell, assignments, class heatmap and intervention reports.
-5. Add password reset, account deletion/export and session management.
-6. Add privacy-safe product analytics and operational monitoring.
-7. Run the full browser/device/accessibility matrix and complete remaining documentation listed in the master brief.
+Release invariants:
 
-Do not describe AI marking as complete. The current system records deterministic retrieval evidence only. Do not expose Component 2/3 content until it has been authored and reviewed.
+1. Do not describe rubric coaching as AI or OCR examiner marking.
+2. Do not expose Component 02 or NEA content until it has been authored and reviewed.
+3. Do not horizontally scale the SQLite deployment.
+4. Do not enable mock billing in production.
+5. Do not claim WCAG conformance until the external assistive-technology and device matrix is complete.
 
+The next product phase is operational rather than another visual rewrite: monitored backups, legal/DPIA review, independent penetration testing, content review, real-device accessibility testing and a controlled pilot.

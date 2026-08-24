@@ -97,6 +97,7 @@ let centres = loadLocalArray(CENTRES_KEY);
 let teacherAssignments = loadLocalArray(TEACHER_ASSIGNMENTS_KEY);
 let activeLearningMode = localStorage.getItem(LEARNING_MODE_KEY) === "teacher" ? "teacher" : "student";
 let activeTeacherSection = "dashboard";
+let teacherActionMessage = { text: "", type: "" };
 let activeClassId = classGroups[0]?.id || null;
 let activeStudentClassId = localStorage.getItem(ACTIVE_STUDENT_CLASS_KEY) || null;
 let activeCentreId = centres[0]?.id || null;
@@ -107,6 +108,18 @@ let studentClassCodeDraft = "";
 let reviewSchedules = loadLocalObject(REVIEW_SCHEDULES_KEY);
 let mistakeJournal = loadLocalArray(MISTAKE_JOURNAL_KEY);
 let activeAdaptiveSession = null;
+let accountProfile = null;
+let serverStudentTopicConfidence = new Map();
+let focusBeforeGlobalSearch = null;
+let globalSearchSelection = 0;
+let onboardingStep = 1;
+let focusBeforeOnboarding = null;
+let activePracticeMode = "quick";
+let examPracticeState = null;
+let miniMockState = null;
+let miniMockTimer = null;
+let csLabState = null;
+let activePasswordResetToken = "";
 
 const REVISION_TOPICS = window.REVISION_TOPICS || [];
 const NEAT_QUESTIONS = window.NEAT_QUESTIONS || [];
@@ -146,12 +159,21 @@ const elements = {
   formattedPreview: document.querySelector("#formatted-preview"),
   formatToolbar: document.querySelector(".format-toolbar"),
   historyButton: document.querySelector("#history-button"),
+  globalSearchButton: document.querySelector("#global-search-button"),
+  globalSearchInput: document.querySelector("#global-search-input"),
+  globalSearchModal: document.querySelector("#global-search-modal"),
+  globalSearchResults: document.querySelector("#global-search-results"),
   insightsPanel: document.querySelector("#insights-panel"),
   launchOverlay: document.querySelector("#launch-overlay"),
   loginForm: document.querySelector("#login-form"),
   loginPassword: document.querySelector("#login-password"),
   loginSubmitButton: document.querySelector("#login-submit-button"),
   loginCapsWarning: document.querySelector("#login-caps-warning"),
+  passwordRecoveryForm: document.querySelector("#password-recovery-form"),
+  recoverySubmitButton: document.querySelector("#recovery-submit-button"),
+  passwordResetForm: document.querySelector("#password-reset-form"),
+  resetPasswordSubmitButton: document.querySelector("#reset-password-submit-button"),
+  authProviderList: document.querySelector("#auth-provider-list"),
   logoutButton: document.querySelector("#logout-button"),
   memberList: document.querySelector("#member-list"),
   mistakeJournalPanel: document.querySelector("#mistake-journal-panel"),
@@ -164,6 +186,14 @@ const elements = {
   learningModeSwitch: document.querySelector("#learning-mode-switch"),
   newButton: document.querySelector("#new-note-button"),
   notesSidebarContext: document.querySelector("#notes-sidebar-context"),
+  onboardingModal: document.querySelector("#onboarding-modal"),
+  onboardingForm: document.querySelector("#onboarding-form"),
+  onboardingBack: document.querySelector("#onboarding-back"),
+  onboardingNext: document.querySelector("#onboarding-next"),
+  onboardingProgressBar: document.querySelector("#onboarding-progress-bar"),
+  onboardingProgressLabel: document.querySelector("#onboarding-progress-label"),
+  onboardingTopicGrid: document.querySelector("#onboarding-topic-grid"),
+  onboardingMessage: document.querySelector("#onboarding-message"),
   noteBody: document.querySelector("#note-body"),
   noteCount: document.querySelector("#note-count"),
   noteDate: document.querySelector("#note-date"),
@@ -204,6 +234,7 @@ const elements = {
   revisionCourseLabel: document.querySelector("#revision-course-label"),
   revisionCoursePercent: document.querySelector("#revision-course-percent"),
   revisionResetButton: document.querySelector("#reset-revision-button"),
+  revisionFocusButton: document.querySelector("#revision-focus-button"),
   revisionShuffleButton: document.querySelector("#shuffle-revision-button"),
   revisionMasteryMap: document.querySelector("#revision-mastery-map"),
   revisionRecommendedMeta: document.querySelector("#revision-recommended-meta"),
@@ -217,6 +248,10 @@ const elements = {
   revisionView: document.querySelector("#revision-view"),
   revisionWeakTopic: document.querySelector("#revision-weak-topic"),
   quickPracticeSection: document.querySelector("#quick-practice-section"),
+  practiceModeBar: document.querySelector("#practice-mode-bar"),
+  examPracticeSection: document.querySelector("#exam-practice-section"),
+  examPracticePanel: document.querySelector("#exam-practice-panel"),
+  examLoadQuestionButton: document.querySelector("#exam-load-question-button"),
   recentNoteList: document.querySelector("#recent-note-list"),
   saveState: document.querySelector("#save-state"),
   searchInput: document.querySelector("#search-input"),
@@ -233,6 +268,14 @@ const elements = {
   settingsAccountName: document.querySelector("#settings-account-name"),
   settingsAccountPlan: document.querySelector("#settings-account-plan"),
   settingsProfileAvatar: document.querySelector("#settings-profile-avatar"),
+  accountSessionTools: document.querySelector("#account-session-tools"),
+  accountSessionSummary: document.querySelector("#account-session-summary"),
+  revokeOtherSessionsButton: document.querySelector("#revoke-other-sessions-button"),
+  accountDangerZone: document.querySelector("#account-danger-zone"),
+  deleteAccountButton: document.querySelector("#delete-account-button"),
+  usageAnalyticsConsent: document.querySelector("#usage-analytics-consent"),
+  settingsRevisionForm: document.querySelector("#settings-revision-form"),
+  settingsRevisionMessage: document.querySelector("#settings-revision-message"),
   settingsTabs: document.querySelector(".settings-tabs"),
   legalModal: document.querySelector("#legal-modal"),
   legalContent: document.querySelector("#legal-content"),
@@ -290,6 +333,10 @@ elements.showSignup.addEventListener("click", () => setAuthMode("signup"));
 elements.landingView.addEventListener("click", handleLandingClick);
 elements.loginForm.addEventListener("submit", login);
 elements.signupForm.addEventListener("submit", signup);
+elements.passwordRecoveryForm.addEventListener("submit", requestPasswordReset);
+elements.passwordResetForm.addEventListener("submit", completePasswordReset);
+document.querySelector("[data-auth-recovery]").addEventListener("click", openPasswordRecovery);
+document.querySelector("[data-auth-back-login]").addEventListener("click", () => setAuthMode("login"));
 document.querySelectorAll("[data-toggle-password]").forEach((button) => {
   button.addEventListener("click", togglePasswordVisibility);
 });
@@ -306,6 +353,15 @@ elements.logoutButton.addEventListener("click", logout);
 elements.topbarLoginButton.addEventListener("click", () => openAuthModal("login"));
 elements.topbarSignupButton.addEventListener("click", () => openAuthModal("signup"));
 elements.topbarBrandButton.addEventListener("click", handleTopbarBrandAction);
+elements.globalSearchButton.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopPropagation();
+  openGlobalSearch();
+});
+elements.globalSearchInput.addEventListener("input", renderGlobalSearchResults);
+elements.globalSearchInput.addEventListener("keydown", handleGlobalSearchKeydown);
+elements.globalSearchModal.addEventListener("keydown", trapGlobalSearchFocus);
+elements.globalSearchModal.addEventListener("click", handleGlobalSearchClick);
 elements.mobileNotesButton.addEventListener("click", toggleMobileNotesSidebar);
 elements.mobileSidebarClose.addEventListener("click", closeMobileNotesSidebar);
 elements.accountProfileButton.addEventListener("click", () => openSettingsModal("account"));
@@ -338,8 +394,16 @@ elements.avatarChoiceGroup.addEventListener("click", chooseProfileAvatar);
 elements.settingsDensity.addEventListener("change", updateSettingsFromControls);
 elements.settingsEditorFont.addEventListener("change", updateSettingsFromControls);
 elements.settingsDefaultTag.addEventListener("input", updateSettingsFromControls);
+elements.onboardingBack.addEventListener("click", () => moveOnboardingStep(-1));
+elements.onboardingNext.addEventListener("click", () => moveOnboardingStep(1));
+elements.onboardingForm.addEventListener("submit", completeOnboarding);
+elements.onboardingModal.addEventListener("keydown", trapOnboardingFocus);
 elements.downloadDataButton.addEventListener("click", downloadWorkspaceData);
 elements.resetPreferencesButton.addEventListener("click", resetLocalPreferences);
+elements.revokeOtherSessionsButton.addEventListener("click", revokeOtherSessions);
+elements.deleteAccountButton.addEventListener("click", deleteAccount);
+elements.usageAnalyticsConsent.addEventListener("change", updateAnalyticsConsent);
+elements.settingsRevisionForm.addEventListener("submit", saveRevisionProfile);
 document.addEventListener("keydown", handleGlobalKeydown);
 elements.themeToggle.addEventListener("click", toggleTheme);
 elements.topbarSectionSwitch.addEventListener("click", switchAppSection);
@@ -361,12 +425,23 @@ elements.teacherModePanel.addEventListener("change", handleTeacherModeChange);
 elements.revisionTopicList.addEventListener("click", selectRevisionTopic);
 elements.revisionMasteryMap.addEventListener("click", handleMasteryMapClick);
 elements.revisionResetButton.addEventListener("click", resetActiveRevisionCards);
+elements.revisionFocusButton.addEventListener("click", toggleRevisionFocusMode);
 elements.revisionShuffleButton.addEventListener("click", shuffleActiveRevisionCards);
 elements.revisionContinueButton.addEventListener("click", continueRevisionJourney);
 elements.revisionProgressJumpButton.addEventListener("click", scrollToRevisionProgress);
 elements.neatQuestionsCurrentLink.addEventListener("click", startActiveTopicQuiz);
 elements.neatQuestionsGrid.addEventListener("click", handleNeatQuestionsClick);
 elements.neatQuizPanel.addEventListener("click", handleNeatQuizPanelClick);
+elements.practiceModeBar.addEventListener("click", handlePracticeModeChange);
+elements.examLoadQuestionButton.addEventListener("click", () => {
+  if (activePracticeMode === "mock") loadMiniMock();
+  else if (activePracticeMode === "labs") loadCsLabs(true);
+  else loadExamPracticeQuestion();
+});
+elements.examPracticePanel.addEventListener("submit", submitExamPracticeAnswer);
+elements.examPracticePanel.addEventListener("submit", submitCsLab);
+elements.examPracticePanel.addEventListener("click", handleExamPracticeClick);
+elements.examPracticePanel.addEventListener("input", handleMiniMockInput);
 elements.newButton.addEventListener("click", () => {
   setAppSection("notes");
   createNote();
@@ -411,6 +486,7 @@ function switchAppSection(event) {
 
 function setAppSection(section) {
   closeMobileNotesSidebar();
+  const previousSection = activeAppSection;
   const normalizedSection = section === "revision" ? "revise" : section;
   activeAppSection = ["home", "revise", "practice", "progress", "notes", "teacher", "contact"].includes(normalizedSection)
     ? normalizedSection
@@ -459,6 +535,51 @@ function setAppSection(section) {
   if (isContact) {
     renderContactPage();
   }
+
+  if (previousSection !== activeAppSection) {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    [elements.revisionView, elements.contactView, elements.editorPanel, elements.notesColumn]
+      .filter(Boolean)
+      .forEach((panel) => { panel.scrollTop = 0; });
+  }
+}
+
+function handlePracticeModeChange(event) {
+  const button = event.target.closest("[data-practice-mode]");
+  if (!button) return;
+  activePracticeMode = ["exam", "mock", "labs"].includes(button.dataset.practiceMode) ? button.dataset.practiceMode : "quick";
+  renderPracticeMode();
+  if (activePracticeMode === "exam" && !examPracticeState) loadExamPracticeQuestion();
+  if (activePracticeMode === "mock" && !miniMockState) loadMiniMock();
+  if (activePracticeMode === "labs" && !csLabState) loadCsLabs();
+}
+
+function renderPracticeMode() {
+  if (!elements.practiceModeBar) return;
+  const inPractice = activeAppSection === "practice";
+  elements.practiceModeBar.hidden = !inPractice;
+  if (!inPractice) {
+    elements.quickPracticeSection.hidden = true;
+    elements.examPracticeSection.hidden = true;
+    return;
+  }
+  elements.quickPracticeSection.hidden = activePracticeMode !== "quick";
+  elements.examPracticeSection.hidden = activePracticeMode === "quick";
+  if (activePracticeMode === "mock") {
+    document.querySelector("#exam-practice-title").textContent = "Timed mini mock";
+    elements.examLoadQuestionButton.textContent = "New mini mock";
+  } else if (activePracticeMode === "labs") {
+    document.querySelector("#exam-practice-title").textContent = "Computer Science Labs";
+    elements.examLoadQuestionButton.textContent = "Choose another lab";
+  } else {
+    document.querySelector("#exam-practice-title").textContent = "Exam Answer Coach";
+    elements.examLoadQuestionButton.textContent = "Start exam practice";
+  }
+  elements.practiceModeBar.querySelectorAll("[data-practice-mode]").forEach((button) => {
+    const active = button.dataset.practiceMode === activePracticeMode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
 }
 
 function toggleMobileNotesSidebar() {
@@ -955,6 +1076,18 @@ function trackEvent(name, details = {}) {
   } catch {
     // Product analytics should never block the learner workflow.
   }
+
+  const preferences = parseClientJson(accountProfile?.studentProfile?.notification_preferences, {});
+  if (isGuestMode || !currentUser || preferences.usageAnalytics !== true) return;
+  fetch("/api/events", {
+    method: "POST",
+    credentials: "same-origin",
+    keepalive: true,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name, details }),
+  }).catch(() => {
+    // Analytics delivery is intentionally non-blocking.
+  });
 }
 
 function createEmptyNeatQuizState() {
@@ -1365,9 +1498,89 @@ function renderSettingsControls() {
   elements.settingsDefaultTag.value = appSettings.defaultTag;
   renderAvatarChoiceGroup();
   renderSettingsAccountPanel();
+  const notificationPreferences = parseClientJson(accountProfile?.studentProfile?.notification_preferences, {});
+  elements.usageAnalyticsConsent.checked = notificationPreferences.usageAnalytics === true;
+  elements.usageAnalyticsConsent.disabled = isGuestMode || !currentUser;
+  renderRevisionProfileSettings();
   document.querySelectorAll("[data-theme-choice]").forEach((button) => {
     button.classList.toggle("active", button.dataset.themeChoice === appSettings.theme);
   });
+}
+
+function renderRevisionProfileSettings() {
+  const profile = accountProfile?.studentProfile || {};
+  const examDates = parseClientJson(profile.exam_dates, {});
+  elements.settingsRevisionForm.elements.learnerType.value = profile.learner_type || "independent";
+  elements.settingsRevisionForm.elements.targetGrade.value = profile.target_grade || "";
+  elements.settingsRevisionForm.elements.revisionGoal.value = profile.revision_goal || "keep_up";
+  elements.settingsRevisionForm.elements.component1.value = examDates.component1 || "";
+  elements.settingsRevisionForm.elements.component2.value = examDates.component2 || "";
+  elements.settingsRevisionForm.elements.personalTarget.value = profile.personal_target || "";
+  [...elements.settingsRevisionForm.elements].forEach((control) => {
+    control.disabled = isGuestMode || !currentUser;
+  });
+}
+
+async function saveRevisionProfile(event) {
+  event.preventDefault();
+  if (isGuestMode || !currentUser) return;
+  const data = new FormData(elements.settingsRevisionForm);
+  const submitButton = elements.settingsRevisionForm.querySelector('button[type="submit"]');
+  submitButton.disabled = true;
+  elements.settingsRevisionMessage.textContent = "Saving revision profile...";
+  elements.settingsRevisionMessage.className = "status-message";
+  try {
+    const response = await api("/api/profile", {
+      method: "PATCH",
+      body: {
+        learnerType: data.get("learnerType"),
+        targetGrade: data.get("targetGrade") || null,
+        personalTarget: data.get("personalTarget") || "",
+        revisionGoal: data.get("revisionGoal"),
+        examDates: {
+          component1: data.get("component1") || null,
+          component2: data.get("component2") || null,
+        },
+      },
+    });
+    accountProfile = response;
+    elements.settingsRevisionMessage.textContent = "Revision profile saved.";
+    elements.settingsRevisionMessage.className = "status-message success";
+    renderRevisionPage();
+  } catch (error) {
+    elements.settingsRevisionMessage.textContent = error.message;
+    elements.settingsRevisionMessage.className = "status-message error";
+  } finally {
+    submitButton.disabled = false;
+  }
+}
+
+async function updateAnalyticsConsent() {
+  if (isGuestMode || !currentUser) return;
+  const existing = parseClientJson(accountProfile?.studentProfile?.notification_preferences, {});
+  elements.usageAnalyticsConsent.disabled = true;
+  try {
+    const response = await api("/api/profile", {
+      method: "PATCH",
+      body: {
+        notificationPreferences: {
+          ...existing,
+          usageAnalytics: elements.usageAnalyticsConsent.checked,
+        },
+      },
+    });
+    accountProfile = response;
+    elements.settingsMessage.textContent = elements.usageAnalyticsConsent.checked
+      ? "Privacy-safe product analytics enabled."
+      : "Product analytics disabled.";
+    elements.settingsMessage.className = "status-message success";
+  } catch (error) {
+    elements.usageAnalyticsConsent.checked = !elements.usageAnalyticsConsent.checked;
+    elements.settingsMessage.textContent = error.message;
+    elements.settingsMessage.className = "status-message error";
+  } finally {
+    elements.usageAnalyticsConsent.disabled = false;
+  }
 }
 
 function updateSettingsFromControls() {
@@ -1431,6 +1644,8 @@ function renderSettingsAccountPanel() {
   elements.settingsAccountPlan.textContent = isSignedIn
     ? `${planName} · synced workspace`
     : "Local browser storage · create an account to sync";
+  elements.accountSessionTools.hidden = !isSignedIn;
+  elements.accountDangerZone.hidden = !isSignedIn;
 }
 
 function getActiveProfileAvatarId() {
@@ -1463,6 +1678,50 @@ function openSettingsModal(tab = "general") {
   selectSettingsTab(tab);
   elements.settingsModal.hidden = false;
   document.body.classList.add("modal-open");
+  if (tab === "account" && currentUser && !isGuestMode) loadAccountSessions();
+}
+
+async function loadAccountSessions() {
+  elements.accountSessionSummary.textContent = "Checking signed-in devices...";
+  try {
+    const response = await api("/api/account/sessions");
+    const otherCount = response.sessions.filter((session) => !session.current).length;
+    elements.accountSessionSummary.textContent = otherCount
+      ? `${response.sessions.length} active sessions, including ${otherCount} other device${otherCount === 1 ? "" : "s"}.`
+      : "Only this browser is currently signed in.";
+    elements.revokeOtherSessionsButton.disabled = otherCount === 0;
+  } catch (error) {
+    elements.accountSessionSummary.textContent = error.message;
+  }
+}
+
+async function revokeOtherSessions() {
+  elements.revokeOtherSessionsButton.disabled = true;
+  try {
+    const response = await api("/api/account/sessions/others", { method: "DELETE" });
+    elements.settingsMessage.textContent = response.message;
+    elements.settingsMessage.className = "status-message success";
+    await loadAccountSessions();
+  } catch (error) {
+    elements.settingsMessage.textContent = error.message;
+    elements.settingsMessage.className = "status-message error";
+  }
+}
+
+async function deleteAccount() {
+  const confirmation = window.prompt("This permanently deletes your account and personal data. Type DELETE MY ACCOUNT to continue.");
+  if (confirmation !== "DELETE MY ACCOUNT") return;
+  const password = window.prompt("Enter your current password. Google-only accounts must have signed in again within the last 15 minutes and can leave this blank.") || "";
+  elements.deleteAccountButton.disabled = true;
+  try {
+    await api("/api/account", { method: "DELETE", body: { confirmation, password } });
+    localStorage.clear();
+    window.location.assign("/");
+  } catch (error) {
+    elements.settingsMessage.textContent = error.message;
+    elements.settingsMessage.className = "status-message error";
+    elements.deleteAccountButton.disabled = false;
+  }
 }
 
 function closeSettingsModal() {
@@ -1571,6 +1830,7 @@ function switchSettingsTab(event) {
   if (!button) return;
 
   selectSettingsTab(button.dataset.settingsTab);
+  if (button.dataset.settingsTab === "account" && currentUser && !isGuestMode) loadAccountSessions();
 }
 
 function selectSettingsTab(tabName = "general") {
@@ -1589,10 +1849,15 @@ function selectSettingsTab(tabName = "general") {
 
 async function boot() {
   const params = new URLSearchParams(location.search);
+  const passwordResetToken = params.get("reset");
   const emailWasVerified = params.get("verified") === "1";
   const checkoutStatus = params.get("checkout");
   const billingReturned = params.get("billing") === "returned";
-  if (emailWasVerified || checkoutStatus || billingReturned) {
+  const publicSignup = params.get("signup") === "1";
+  const publicDemo = params.get("demo") === "1";
+  if (passwordResetToken) {
+    history.replaceState({}, "", location.pathname || "/");
+  } else if (emailWasVerified || checkoutStatus || billingReturned) {
     history.replaceState({}, "", "/");
   }
 
@@ -1614,12 +1879,16 @@ async function boot() {
       elements.upgradeMessage.textContent = "Billing portal closed. Your account is up to date.";
       elements.upgradeMessage.className = "topbar-plan-message success";
     }
+    if (passwordResetToken) openPasswordReset(passwordResetToken);
   } catch {
-    loadGuestApp({ showLanding: !localStorage.getItem(LANDING_DISMISSED_KEY) && !emailWasVerified });
+    loadGuestApp({ showLanding: !publicDemo && !localStorage.getItem(LANDING_DISMISSED_KEY) && !emailWasVerified });
+    if (publicDemo) openDemoWorkspace({ section: "home" });
+    if (publicSignup) openAuthModal("signup");
     if (emailWasVerified) {
       openAuthModal("login");
       showAuthMessage("Email verified. You can log in now.", "success");
     }
+    if (passwordResetToken) openPasswordReset(passwordResetToken);
   }
 }
 
@@ -1818,6 +2087,9 @@ function setAuthMode(mode) {
   const isLogin = mode === "login";
   elements.loginForm.hidden = !isLogin;
   elements.signupForm.hidden = isLogin;
+  elements.passwordRecoveryForm.hidden = true;
+  elements.passwordResetForm.hidden = true;
+  elements.authProviderList.hidden = false;
   elements.showLogin.classList.toggle("active", isLogin);
   elements.showSignup.classList.toggle("active", !isLogin);
   elements.showLogin.setAttribute("aria-selected", String(isLogin));
@@ -1827,6 +2099,77 @@ function setAuthMode(mode) {
   setAuthLoading("login", false);
   setAuthLoading("signup", false);
   showAuthMessage("");
+}
+
+function openPasswordRecovery() {
+  elements.loginForm.hidden = true;
+  elements.signupForm.hidden = true;
+  elements.passwordResetForm.hidden = true;
+  elements.passwordRecoveryForm.hidden = false;
+  elements.authProviderList.hidden = true;
+  elements.authCardTitle.textContent = "Reset your password";
+  showAuthMessage("");
+  document.querySelector("#recovery-email").value = document.querySelector("#login-email").value;
+  document.querySelector("#recovery-email").focus();
+}
+
+function openPasswordReset(token) {
+  openAuthModal("login");
+  elements.loginForm.hidden = true;
+  elements.signupForm.hidden = true;
+  elements.passwordRecoveryForm.hidden = true;
+  elements.passwordResetForm.hidden = false;
+  elements.authProviderList.hidden = true;
+  activePasswordResetToken = token;
+  elements.authCardTitle.textContent = "Choose a new password";
+  document.querySelector("#reset-password").focus();
+}
+
+async function requestPasswordReset(event) {
+  event.preventDefault();
+  const button = elements.recoverySubmitButton;
+  button.disabled = true;
+  button.textContent = "Sending...";
+  showAuthMessage("");
+  try {
+    const response = await api("/api/auth/forgot-password", {
+      method: "POST",
+      body: { email: document.querySelector("#recovery-email").value },
+    });
+    showAuthMessage(response.message, "success");
+  } catch (error) {
+    showAuthMessage(error.message, "error");
+  } finally {
+    button.disabled = false;
+    button.textContent = "Send reset link";
+  }
+}
+
+async function completePasswordReset(event) {
+  event.preventDefault();
+  const password = document.querySelector("#reset-password").value;
+  if (password.length < 8) {
+    showAuthMessage("Use at least 8 characters.", "error");
+    return;
+  }
+  const button = elements.resetPasswordSubmitButton;
+  button.disabled = true;
+  button.textContent = "Updating...";
+  try {
+    const response = await api("/api/auth/reset-password", {
+      method: "POST",
+      body: { token: activePasswordResetToken, password },
+    });
+    activePasswordResetToken = "";
+    history.replaceState({}, "", "/");
+    setAuthMode("login");
+    showAuthMessage(response.message, "success");
+  } catch (error) {
+    showAuthMessage(error.message, "error");
+  } finally {
+    button.disabled = false;
+    button.textContent = "Update password";
+  }
 }
 
 function openAuthModal(mode = "login") {
@@ -1988,14 +2331,231 @@ async function loadApp() {
   elements.appView.hidden = false;
   elements.userName.textContent = currentUser.name;
   elements.userEmail.textContent = currentUser.email;
+  const profileResponse = await api("/api/profile");
+  accountProfile = profileResponse;
+  if (profileResponse.user) currentUser = profileResponse.user;
   await refreshAccessibleRevisionContent();
   pruneRevisionTopicCardsForCurrentPlan();
   renderPlan();
+
+  await loadAccountLearningWorkspace();
 
   await loadWorkspaces();
   await selectWorkspace(activeWorkspaceId || workspaces[0]?.id);
   renderAccountChrome();
   hideLaunchOverlay();
+  maybeOpenOnboarding();
+}
+
+async function loadAccountLearningWorkspace() {
+  if (isGuestMode || !currentUser) return;
+  const [classResponse, assignmentResponse, centreResponse] = await Promise.all([
+    api("/api/classes"),
+    api("/api/assignments"),
+    currentUser.isTeacher ? api("/api/centres") : Promise.resolve({ centres: [] }),
+  ]);
+  classGroups = (classResponse.classes || []).map(normaliseServerClass);
+  teacherAssignments = assignmentResponse.assignments || [];
+  centres = centreResponse.centres || [];
+  activeClassId = classGroups.some((group) => group.id === activeClassId) ? activeClassId : classGroups[0]?.id || null;
+  activeStudentClassId = classGroups.some((group) => group.id === activeStudentClassId) ? activeStudentClassId : classGroups[0]?.id || null;
+  classMemberships = currentUser.isTeacher ? [] : classGroups.map((group) => ({
+    id: `server-membership-${group.id}`,
+    classId: group.id,
+    userId: currentUser.id,
+    studentName: currentUser.name,
+    studentEmail: currentUser.email,
+    role: "student",
+    status: "active",
+    joinedAt: group.membership?.joined_at || group.createdAt,
+  }));
+  if (currentUser.isTeacher && activeClassId) {
+    await loadTeacherClassEvidence(activeClassId);
+  } else if (currentUser.isTeacher) {
+    activityEvents = [];
+    serverStudentTopicConfidence = new Map();
+  }
+}
+
+function normaliseServerClass(group) {
+  return {
+    id: group.id,
+    centreId: group.centreId,
+    teacherId: group.teacherId,
+    name: group.name,
+    subject: group.subject,
+    examBoard: group.examBoard,
+    yearGroup: group.yearGroup,
+    description: group.description,
+    inviteCode: group.joinCode,
+    joinCodeEnabled: group.joinCodeEnabled,
+    studentCount: group.studentCount,
+    membership: group.membership,
+    createdAt: group.createdAt,
+    updatedAt: group.updatedAt,
+  };
+}
+
+async function loadTeacherClassEvidence(classId) {
+  const response = await api(`/api/classes/${encodeURIComponent(classId)}/insights`);
+  const dashboard = response.dashboard || {};
+  const students = response.students || [];
+  classMemberships = students.map((student) => ({
+    id: `server-membership-${classId}-${student.id}`,
+    classId,
+    userId: student.id,
+    studentName: student.name,
+    studentEmail: student.email,
+    role: "student",
+    status: "active",
+    joinedAt: student.joined_at,
+  }));
+  activityEvents = dashboard.recentActivity || [];
+  serverStudentTopicConfidence = new Map();
+  const studentDashboards = response.studentProfiles || [];
+  studentDashboards.filter(Boolean).forEach((studentDashboard) => {
+    studentDashboard.topics.forEach((topic) => {
+      serverStudentTopicConfidence.set(`${studentDashboard.student.id}:${topic.topicId || topic.id}`, topic.confidence);
+    });
+  });
+}
+
+function maybeOpenOnboarding() {
+  if (isGuestMode || !currentUser || currentUser.isTeacher || accountProfile?.studentProfile?.onboarding_completed_at) return;
+  openOnboarding();
+}
+
+function openOnboarding() {
+  const profile = accountProfile?.studentProfile || {};
+  focusBeforeOnboarding = document.activeElement;
+  onboardingStep = 1;
+  elements.onboardingTopicGrid.innerHTML = REVISION_TOPICS.map((topic) => `
+    <label>
+      <input type="checkbox" name="taught-topic" value="${escapeHtml(topic.id)}" />
+      <span><strong>${escapeHtml(topic.code)}</strong><small>${escapeHtml(topic.title)}</small></span>
+    </label>`).join("");
+
+  const learnerType = profile.learner_type || "";
+  const revisionGoal = profile.revision_goal || "";
+  if (learnerType) {
+    elements.onboardingForm.querySelector(`[name="learner-type"][value="${learnerType}"]`)?.setAttribute("checked", "");
+  }
+  if (revisionGoal) {
+    elements.onboardingForm.querySelector(`[name="revision-goal"][value="${revisionGoal}"]`)?.setAttribute("checked", "");
+  }
+  document.querySelector("#onboarding-target-grade").value = profile.target_grade || "";
+  document.querySelector("#onboarding-personal-target").value = profile.personal_target || "";
+  const examDates = parseClientJson(profile.exam_dates, {});
+  document.querySelector("#onboarding-component-1-date").value = examDates.component1 || "";
+  document.querySelector("#onboarding-component-2-date").value = examDates.component2 || "";
+  const taughtTopics = parseClientJson(profile.taught_topic_ids, []);
+  taughtTopics.forEach((topicId) => {
+    const input = elements.onboardingTopicGrid.querySelector(`input[value="${topicId}"]`);
+    if (input) input.checked = true;
+  });
+
+  elements.onboardingMessage.textContent = "";
+  elements.onboardingModal.hidden = false;
+  document.body.classList.add("modal-open");
+  renderOnboardingStep();
+}
+
+function renderOnboardingStep() {
+  elements.onboardingForm.querySelectorAll("[data-onboarding-step]").forEach((section) => {
+    section.hidden = Number(section.dataset.onboardingStep) !== onboardingStep;
+  });
+  elements.onboardingProgressLabel.textContent = `Step ${onboardingStep} of 6`;
+  elements.onboardingProgressBar.style.width = `${(onboardingStep / 6) * 100}%`;
+  elements.onboardingBack.hidden = onboardingStep === 1;
+  elements.onboardingNext.hidden = onboardingStep === 6;
+  const heading = elements.onboardingForm.querySelector(`[data-onboarding-step="${onboardingStep}"] h3`);
+  heading?.setAttribute("tabindex", "-1");
+  heading?.focus();
+}
+
+function moveOnboardingStep(direction) {
+  if (direction > 0 && !validateOnboardingStep()) return;
+  onboardingStep = Math.max(1, Math.min(6, onboardingStep + direction));
+  elements.onboardingMessage.textContent = "";
+  renderOnboardingStep();
+}
+
+function validateOnboardingStep() {
+  const requiredName = onboardingStep === 1 ? "learner-type" : onboardingStep === 5 ? "revision-goal" : null;
+  if (!requiredName || elements.onboardingForm.querySelector(`[name="${requiredName}"]:checked`)) return true;
+  elements.onboardingMessage.textContent = "Choose one option to continue.";
+  elements.onboardingMessage.className = "status-message error";
+  elements.onboardingForm.querySelector(`[name="${requiredName}"]`)?.focus();
+  return false;
+}
+
+async function completeOnboarding(event) {
+  event.preventDefault();
+  const action = event.submitter?.value || "explore";
+  const data = new FormData(elements.onboardingForm);
+  const submitButtons = elements.onboardingForm.querySelectorAll("button[type='submit']");
+  submitButtons.forEach((button) => { button.disabled = true; });
+  elements.onboardingMessage.textContent = "Saving your revision setup...";
+  elements.onboardingMessage.className = "status-message";
+
+  try {
+    const response = await api("/api/profile", {
+      method: "PATCH",
+      body: {
+        learnerType: data.get("learner-type") || "independent",
+        targetGrade: data.get("target-grade") || null,
+        personalTarget: data.get("personal-target") || "",
+        taughtTopicIds: data.getAll("taught-topic"),
+        taughtTopicSource: "self",
+        revisionGoal: data.get("revision-goal") || "keep_up",
+        examDates: {
+          component1: data.get("component-1-date") || null,
+          component2: data.get("component-2-date") || null,
+        },
+        completeOnboarding: true,
+      },
+    });
+    accountProfile = response;
+    if (response.user) currentUser = response.user;
+    elements.onboardingModal.hidden = true;
+    document.body.classList.remove("modal-open");
+    setAppSection("home");
+    renderRevisionPage();
+    focusBeforeOnboarding?.focus?.();
+    trackEvent("onboarding_completed", { action, learnerType: data.get("learner-type"), revisionGoal: data.get("revision-goal") });
+    if (action === "diagnostic") startAdaptiveRevisionSession(5);
+  } catch (error) {
+    elements.onboardingMessage.textContent = error.message || "Your setup could not be saved. Try again.";
+    elements.onboardingMessage.className = "status-message error";
+  } finally {
+    submitButtons.forEach((button) => { button.disabled = false; });
+  }
+}
+
+function parseClientJson(value, fallback) {
+  if (value && typeof value !== "string") return value;
+  try {
+    return JSON.parse(value || "") ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function trapOnboardingFocus(event) {
+  if (event.key !== "Tab") return;
+  const focusable = [...elements.onboardingModal.querySelectorAll(
+    "button:not([disabled]):not([hidden]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex='0']",
+  )].filter((control) => !control.closest("[hidden]"));
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 async function loadWorkspaces() {
@@ -2587,6 +3147,30 @@ function handlePricingModalClick(event) {
 }
 
 function handleGlobalKeydown(event) {
+  const target = event.target;
+  const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable;
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+    event.preventDefault();
+    openGlobalSearch();
+    return;
+  }
+  if (!isTyping && event.key === "/" && elements.globalSearchModal.hidden) {
+    event.preventDefault();
+    openGlobalSearch();
+    return;
+  }
+  if (!isTyping && elements.appView.classList.contains("revision-focus-active")) {
+    const activeCard = elements.revisionCardGrid.querySelector(".revision-card");
+    const confidenceIndex = { Digit1: 0, Digit2: 1, Digit3: 2 }[event.code];
+    if (confidenceIndex !== undefined) {
+      const confidenceButton = activeCard?.querySelectorAll(".confidence-button")[confidenceIndex];
+      if (confidenceButton && confidenceButton.tabIndex === 0) {
+        event.preventDefault();
+        confidenceButton.click();
+        return;
+      }
+    }
+  }
   if (event.key === "Escape" && elements.appView.classList.contains("mobile-sidebar-open")) {
     closeMobileNotesSidebar();
     elements.mobileNotesButton.focus();
@@ -2609,6 +3193,156 @@ function handleGlobalKeydown(event) {
   if (event.key === "Escape" && !elements.legalModal.hidden) {
     closeLegalModal();
   }
+  if (event.key === "Escape" && !elements.globalSearchModal.hidden) {
+    closeGlobalSearch();
+  }
+  if (event.key === "Escape" && elements.appView.classList.contains("revision-focus-active")) {
+    setRevisionFocusMode(false);
+  }
+}
+
+function openGlobalSearch() {
+  if (!elements.globalSearchModal.hidden) return;
+  focusBeforeGlobalSearch = document.activeElement;
+  globalSearchSelection = 0;
+  elements.globalSearchModal.hidden = false;
+  document.body.classList.add("modal-open");
+  elements.globalSearchInput.value = "";
+  renderGlobalSearchResults();
+  window.setTimeout(() => elements.globalSearchInput.focus(), 0);
+}
+
+function closeGlobalSearch() {
+  elements.globalSearchModal.hidden = true;
+  document.body.classList.remove("modal-open");
+  focusBeforeGlobalSearch?.focus?.();
+}
+
+function renderGlobalSearchResults() {
+  const query = elements.globalSearchInput.value.trim().toLowerCase();
+  if (!query) {
+    elements.globalSearchResults.innerHTML = `<div class="global-search-empty"><strong>Search the OCR course and your current workspace</strong><p>Use a topic code, concept, card prompt, note title or folder tag.</p></div>`;
+    return;
+  }
+
+  const results = buildGlobalSearchResults(query);
+  globalSearchSelection = Math.min(globalSearchSelection, Math.max(0, results.length - 1));
+  elements.globalSearchResults.innerHTML = results.length
+    ? results.map((result, index) => `<button class="global-search-result ${index === globalSearchSelection ? "selected" : ""}" type="button" data-search-kind="${escapeHtml(result.kind)}" data-search-id="${escapeHtml(result.id)}" data-search-index="${index}">
+        <span class="global-search-result-type">${escapeHtml(result.type)}</span>
+        <span><strong>${escapeHtml(result.title)}</strong><small>${escapeHtml(result.detail)}</small></span>
+        <span class="global-search-result-action">Open</span>
+      </button>`).join("")
+    : `<div class="global-search-empty"><strong>No matching result</strong><p>Try a topic code, a shorter term, or search your note text.</p></div>`;
+}
+
+function buildGlobalSearchResults(query) {
+  const results = [];
+  const aliases = {
+    mar: "memory address register",
+    mdr: "memory data register",
+    pc: "program counter",
+    cir: "current instruction register",
+    acc: "accumulator",
+    alu: "arithmetic logic unit",
+    cu: "control unit",
+    fde: "fetch decode execute",
+  };
+  const searchTerms = [...new Set([query, aliases[query]].filter(Boolean))];
+  REVISION_TOPICS.forEach((topic) => {
+    const matchingCard = (topic.cards || []).find((card) => {
+      const cardText = `${card.front} ${card.back} ${card.category}`.toLowerCase();
+      return searchTerms.some((term) => cardText.includes(term));
+    });
+    const topicText = `${topic.code} ${topic.title} ${topic.summary}`.toLowerCase();
+    if (searchTerms.some((term) => topicText.includes(term)) || matchingCard) {
+      results.push({
+        kind: "topic",
+        id: topic.id,
+        type: matchingCard ? "Concept" : "OCR topic",
+        title: matchingCard?.front || `${topic.code} ${topic.title}`,
+        detail: matchingCard ? `${topic.code} ${topic.title}` : topic.summary,
+      });
+    }
+  });
+  notes.forEach((note) => {
+    const noteText = `${note.title} ${note.summary} ${note.tag} ${note.body}`.toLowerCase();
+    if (noteText.includes(query)) {
+      results.push({ kind: "note", id: note.id, type: "Note", title: note.title || createTitle(note.body), detail: `#${note.tag} · ${note.summary || createSummary(note.body)}` });
+    }
+  });
+  return results.slice(0, 12);
+}
+
+function handleGlobalSearchKeydown(event) {
+  const results = [...elements.globalSearchResults.querySelectorAll("[data-search-index]")];
+  if ((event.key === "ArrowDown" || event.key === "ArrowUp") && results.length) {
+    event.preventDefault();
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+    globalSearchSelection = (globalSearchSelection + direction + results.length) % results.length;
+    renderGlobalSearchResults();
+    elements.globalSearchResults.querySelector(`[data-search-index="${globalSearchSelection}"]`)?.scrollIntoView({ block: "nearest" });
+  }
+  if (event.key === "Enter" && results.length) {
+    event.preventDefault();
+    openGlobalSearchResult(results[globalSearchSelection]);
+  }
+}
+
+function trapGlobalSearchFocus(event) {
+  if (event.key !== "Tab") return;
+  const focusable = [...elements.globalSearchModal.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+  )].filter((element) => !element.hidden && element.offsetParent !== null);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
+function handleGlobalSearchClick(event) {
+  if (event.target.closest("[data-close-global-search]")) {
+    closeGlobalSearch();
+    return;
+  }
+  const result = event.target.closest("[data-search-kind]");
+  if (result) openGlobalSearchResult(result);
+}
+
+function openGlobalSearchResult(result) {
+  const kind = result.dataset.searchKind;
+  const id = result.dataset.searchId;
+  closeGlobalSearch();
+  if (kind === "note") {
+    setAppSection("notes");
+    selectedId = id;
+    renderNotesAndFolders();
+    renderEditor();
+    elements.noteBody.focus();
+    return;
+  }
+  activeRevisionTopicId = id;
+  setAppSection("revise");
+  renderRevisionPage();
+  document.querySelector(".revision-stage")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function toggleRevisionFocusMode() {
+  setRevisionFocusMode(!elements.appView.classList.contains("revision-focus-active"));
+}
+
+function setRevisionFocusMode(enabled) {
+  elements.appView.classList.toggle("revision-focus-active", enabled);
+  document.body.classList.toggle("revision-focus-mode", enabled);
+  elements.revisionFocusButton.setAttribute("aria-pressed", String(enabled));
+  elements.revisionFocusButton.textContent = enabled ? "Exit focus" : "Focus mode";
+  if (enabled) elements.revisionCardGrid.querySelector(".revision-card")?.focus();
 }
 
 function handleTitleKeydown(event) {
@@ -2984,7 +3718,7 @@ function renderStudentClassPanel() {
     }`;
 }
 
-function handleStudentClassPanelSubmit(event) {
+async function handleStudentClassPanelSubmit(event) {
   const form = event.target.closest("[data-join-class-form]");
   if (!form) return;
   event.preventDefault();
@@ -3004,6 +3738,35 @@ function handleStudentClassPanelSubmit(event) {
   if (!isValidNormalisedClassCode(normalisedCode)) {
     input.setAttribute("aria-invalid", "true");
     setStudentClassMessage("That class code does not look right. Check it and try again.", "error");
+    return;
+  }
+
+  if (!isGuestMode && currentUser) {
+    const submitButton = form.querySelector('button[type="submit"]');
+    submitButton.disabled = true;
+    setStudentClassMessage("Checking class code...", "");
+    try {
+      const preview = await api("/api/classes/preview", { method: "POST", body: { code: normalisedCode } });
+      const classPreview = preview.class;
+      const confirmed = window.confirm(
+        `Join ${classPreview.name}?\n\n${classPreview.examBoard} ${classPreview.subject}${classPreview.teacherName ? `\nTeacher: ${classPreview.teacherName}` : ""}`,
+      );
+      if (!confirmed) {
+        setStudentClassMessage("Class join cancelled.", "");
+        return;
+      }
+      const response = await api("/api/classes/join", { method: "POST", body: { code: normalisedCode } });
+      await loadAccountLearningWorkspace();
+      studentClassCodeDraft = "";
+      input.value = "";
+      setStudentClassMessage(response.message || `You have joined ${classPreview.name}.`, "success");
+      renderRevisionPage();
+    } catch (error) {
+      input.setAttribute("aria-invalid", "true");
+      setStudentClassMessage(error.message, "error");
+    } finally {
+      submitButton.disabled = false;
+    }
     return;
   }
 
@@ -3142,6 +3905,7 @@ function getClassMemberships(classId) {
 }
 
 function getClassTopicAttempts(topicId, classId) {
+  if (!classId && currentUser?.isTeacher && !isGuestMode) return [];
   return cardAttempts.filter((attempt) => attempt.topicId === topicId && (!classId || attempt.classId === classId));
 }
 
@@ -3181,10 +3945,25 @@ function renderStudentClassCard(membership) {
   </article>`;
 }
 
-function leaveStudentClass(classId) {
+async function leaveStudentClass(classId) {
   const group = getClassById(classId);
   const confirmed = window.confirm("Leave this class? Your personal notes and revision history will stay in your workspace, but your teacher will no longer see new activity for this class.");
   if (!confirmed) return;
+
+  if (!isGuestMode && currentUser) {
+    try {
+      await api(`/api/classes/${encodeURIComponent(classId)}/members/me`, { method: "DELETE" });
+      await loadAccountLearningWorkspace();
+      if (activeStudentClassId === classId) {
+        activeStudentClassId = classGroups[0]?.id || null;
+      }
+      setStudentClassMessage(group ? `You have left ${group.name}.` : "You have left this class.", "success");
+      renderRevisionPage();
+    } catch (error) {
+      setStudentClassMessage(error.message, "error");
+    }
+    return;
+  }
 
   classMemberships = classMemberships.map((membership) =>
     membership.classId === classId && membership.status === "active"
@@ -3220,11 +3999,12 @@ function renderTeacherMode() {
   }
 
   const teacherSections = [
-    ["dashboard", "Dashboard"],
+    ["dashboard", "Overview"],
     ["classes", "Classes"],
-    ["assignments", "Assignments"],
     ["students", "Students"],
-    ["heatmap", "Topic Heatmap"],
+    ["assignments", "Assignments"],
+    ["heatmap", "Insights"],
+    ["content", "Content"],
     ["reports", "Reports"],
     ["settings", "Settings"],
   ];
@@ -3232,9 +4012,9 @@ function renderTeacherMode() {
   elements.teacherModePanel.innerHTML = `
     <header class="teacher-hero">
       <div>
-        <p class="eyebrow">Teacher Mode</p>
-        <h2>Class progress for OCR Computer Science</h2>
-        <p>Review confidence, find topics that need intervention, and set the next revision task.</p>
+        <p class="eyebrow">Teacher workspace</p>
+        <h2>Plan the next useful intervention</h2>
+        <p>Review class evidence, identify misconceptions and set focused OCR Computer Science practice.</p>
       </div>
       <div class="teacher-preview-card">
         <span>${isGuestMode ? "Preview mode" : "Teacher workspace"}</span>
@@ -3246,6 +4026,7 @@ function renderTeacherMode() {
         return `<button class="${section === activeTeacherSection ? "active" : ""}" type="button" data-teacher-section="${section}">${label}</button>`;
       }).join("")}
     </nav>
+    ${teacherActionMessage.text ? `<p class="teacher-action-message ${escapeHtml(teacherActionMessage.type)}" role="status">${escapeHtml(teacherActionMessage.text)}</p>` : ""}
     ${renderTeacherSection()}`;
 }
 
@@ -3298,6 +4079,7 @@ function renderTeacherSection() {
   if (activeTeacherSection === "assignments") return renderTeacherAssignmentsSection();
   if (activeTeacherSection === "students") return renderTeacherStudentsSection();
   if (activeTeacherSection === "heatmap") return renderTeacherHeatmapSection();
+  if (activeTeacherSection === "content") return renderTeacherContentSection();
   if (activeTeacherSection === "reports") return renderTeacherReportsSection();
   if (activeTeacherSection === "settings") return renderCentreSettingsSection();
   return renderTeacherDashboardSection();
@@ -3306,8 +4088,8 @@ function renderTeacherSection() {
 function renderTeacherDashboardSection() {
   const activeClass = getActiveClassGroup();
   const overview = getTeacherClassOverview(activeClass);
-  const weakTopics = getClassTopicInsights().filter((topic) => topic.confidence.totalAttempts).slice(0, 4);
-  const watchlist = getStudentWatchlist();
+  const weakTopics = activeClass ? getClassTopicInsights().filter((topic) => topic.confidence.totalAttempts).slice(0, 4) : [];
+  const watchlist = activeClass ? getStudentWatchlist() : [];
 
   return `<section class="teacher-section">
     <div class="teacher-section-head">
@@ -3315,7 +4097,7 @@ function renderTeacherDashboardSection() {
         <p class="eyebrow">Dashboard</p>
         <h3>Who needs help, with what, and what should happen next?</h3>
       </div>
-      ${renderClassSelector()}
+      ${activeClass ? renderClassSelector() : ""}
     </div>
     ${
       classGroups.length
@@ -3419,11 +4201,22 @@ function renderTeacherAssignmentsSection() {
         </select>
         <label for="assignment-task">Task type</label>
         <select id="assignment-task" name="taskType">
-          <option value="flashcards_quiz">Flashcards + Quick Practice</option>
+          <option value="topic_revision">Flashcards + Quick Practice</option>
+          <option value="adaptive_session">Adaptive revision session</option>
           <option value="flashcards">Flashcards only</option>
-          <option value="quiz">Quick Practice only</option>
-          <option value="weak-cards">Weak-card recovery</option>
+          <option value="quick_quiz">Quick Practice only</option>
+          <option value="exam_questions">Exam questions</option>
+          <option value="mini_mock">Mini mock</option>
+          <option value="interactive_lab">Interactive lab</option>
         </select>
+        <div class="teacher-form-row">
+          <label for="assignment-start">Start date
+            <input id="assignment-start" name="startAt" type="date" />
+          </label>
+          <label for="assignment-duration">Estimated minutes
+            <input id="assignment-duration" name="estimatedMinutes" type="number" min="5" max="120" step="5" value="15" />
+          </label>
+        </div>
         <label for="assignment-due">Due date</label>
         <input id="assignment-due" name="dueAt" type="date" />
         <label for="assignment-instructions">Instructions</label>
@@ -3538,11 +4331,26 @@ function renderTeacherReportsSection() {
         <p>Export every OCR topic with class confidence and latest activity.</p>
         <button type="button" data-export-report="mastery" ${activeClass ? "" : "disabled"}>Export mastery</button>
       </article>
+    </div>
+  </section>`;
+}
+
+function renderTeacherContentSection() {
+  const weakTopics = getClassTopicInsights().filter((item) => item.confidence.totalAttempts).slice(0, 3);
+  const selected = weakTopics.length ? weakTopics : REVISION_TOPICS.slice(0, 3).map((topic) => ({ topic, confidence: { totalAttempts: 0, percent: 0 } }));
+  return `<section class="teacher-section">
+    <div class="teacher-section-head"><div><p class="eyebrow">Content</p><h3>Build a five-minute retrieval starter from class evidence.</h3><p>Review the selected topics before turning the draft into an assignment.</p></div>${renderClassSelector()}</div>
+    <div class="teacher-content-builder">
       <article class="teacher-panel-card">
-        <span>Future Pro</span>
-        <strong>PDF report pack</strong>
-        <p>Prepared UI for future branded reports, school evidence packs and parent-facing summaries.</p>
-        <button type="button" disabled>Coming soon</button>
+        <div class="section-title"><span>Suggested starter</span><span>${weakTopics.length ? "Based on class weakness" : "Course starter"}</span></div>
+        <ol>${selected.map((item) => `<li><span>${escapeHtml(item.topic.code)}</span><strong>${escapeHtml(item.topic.title)}</strong><small>${item.confidence.totalAttempts ? `${item.confidence.percent}% current confidence` : "No class evidence yet"}</small></li>`).join("")}</ol>
+        <p>The draft uses published Neat Notes retrieval content. Check suitability against what your class has been taught.</p>
+      </article>
+      <article class="teacher-panel-card teacher-content-actions">
+        <span>Teacher review required</span>
+        <strong>Prepare the highest-priority topic</strong>
+        <p>This opens the assignment builder with the topic selected. Nothing is sent to students until you submit it.</p>
+        <button type="button" data-create-assignment data-topic-id="${escapeHtml(selected[0].topic.id)}">Review assignment draft</button>
       </article>
     </div>
   </section>`;
@@ -3588,8 +4396,7 @@ function renderCentreSettingsSection() {
           <option value="school">School</option>
           <option value="college">College</option>
           <option value="department">Department</option>
-          <option value="tutoring">Tutoring</option>
-          <option value="other">Other</option>
+          <option value="trust">Multi-academy trust</option>
         </select>
         <button type="submit">Create centre</button>
       </form>
@@ -3612,9 +4419,7 @@ function renderCentreSettingsSection() {
 }
 
 function renderClassSelector() {
-  if (!classGroups.length) {
-    return `<button class="teacher-inline-action" type="button" data-teacher-section="classes">Create first class</button>`;
-  }
+  if (!classGroups.length) return "";
 
   return `<label class="class-selector">
     <span>Class</span>
@@ -3819,6 +4624,13 @@ function renderTeacherAssignmentCard(assignment) {
 }
 
 function getAssignmentCompletionSummary(assignment) {
+  if (Number.isFinite(Number(assignment.studentCount)) && Number.isFinite(Number(assignment.completedCount))) {
+    return {
+      total: Number(assignment.studentCount),
+      completed: Number(assignment.completedCount),
+    };
+  }
+
   const students = getClassMemberships(assignment.classId);
   const completed = students.filter((student) => {
     const attempts = cardAttempts.filter((attempt) =>
@@ -3848,12 +4660,13 @@ function renderTeacherStudentRow(student) {
     <td>${confidence.totalAttempts}</td>
     <td>${lastAttempt ? escapeHtml(formatDate(lastAttempt.createdAt)) : "Not active yet"}</td>
     <td>${weakest ? `${escapeHtml(weakest.topic.code)} ${escapeHtml(weakest.topic.title)}` : "None yet"}</td>
-    <td><button type="button" data-remove-student="${escapeHtml(student.id)}">Remove</button></td>
+    <td><button type="button" data-remove-student="${escapeHtml(student.userId || student.id)}">Remove</button></td>
   </tr>`;
 }
 
 function getWeakestTopicForStudent(student, classId) {
   return REVISION_TOPICS.map((topic) => {
+    const serverConfidence = serverStudentTopicConfidence.get(`${student.userId}:${topic.id}`);
     const attempts = cardAttempts.filter((attempt) =>
       attempt.userId === student.userId &&
       attempt.classId === classId &&
@@ -3861,7 +4674,7 @@ function getWeakestTopicForStudent(student, classId) {
     );
     return {
       topic,
-      confidence: calculateTopicConfidence(attempts),
+      confidence: serverConfidence || calculateTopicConfidence(attempts),
     };
   })
     .filter((entry) => entry.confidence.totalAttempts)
@@ -3874,7 +4687,7 @@ function renderTeacherHeatmapCell(student, topic, classId) {
     attempt.classId === classId &&
     attempt.topicId === topic.id
   );
-  const confidence = calculateTopicConfidence(attempts);
+  const confidence = serverStudentTopicConfidence.get(`${student.userId}:${topic.id}`) || calculateTopicConfidence(attempts);
   const heatClass = !confidence.totalAttempts
     ? "empty"
     : confidence.percent >= 75
@@ -3984,7 +4797,7 @@ function csvEscape(value) {
   return `"${String(value ?? "").replaceAll('"', '""')}"`;
 }
 
-function handleTeacherModeClick(event) {
+async function handleTeacherModeClick(event) {
   const teacherPlanButton = event.target.closest("[data-open-teacher-plan]");
   if (teacherPlanButton) {
     openPlansModal();
@@ -4035,19 +4848,19 @@ function handleTeacherModeClick(event) {
 
   const regenerateButton = event.target.closest("[data-regenerate-code]");
   if (regenerateButton) {
-    regenerateClassCode(regenerateButton.dataset.regenerateCode);
+    await regenerateClassCode(regenerateButton.dataset.regenerateCode);
     return;
   }
 
   const archiveButton = event.target.closest("[data-archive-class]");
   if (archiveButton) {
-    archiveClassGroup(archiveButton.dataset.archiveClass);
+    await archiveClassGroup(archiveButton.dataset.archiveClass);
     return;
   }
 
   const removeStudentButton = event.target.closest("[data-remove-student]");
   if (removeStudentButton) {
-    removeClassStudent(removeStudentButton.dataset.removeStudent);
+    await removeClassStudent(removeStudentButton.dataset.removeStudent);
     return;
   }
 
@@ -4061,7 +4874,7 @@ function handleTeacherModeClick(event) {
   }
 }
 
-function handleTeacherModeSubmit(event) {
+async function handleTeacherModeSubmit(event) {
   const classForm = event.target.closest("[data-create-class]");
   const assignmentForm = event.target.closest("[data-create-assignment-form]");
   const centreForm = event.target.closest("[data-create-centre]");
@@ -4074,34 +4887,73 @@ function handleTeacherModeSubmit(event) {
   }
 
   event.preventDefault();
+  teacherActionMessage = { text: "", type: "" };
 
-  if (classForm) {
-    createClassGroup(new FormData(classForm));
-    return;
+  const form = classForm || assignmentForm || centreForm || joinCentreForm;
+  const submitButton = form.querySelector('button[type="submit"]');
+  const originalLabel = submitButton?.textContent;
+  if (submitButton) {
+    submitButton.disabled = true;
+    submitButton.textContent = "Saving...";
   }
 
-  if (assignmentForm) {
-    createTeacherAssignment(new FormData(assignmentForm));
-    return;
+  try {
+    if (classForm) {
+      await createClassGroup(new FormData(classForm));
+    } else if (assignmentForm) {
+      await createTeacherAssignment(new FormData(assignmentForm));
+    } else if (centreForm) {
+      await createCentre(new FormData(centreForm));
+    } else {
+      await joinCentre(new FormData(joinCentreForm));
+    }
+  } catch (error) {
+    teacherActionMessage = { text: error.message, type: "error" };
+    renderTeacherMode();
+  } finally {
+    if (submitButton?.isConnected) {
+      submitButton.disabled = false;
+      submitButton.textContent = originalLabel;
+    }
   }
-
-  if (centreForm) {
-    createCentre(new FormData(centreForm));
-    return;
-  }
-
-  joinCentre(new FormData(joinCentreForm));
 }
 
-function handleTeacherModeChange(event) {
+async function handleTeacherModeChange(event) {
   const selector = event.target.closest("[data-class-selector]");
   if (!selector) return;
 
   activeClassId = selector.value;
+  teacherActionMessage = { text: "", type: "" };
+  if (!isGuestMode && currentUser?.isTeacher && activeClassId) {
+    try {
+      await loadTeacherClassEvidence(activeClassId);
+    } catch (error) {
+      teacherActionMessage = { text: error.message, type: "error" };
+    }
+  }
   renderTeacherMode();
 }
 
-function createClassGroup(form) {
+async function createClassGroup(form) {
+  if (!isGuestMode && currentUser) {
+    const response = await api("/api/classes", {
+      method: "POST",
+      body: {
+        centreId: activeCentreId || null,
+        name: String(form.get("name") || "").trim(),
+        subject: String(form.get("subject") || "Computer Science").trim(),
+        examBoard: String(form.get("examBoard") || "OCR A-Level").trim(),
+        yearGroup: String(form.get("yearGroup") || "").trim(),
+        description: String(form.get("description") || "").trim(),
+      },
+    });
+    activeClassId = response.class.id;
+    await loadAccountLearningWorkspace();
+    teacherActionMessage = { text: `${response.class.name} created. Share its join code when you are ready.`, type: "success" };
+    renderTeacherMode();
+    return;
+  }
+
   const now = new Date().toISOString();
   const group = {
     id: createLocalId("class"),
@@ -4125,11 +4977,32 @@ function createClassGroup(form) {
   renderTeacherMode();
 }
 
-function createTeacherAssignment(form) {
+async function createTeacherAssignment(form) {
   const classId = String(form.get("classId") || activeClassId || "").trim();
   const topicId = String(form.get("topicId") || activeRevisionTopicId || "").trim();
   const topic = getQuizTopicById(topicId);
   if (!classId || !topic) return;
+
+  if (!isGuestMode && currentUser) {
+    const response = await api(`/api/classes/${encodeURIComponent(classId)}/assignments`, {
+      method: "POST",
+      body: {
+        topicId,
+        taskType: String(form.get("taskType") || "topic_revision"),
+        instructions: String(form.get("instructions") || "").trim(),
+        startAt: String(form.get("startAt") || "").trim() || null,
+        dueAt: String(form.get("dueAt") || "").trim() || null,
+        estimatedMinutes: Number(form.get("estimatedMinutes") || 15),
+      },
+    });
+    activeClassId = classId;
+    activeRevisionTopicId = topicId;
+    await loadAccountLearningWorkspace();
+    teacherActionMessage = { text: `${response.assignment.title} assigned successfully.`, type: "success" };
+    trackEvent("teacher_assignment_created", { classId, topicId, taskType: response.assignment.taskType });
+    renderTeacherMode();
+    return;
+  }
 
   const dueValue = String(form.get("dueAt") || "").trim();
   const assignment = {
@@ -4153,7 +5026,20 @@ function createTeacherAssignment(form) {
   renderTeacherMode();
 }
 
-function regenerateClassCode(classId) {
+async function regenerateClassCode(classId) {
+  if (!isGuestMode && currentUser) {
+    try {
+      const response = await api(`/api/classes/${encodeURIComponent(classId)}/join-code/regenerate`, { method: "POST" });
+      await loadAccountLearningWorkspace();
+      teacherActionMessage = { text: `New join code created: ${response.joinCode}`, type: "success" };
+      renderTeacherMode();
+    } catch (error) {
+      teacherActionMessage = { text: error.message, type: "error" };
+      renderTeacherMode();
+    }
+    return;
+  }
+
   classGroups = classGroups.map((group) =>
     group.id === classId
       ? { ...group, inviteCode: createInviteCode("NN"), updatedAt: new Date().toISOString() }
@@ -4163,11 +5049,24 @@ function regenerateClassCode(classId) {
   renderTeacherMode();
 }
 
-function archiveClassGroup(classId) {
+async function archiveClassGroup(classId) {
   const group = getClassById(classId);
   if (!group || group.archivedAt) return;
   const confirmed = window.confirm(`Archive ${group.name}? Students are not deleted, but the class is marked as inactive.`);
   if (!confirmed) return;
+
+  if (!isGuestMode && currentUser) {
+    try {
+      const response = await api(`/api/classes/${encodeURIComponent(classId)}/archive`, { method: "PATCH" });
+      await loadAccountLearningWorkspace();
+      teacherActionMessage = { text: response.message, type: "success" };
+      renderTeacherMode();
+    } catch (error) {
+      teacherActionMessage = { text: error.message, type: "error" };
+      renderTeacherMode();
+    }
+    return;
+  }
 
   classGroups = classGroups.map((item) =>
     item.id === classId ? { ...item, archivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : item
@@ -4176,20 +5075,45 @@ function archiveClassGroup(classId) {
   renderTeacherMode();
 }
 
-function removeClassStudent(membershipId) {
-  const membership = classMemberships.find((item) => item.id === membershipId);
+async function removeClassStudent(studentId) {
+  const membership = classMemberships.find((item) => item.userId === studentId || item.id === studentId);
   if (!membership) return;
   const confirmed = window.confirm(`Remove ${membership.studentName || "this student"} from the class?`);
   if (!confirmed) return;
 
+  if (!isGuestMode && currentUser) {
+    try {
+      const response = await api(`/api/classes/${encodeURIComponent(membership.classId)}/members/${encodeURIComponent(membership.userId)}`, { method: "DELETE" });
+      await loadTeacherClassEvidence(membership.classId);
+      teacherActionMessage = { text: response.message, type: "success" };
+      renderTeacherMode();
+    } catch (error) {
+      teacherActionMessage = { text: error.message, type: "error" };
+      renderTeacherMode();
+    }
+    return;
+  }
+
   classMemberships = classMemberships.map((item) =>
-    item.id === membershipId ? { ...item, status: "removed", removedAt: new Date().toISOString() } : item
+    item.id === membership.id ? { ...item, status: "removed", removedAt: new Date().toISOString() } : item
   );
   saveClassMemberships();
   renderTeacherMode();
 }
 
-function createCentre(form) {
+async function createCentre(form) {
+  if (!isGuestMode && currentUser) {
+    const response = await api("/api/centres", {
+      method: "POST",
+      body: { name: String(form.get("name") || "").trim(), type: String(form.get("type") || "school") },
+    });
+    activeCentreId = response.centre.id;
+    await loadAccountLearningWorkspace();
+    teacherActionMessage = { text: `${response.centre.name} created.`, type: "success" };
+    renderTeacherMode();
+    return;
+  }
+
   const centre = {
     id: createLocalId("centre"),
     name: String(form.get("name") || "").trim(),
@@ -4206,9 +5130,18 @@ function createCentre(form) {
   renderTeacherMode();
 }
 
-function joinCentre(form) {
+async function joinCentre(form) {
   const code = String(form.get("code") || "").trim().toUpperCase();
   if (!code) return;
+
+  if (!isGuestMode && currentUser) {
+    const response = await api("/api/centres/join", { method: "POST", body: { code } });
+    activeCentreId = response.centre.id;
+    await loadAccountLearningWorkspace();
+    teacherActionMessage = { text: `Joined ${response.centre.name}.`, type: "success" };
+    renderTeacherMode();
+    return;
+  }
 
   const existing = centres.find((centre) => centre.code.toUpperCase() === code);
   const centre = existing || {
@@ -4235,6 +5168,7 @@ function createInviteCode(prefix) {
 function renderRevisionPage() {
   let topic = getActiveRevisionTopic();
   renderLearningMode();
+  renderPracticeMode();
 
   if (activeLearningMode === "teacher") {
     renderTeacherMode();
@@ -4598,8 +5532,11 @@ function renderStudentDashboard(topic) {
   const openMistakes = mistakeJournal.filter((entry) => !entry.correctedAt);
   const recentNote = [...notes].sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))[0];
   const recentQuiz = getMostRecentQuizProgress();
-  const activeAssignments = teacherAssignments.filter((assignment) => !assignment.completedAt).slice(0, 2);
+  const activeAssignments = teacherAssignments
+    .filter((assignment) => assignment.status === "active" && assignment.userStatus !== "complete")
+    .slice(0, 2);
   const sessionPreview = session.items.slice(0, 4);
+  const examCountdown = getNearestExamCountdown();
 
   elements.studentDashboardPanel.innerHTML = `
     <section class="today-session" aria-labelledby="today-session-title">
@@ -4639,14 +5576,43 @@ function renderStudentDashboard(topic) {
       </section>
       <section>
         <div class="section-title"><span>Assignments</span><span>${activeAssignments.length}</span></div>
-        ${activeAssignments.length ? `<p><strong>${escapeHtml(activeAssignments[0].title)}</strong><br>${escapeHtml(activeAssignments[0].instructions || "Teacher-set revision")}</p>` : `<p>No teacher assignments are waiting. Independent revision stays separate.</p>`}
+        ${activeAssignments.length ? `<p><strong>${escapeHtml(activeAssignments[0].title)}</strong><br>${escapeHtml(activeAssignments[0].instructions || "Teacher-set revision")}</p>
+          <div class="assignment-home-actions">
+            <button type="button" data-assignment-start="${escapeHtml(activeAssignments[0].id)}">${activeAssignments[0].userStatus === "started" ? "Continue assignment" : "Start assignment"}</button>
+            ${activeAssignments[0].userStatus === "started" ? `<button class="secondary" type="button" data-assignment-complete="${escapeHtml(activeAssignments[0].id)}">Mark complete</button>` : ""}
+          </div>` : `<p>No teacher assignments are waiting. Independent revision stays separate.</p>`}
       </section>
       <section>
         <div class="section-title"><span>Mistake repair</span><span>${openMistakes.length}</span></div>
         <p>${openMistakes.length ? `<strong>${escapeHtml(openMistakes[0].prompt)}</strong><br>Revisit an answer that needs correcting.` : "Mistakes you make in revision will be collected here automatically."}</p>
         <button type="button" data-student-action="progress">Open progress</button>
       </section>
+      <section>
+        <div class="section-title"><span>Exam plan</span><span>${examCountdown ? `${examCountdown.days} days` : "Not set"}</span></div>
+        <p>${examCountdown ? `<strong>${escapeHtml(examCountdown.label)}</strong><br>${escapeHtml(examCountdown.message)}` : "Add exam dates to shape the balance of retrieval and exam practice."}</p>
+        <button type="button" data-student-action="exam-settings">${examCountdown ? "Review exam plan" : "Add exam dates"}</button>
+      </section>
     </div>`;
+}
+
+function getNearestExamCountdown() {
+  const examDates = parseClientJson(accountProfile?.studentProfile?.exam_dates, {});
+  const options = [
+    { key: "component1", label: "Component 01" },
+    { key: "component2", label: "Component 02" },
+  ].map((item) => ({ ...item, date: examDates[item.key] ? new Date(`${examDates[item.key]}T12:00:00`) : null }))
+    .filter((item) => item.date && !Number.isNaN(item.date.getTime()) && item.date.getTime() >= Date.now() - 24 * 60 * 60 * 1000)
+    .sort((a, b) => a.date - b.date);
+  if (!options.length) return null;
+  const nearest = options[0];
+  const days = Math.max(0, Math.ceil((nearest.date.getTime() - Date.now()) / (24 * 60 * 60 * 1000)));
+  return {
+    ...nearest,
+    days,
+    message: days <= 21
+      ? "Exam practice now carries more weight in your recommended sessions."
+      : "Your plan will gradually increase mixed and applied practice as the exam approaches.",
+  };
 }
 
 function getMostRecentQuizProgress() {
@@ -4661,6 +5627,18 @@ function getMostRecentQuizProgress() {
 }
 
 async function handleStudentDashboardClick(event) {
+  const assignmentStart = event.target.closest("[data-assignment-start]");
+  if (assignmentStart) {
+    await openStudentAssignment(assignmentStart.dataset.assignmentStart);
+    return;
+  }
+
+  const assignmentComplete = event.target.closest("[data-assignment-complete]");
+  if (assignmentComplete) {
+    await updateStudentAssignmentStatus(assignmentComplete.dataset.assignmentComplete, "complete");
+    return;
+  }
+
   const sessionButton = event.target.closest("[data-session-duration]");
   if (sessionButton) {
     startAdaptiveRevisionSession(Number(sessionButton.dataset.sessionDuration) || 15);
@@ -4720,7 +5698,61 @@ async function handleStudentDashboardClick(event) {
 
   if (action === "teacher") {
     setAppSection("teacher");
+    return;
   }
+
+  if (action === "exam-settings") {
+    openSettingsModal("revision");
+  }
+}
+
+async function updateStudentAssignmentStatus(assignmentId, status) {
+  if (isGuestMode || !currentUser) return;
+  try {
+    await api(`/api/assignments/${encodeURIComponent(assignmentId)}/status`, {
+      method: "PATCH",
+      body: { status },
+    });
+    await loadAccountLearningWorkspace();
+    renderRevisionPage();
+  } catch (error) {
+    studentClassJoinMessage = { text: error.message, type: "error" };
+    renderStudentClassPanel();
+  }
+}
+
+async function openStudentAssignment(assignmentId) {
+  const assignment = teacherAssignments.find((item) => item.id === assignmentId);
+  if (!assignment) return;
+  await updateStudentAssignmentStatus(assignmentId, "started");
+  if (assignment.topicId && getQuizTopicById(assignment.topicId)) {
+    activeRevisionTopicId = assignment.topicId;
+  }
+
+  if (["quick_quiz", "exam_questions", "mini_mock", "interactive_lab"].includes(assignment.taskType)) {
+    setAppSection("practice");
+    if (assignment.taskType === "quick_quiz") {
+      activePracticeMode = "quick";
+      await startNeatQuiz(activeRevisionTopicId);
+    } else if (assignment.taskType === "mini_mock") {
+      activePracticeMode = "mock";
+      await loadMiniMock();
+    } else if (assignment.taskType === "interactive_lab") {
+      activePracticeMode = "labs";
+      await loadCsLabs(true);
+    } else {
+      activePracticeMode = "exam";
+      await loadExamPracticeQuestion();
+    }
+    renderPracticeMode();
+    elements.quickPracticeSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+
+  setAppSection("revise");
+  startRevisionSession(activeRevisionTopicId);
+  renderRevisionPage();
+  document.querySelector(".revision-stage")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function handleMasteryMapClick(event) {
@@ -4769,7 +5801,7 @@ function renderNeatQuestions() {
         ? Math.round((completedCards / topicCardCount) * 100)
         : 0;
     const progressLabel = getNeatQuizProgressLabel(quiz.topic.id);
-    const sourceLabel = quiz.sourceCount ? `${quiz.sourceCount} Forms reference${quiz.sourceCount === 1 ? "" : "s"}` : "Native Neat Notes quiz";
+    const sourceLabel = "Instant feedback";
     const activeLabel = isActive ? `<span class="question-current">Current topic</span>` : "";
     const runningLabel = isRunning ? `<span class="question-variant">In progress</span>` : "";
     const lockLabel = locked
@@ -4781,7 +5813,7 @@ function renderNeatQuestions() {
           : !hasFeature("quickPractice")
             ? `<span class="question-variant pro">Pro quiz</span>`
             : "";
-    const openLabel = access.canClaim ? "Choose deck" : locked ? "Preview plan" : "Open deck";
+    const openLabel = access.canClaim ? "Choose deck" : locked ? "Preview plan" : "Flashcards";
     const actionLabel = access.canClaim ? "Choose + practise" : quizLocked ? "Unlock Pro" : isRunning ? "Continue" : quizProgress.attempts ? "Retry quiz" : "Start quiz";
     const lockedNote = locked
       ? `<div class="topic-lock-note" aria-label="Locked topic">
@@ -5007,6 +6039,319 @@ async function handleNeatQuizPanelClick(event) {
 
 async function startActiveTopicQuiz() {
   await startNeatQuiz(getActiveRevisionTopic()?.id);
+}
+
+async function loadExamPracticeQuestion() {
+  if (isGuestMode || !currentUser) {
+    elements.examPracticePanel.innerHTML = `<div class="exam-empty-state exam-auth-state"><strong>Save written-answer progress to your account</strong><p>Create a free account to submit an original exam question from your chosen OCR deck.</p><button type="button" data-exam-auth>Create account</button></div>`;
+    return;
+  }
+  elements.examLoadQuestionButton.disabled = true;
+  elements.examLoadQuestionButton.textContent = "Loading...";
+  elements.examPracticePanel.setAttribute("aria-busy", "true");
+  try {
+    const response = await api(`/api/exam/questions?topicId=${encodeURIComponent(activeRevisionTopicId)}`);
+    const question = response.questions[0];
+    if (!question) {
+      const topic = getQuizTopicById(activeRevisionTopicId) || getActiveRevisionTopic();
+      elements.examPracticePanel.innerHTML = `<div class="exam-empty-state exam-locked-state"><span class="pro-badge">Pro</span><strong>${escapeHtml(topic ? `${topic.code} ${topic.title}` : "This topic")} is outside your free deck</strong><p>Choose an accessible topic or unlock the complete original exam-practice bank with Pro.</p><button type="button" data-exam-upgrade>View Pro</button></div>`;
+      examPracticeState = null;
+      return;
+    }
+    examPracticeState = { question, startedAt: performance.now(), answer: "", originalAttemptId: null, result: null };
+    renderExamPracticeQuestion();
+    trackEvent("exam_question_started", { questionId: question.id, topicId: question.topicId });
+  } catch (error) {
+    elements.examPracticePanel.innerHTML = `<div class="exam-empty-state error-state"><strong>Exam Practice could not load</strong><p>${escapeHtml(error.message)}</p><button type="button" data-exam-retry>Try again</button></div>`;
+  } finally {
+    elements.examPracticePanel.removeAttribute("aria-busy");
+    elements.examLoadQuestionButton.disabled = false;
+    elements.examLoadQuestionButton.textContent = "Another question";
+  }
+}
+
+function renderExamPracticeQuestion() {
+  const state = examPracticeState;
+  if (!state?.question) return;
+  const question = state.question;
+  if (state.result) {
+    const { result, notice } = state.result;
+    elements.examPracticePanel.innerHTML = `<article class="exam-feedback-card"><div class="exam-feedback-score"><span>Suggested mark</span><strong>${result.proposedMark}<small> / ${result.maximumMark}</small></strong><em>${escapeHtml(result.confidence === "low" ? "Teacher review recommended" : "Rubric match")}</em></div><div class="exam-feedback-body"><p class="eyebrow">${escapeHtml(question.topicCode)} · ${escapeHtml(question.commandWord)}</p><h4>${escapeHtml(result.feedback)}</h4>${result.awarded.length ? `<section><strong>Credit matched</strong><ul>${result.awarded.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul></section>` : ""}${result.missing.length ? `<section class="exam-missing-points"><strong>Build these points in</strong><ul>${result.missing.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul></section>` : ""}<section class="exam-reasoning"><strong>Reasoning guide</strong><p>${escapeHtml(result.modelReasoning)}</p></section><p class="exam-result-notice">${escapeHtml(notice)}</p><div class="exam-feedback-actions">${result.proposedMark < result.maximumMark ? `<button class="primary-button" type="button" data-exam-improve>Improve my answer</button>` : ""}<button type="button" data-exam-next>Try another</button></div></div></article>`;
+    return;
+  }
+
+  elements.examPracticePanel.innerHTML = `<article class="exam-question-card"><header><div><span>${escapeHtml(question.topicCode)}</span><strong>${escapeHtml(question.topicTitle)}</strong></div><div class="exam-question-meta"><span>${question.marks} marks</span><span>About ${question.expectedMinutes} min</span></div></header><div class="exam-command-row"><span>${escapeHtml(question.commandWord)}</span><details><summary>Command-word help</summary><p>${escapeHtml(getCommandWordHelp(question.commandWord))}</p></details></div><h3>${escapeHtml(question.prompt)}</h3><form class="exam-answer-form" data-exam-answer-form><label for="exam-answer">Your answer</label><textarea id="exam-answer" name="answer" rows="8" maxlength="4000" required placeholder="Build a clear answer before checking the rubric.">${escapeHtml(state.answer || "")}</textarea><div class="exam-answer-footer"><label for="exam-confidence">Confidence<select id="exam-confidence" name="confidence"><option value="">Prefer not to say</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label><button class="primary-button" type="submit">${state.originalAttemptId ? "Submit improved answer" : "Check against rubric"}</button></div><p class="status-message" data-exam-status role="status" aria-live="polite"></p></form></article>`;
+}
+
+function getCommandWordHelp(commandWord) {
+  const help = {
+    Compare: "Make paired similarities or differences. Use both subjects in each comparison where possible.",
+    Discuss: "Develop relevant points and consider more than one side or consequence where the question invites it.",
+    Explain: "Make the reason or process clear, linking cause to effect rather than listing facts.",
+    Apply: "Use the knowledge in the specific expression, data or scenario given.",
+  };
+  return help[commandWord] || "Respond directly to the command word and use precise Computer Science terminology.";
+}
+
+async function submitExamPracticeAnswer(event) {
+  const form = event.target.closest("[data-exam-answer-form]");
+  if (!form || !examPracticeState?.question) return;
+  event.preventDefault();
+  const formData = new FormData(form);
+  const answer = String(formData.get("answer") || "").trim();
+  const status = form.querySelector("[data-exam-status]");
+  const button = form.querySelector("button[type='submit']");
+  examPracticeState.answer = answer;
+  button.disabled = true;
+  button.textContent = "Checking...";
+  status.textContent = "";
+  try {
+    const response = await api("/api/exam/attempts", { method: "POST", body: { questionId: examPracticeState.question.id, answer, confidence: formData.get("confidence"), originalAttemptId: examPracticeState.originalAttemptId, responseTimeMs: Math.round(performance.now() - examPracticeState.startedAt) } });
+    examPracticeState.originalAttemptId ||= response.attemptId;
+    examPracticeState.result = response;
+    renderExamPracticeQuestion();
+    trackEvent("exam_question_submitted", { questionId: examPracticeState.question.id, mark: response.result.proposedMark, maximum: response.result.maximumMark });
+  } catch (error) {
+    status.textContent = error.message;
+    status.className = "status-message error";
+    button.disabled = false;
+    button.textContent = examPracticeState.originalAttemptId ? "Submit improved answer" : "Check against rubric";
+  }
+}
+
+function handleExamPracticeClick(event) {
+  if (event.target.closest("[data-exam-auth]")) return openAuthModal("signup");
+  if (event.target.closest("[data-exam-upgrade]")) return openPlansModal();
+  if (event.target.closest("[data-lab-retry]")) return loadCsLabs();
+  if (event.target.closest("[data-lab-picker]")) return renderCsLabPicker();
+  const labChoice = event.target.closest("[data-lab-id]");
+  if (labChoice && csLabState) {
+    csLabState.current = csLabState.labs.find((labItem) => labItem.id === labChoice.dataset.labId) || csLabState.current;
+    csLabState.result = null;
+    csLabState.startedAt = performance.now();
+    renderCsLab();
+    return;
+  }
+  if (event.target.closest("[data-lab-again]") && csLabState) {
+    if (csLabState.result?.assessment?.correct) return renderCsLabPicker();
+    csLabState.result = null;
+    csLabState.startedAt = performance.now();
+    renderCsLab();
+    return;
+  }
+  if (event.target.closest("[data-mock-retry], [data-mock-new]")) return loadMiniMock();
+  const navigator = event.target.closest("[data-mock-question]");
+  if (navigator && miniMockState) {
+    miniMockState.currentIndex = Number(navigator.dataset.mockQuestion);
+    renderMiniMock();
+    return;
+  }
+  if (event.target.closest("[data-mock-previous]") && miniMockState) {
+    miniMockState.currentIndex = Math.max(0, miniMockState.currentIndex - 1);
+    renderMiniMock();
+    return;
+  }
+  if (event.target.closest("[data-mock-next]") && miniMockState) {
+    miniMockState.currentIndex = Math.min(miniMockState.questions.length - 1, miniMockState.currentIndex + 1);
+    renderMiniMock();
+    return;
+  }
+  if (event.target.closest("[data-mock-flag]") && miniMockState) {
+    const questionId = miniMockState.questions[miniMockState.currentIndex].id;
+    if (miniMockState.flags.has(questionId)) miniMockState.flags.delete(questionId);
+    else miniMockState.flags.add(questionId);
+    renderMiniMock();
+    return;
+  }
+  if (event.target.closest("[data-mock-submit]")) return submitMiniMock(false);
+  const reviewTopic = event.target.closest("[data-mock-review-topic]");
+  if (reviewTopic) {
+    activeRevisionTopicId = reviewTopic.dataset.topicId;
+    startRevisionSession(activeRevisionTopicId);
+    setAppSection("revise");
+    return;
+  }
+  if (event.target.closest("[data-exam-retry], [data-exam-next]")) return loadExamPracticeQuestion();
+  if (event.target.closest("[data-exam-improve]") && examPracticeState) {
+    examPracticeState.result = null;
+    examPracticeState.startedAt = performance.now();
+    renderExamPracticeQuestion();
+    document.querySelector("#exam-answer")?.focus();
+    trackEvent("exam_answer_improvement_started", { questionId: examPracticeState.question.id });
+  }
+}
+
+async function loadMiniMock() {
+  clearInterval(miniMockTimer);
+  if (isGuestMode || !currentUser) {
+    elements.examPracticePanel.innerHTML = `<div class="exam-empty-state exam-auth-state"><strong>Mini mocks save formal learning evidence</strong><p>Log in to build a timed paper from your available OCR question bank.</p><button type="button" data-exam-auth>Create account</button></div>`;
+    return;
+  }
+  elements.examPracticePanel.innerHTML = `<div class="exam-empty-state"><strong>Building your paper...</strong><p>Selecting a balanced set of original Neat Notes questions.</p></div>`;
+  try {
+    const response = await api("/api/exam/questions");
+    if (response.questions.length < 3) {
+      elements.examPracticePanel.innerHTML = `<div class="exam-empty-state exam-locked-state"><span class="pro-badge">Pro</span><strong>Mixed-topic mini mocks use the full question bank</strong><p>Your free deck still includes the complete single-question feedback and improvement loop. Pro unlocks enough topics to build a balanced paper.</p><button type="button" data-exam-upgrade>View Pro</button></div>`;
+      miniMockState = null;
+      return;
+    }
+    const questions = shuffleArray([...response.questions]).slice(0, 5);
+    miniMockState = {
+      id: createLocalId("mock"), questions, currentIndex: 0, answers: {}, confidence: {}, flags: new Set(),
+      startedAt: Date.now(), durationSeconds: questions.reduce((sum, item) => sum + item.expectedMinutes * 60, 0),
+      submitted: false, results: [],
+    };
+    renderMiniMock();
+    miniMockTimer = window.setInterval(updateMiniMockTimer, 1000);
+    trackEvent("mini_mock_started", { questions: questions.length });
+  } catch (error) {
+    elements.examPracticePanel.innerHTML = `<div class="exam-empty-state error-state"><strong>Mini mock could not load</strong><p>${escapeHtml(error.message)}</p><button type="button" data-mock-retry>Try again</button></div>`;
+  }
+}
+
+function shuffleArray(items) {
+  for (let index = items.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
+  }
+  return items;
+}
+
+function renderMiniMock() {
+  const state = miniMockState;
+  if (!state) return;
+  if (state.submitted) return renderMiniMockResults();
+  const question = state.questions[state.currentIndex];
+  const answer = state.answers[question.id] || "";
+  const confidence = state.confidence[question.id] || "";
+  elements.examPracticePanel.innerHTML = `<article class="mini-mock-shell">
+    <header class="mini-mock-head"><div><p class="eyebrow">Original mixed-topic paper</p><h3>Component 01 mini mock</h3></div><div class="mini-mock-clock" aria-label="Time remaining"><span>Time remaining</span><strong id="mini-mock-time">${formatMockTime(getMiniMockSecondsRemaining())}</strong></div></header>
+    <nav class="mini-mock-navigator" aria-label="Question navigator">${state.questions.map((item, index) => `<button class="${index === state.currentIndex ? "active" : ""} ${state.answers[item.id]?.trim() ? "answered" : ""} ${state.flags.has(item.id) ? "flagged" : ""}" type="button" data-mock-question="${index}" aria-label="Question ${index + 1}${state.answers[item.id]?.trim() ? ", answered" : ", unanswered"}${state.flags.has(item.id) ? ", flagged" : ""}">${index + 1}</button>`).join("")}</nav>
+    <section class="mini-mock-question"><div class="exam-question-meta"><span>Question ${state.currentIndex + 1} of ${state.questions.length}</span><span>${question.topicCode}</span><span>${question.marks} marks</span></div><p class="exam-command-label">${escapeHtml(question.commandWord)}</p><h3>${escapeHtml(question.prompt)}</h3><label for="mini-mock-answer">Your answer</label><textarea id="mini-mock-answer" data-mock-answer data-question-id="${escapeHtml(question.id)}" rows="8" maxlength="4000">${escapeHtml(answer)}</textarea><label class="mini-mock-confidence" for="mini-mock-confidence">Confidence<select id="mini-mock-confidence" data-mock-confidence data-question-id="${escapeHtml(question.id)}"><option value="" ${confidence ? "" : "selected"}>Prefer not to say</option><option value="low" ${confidence === "low" ? "selected" : ""}>Low</option><option value="medium" ${confidence === "medium" ? "selected" : ""}>Medium</option><option value="high" ${confidence === "high" ? "selected" : ""}>High</option></select></label></section>
+    <footer class="mini-mock-actions"><button type="button" data-mock-flag>${state.flags.has(question.id) ? "Remove flag" : "Flag question"}</button><div><button type="button" data-mock-previous ${state.currentIndex === 0 ? "disabled" : ""}>Previous</button><button type="button" data-mock-next ${state.currentIndex === state.questions.length - 1 ? "disabled" : ""}>Next</button><button class="primary-button" type="button" data-mock-submit>Submit paper</button></div></footer>
+    <p class="status-message" data-mock-status role="status" aria-live="polite"></p>
+  </article>`;
+}
+
+function handleMiniMockInput(event) {
+  if (!miniMockState || miniMockState.submitted) return;
+  const answer = event.target.closest("[data-mock-answer]");
+  if (answer) miniMockState.answers[answer.dataset.questionId] = answer.value;
+  const confidence = event.target.closest("[data-mock-confidence]");
+  if (confidence) miniMockState.confidence[confidence.dataset.questionId] = confidence.value;
+}
+
+function updateMiniMockTimer() {
+  const time = document.querySelector("#mini-mock-time");
+  if (time) time.textContent = formatMockTime(getMiniMockSecondsRemaining());
+  if (getMiniMockSecondsRemaining() <= 0 && miniMockState && !miniMockState.submitted) submitMiniMock(true);
+}
+
+function getMiniMockSecondsRemaining() {
+  if (!miniMockState) return 0;
+  return Math.max(0, miniMockState.durationSeconds - Math.floor((Date.now() - miniMockState.startedAt) / 1000));
+}
+
+function formatMockTime(seconds) {
+  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+async function submitMiniMock(automatic = false) {
+  if (!miniMockState || miniMockState.submitted) return;
+  const unanswered = miniMockState.questions.filter((item) => !miniMockState.answers[item.id]?.trim()).length;
+  if (!automatic && !window.confirm(`Submit this paper? ${unanswered ? `${unanswered} question${unanswered === 1 ? " is" : "s are"} unanswered.` : "Every question has an answer."}`)) return;
+  clearInterval(miniMockTimer);
+  const status = elements.examPracticePanel.querySelector("[data-mock-status]");
+  if (status) status.textContent = "Submitting answers and building your feedback...";
+  const results = [];
+  for (const question of miniMockState.questions) {
+    const answer = miniMockState.answers[question.id]?.trim();
+    if (!answer) {
+      results.push({ question, skipped: true, result: { proposedMark: 0, maximumMark: question.marks, missing: [], awarded: [] } });
+      continue;
+    }
+    try {
+      const response = await api("/api/exam/attempts", { method: "POST", body: { questionId: question.id, answer, confidence: miniMockState.confidence[question.id], responseTimeMs: null } });
+      results.push({ question, ...response });
+    } catch (error) {
+      results.push({ question, error: error.message, result: { proposedMark: 0, maximumMark: question.marks, missing: [], awarded: [] } });
+    }
+  }
+  miniMockState.results = results;
+  miniMockState.submitted = true;
+  renderMiniMockResults();
+  trackEvent("mini_mock_completed", { answered: miniMockState.questions.length - unanswered, total: miniMockState.questions.length });
+}
+
+function renderMiniMockResults() {
+  const results = miniMockState.results;
+  const scored = results.reduce((sum, item) => sum + item.result.proposedMark, 0);
+  const available = results.reduce((sum, item) => sum + item.result.maximumMark, 0);
+  const percent = available ? Math.round((scored / available) * 100) : 0;
+  const weakest = [...results].sort((a, b) => (a.result.proposedMark / a.result.maximumMark) - (b.result.proposedMark / b.result.maximumMark))[0];
+  elements.examPracticePanel.innerHTML = `<article class="mini-mock-results"><header><div><p class="eyebrow">Mini mock complete</p><h3>${scored} / ${available} suggested marks</h3><p>${percent}% against the Neat Notes rubrics. This is not a predicted grade.</p></div><strong>${percent}%</strong></header><div class="mini-mock-breakdown">${results.map((item, index) => `<article><span>Q${index + 1} · ${escapeHtml(item.question.topicCode)}</span><strong>${item.result.proposedMark} / ${item.result.maximumMark}</strong><p>${item.skipped ? "Unanswered" : item.error ? "Submission error" : item.result.proposedMark === item.result.maximumMark ? "Rubric complete" : "Review missing points"}</p></article>`).join("")}</div><section class="mini-mock-next-step"><div><span>Recommended next</span><strong>Review ${escapeHtml(weakest.question.topicCode)} ${escapeHtml(weakest.question.topicTitle)}</strong><p>Your lowest rubric coverage came from this question. It has been added to the evidence and mistake-repair loop where applicable.</p></div><button class="primary-button" type="button" data-mock-review-topic data-topic-id="${escapeHtml(weakest.question.topicId)}">Revise this topic</button></section><div class="exam-feedback-actions"><button type="button" data-mock-new>Build another mini mock</button></div></article>`;
+}
+
+async function loadCsLabs(showPicker = false) {
+  clearInterval(miniMockTimer);
+  if (isGuestMode || !currentUser) {
+    elements.examPracticePanel.innerHTML = `<div class="exam-empty-state exam-auth-state"><strong>Interactive practice builds mastery evidence</strong><p>Create an account to use a Computer Science lab from your chosen free deck.</p><button type="button" data-exam-auth>Create account</button></div>`;
+    return;
+  }
+  try {
+    const response = await api("/api/labs");
+    if (!response.labs.length) {
+      elements.examPracticePanel.innerHTML = `<div class="exam-empty-state"><strong>No lab is published for your chosen free topic yet</strong><p>Quick Practice and Exam Practice remain available. Pro unlocks ${response.lockedCount} interactive labs across CPU tracing, Boolean logic, algorithms, data structures, SQL, normalisation, pseudocode and networks.</p><button type="button" data-exam-upgrade>View Pro</button></div>`;
+      csLabState = null;
+      return;
+    }
+    csLabState = { labs: response.labs, current: csLabState?.current || response.labs[0], result: null, startedAt: performance.now() };
+    if (showPicker || response.labs.length > 1 && !csLabState.current) renderCsLabPicker();
+    else renderCsLab();
+  } catch (error) {
+    elements.examPracticePanel.innerHTML = `<div class="exam-empty-state error-state"><strong>CS Labs could not load</strong><p>${escapeHtml(error.message)}</p><button type="button" data-lab-retry>Try again</button></div>`;
+  }
+}
+
+function renderCsLabPicker() {
+  if (!csLabState) return;
+  elements.examPracticePanel.innerHTML = `<section class="cs-lab-picker"><header><p class="eyebrow">Choose a lab</p><h3>Practise Computer Science by doing</h3><p>Each task requires a prediction or construction before feedback is revealed.</p></header><div>${csLabState.labs.map((labItem) => `<button type="button" data-lab-id="${escapeHtml(labItem.id)}"><span>${escapeHtml(getQuizTopicById(labItem.topicId)?.code || "OCR")}</span><strong>${escapeHtml(labItem.title)}</strong><small>${escapeHtml(labItem.responseType === "sql" ? "Write and test a query" : "Interactive prediction")}</small></button>`).join("")}</div></section>`;
+}
+
+function renderCsLab() {
+  const state = csLabState;
+  const labItem = state?.current;
+  if (!labItem) return;
+  if (state.result) {
+    const feedback = state.result.assessment;
+    elements.examPracticePanel.innerHTML = `<article class="cs-lab-feedback ${feedback.correct ? "correct" : "incorrect"}"><div class="cs-lab-feedback-mark"><span>${feedback.correct ? "Correct" : "Not yet"}</span><strong>${feedback.correct ? "✓" : "→"}</strong></div><div><p class="eyebrow">${escapeHtml(labItem.title)}</p><h3>${escapeHtml(feedback.explanation)}</h3>${feedback.correct ? "" : `<p><strong>Expected:</strong> ${escapeHtml(feedback.expectedAnswer)}</p>`}<div class="exam-feedback-actions"><button class="primary-button" type="button" data-lab-again>${feedback.correct ? "Try another lab" : "Try this again"}</button><button type="button" data-lab-picker>View all labs</button></div></div></article>`;
+    return;
+  }
+  const responseControl = labItem.responseType === "sql"
+    ? `<label for="cs-lab-response">SQL query</label><textarea id="cs-lab-response" name="response" rows="5" spellcheck="false" required placeholder="SELECT ..."></textarea><p class="cs-lab-schema">Available table: Student(Name, Score)</p>`
+    : `<fieldset><legend>Choose your prediction</legend>${labItem.options.map((option, index) => `<label><input type="radio" name="response" value="${escapeHtml(option)}" required><span>${String.fromCharCode(65 + index)}</span><strong>${escapeHtml(option)}</strong></label>`).join("")}</fieldset>`;
+  elements.examPracticePanel.innerHTML = `<article class="cs-lab-shell"><header><div><p class="eyebrow">Interactive practice</p><h3>${escapeHtml(labItem.title)}</h3></div><span>${escapeHtml(getQuizTopicById(labItem.topicId)?.code || "OCR H446")}</span></header><form data-lab-form><h4>${escapeHtml(labItem.prompt)}</h4>${responseControl}<button class="primary-button" type="submit">Check prediction</button><p class="status-message" data-lab-status role="status" aria-live="polite"></p></form></article>`;
+}
+
+async function submitCsLab(event) {
+  const form = event.target.closest("[data-lab-form]");
+  if (!form || !csLabState?.current) return;
+  event.preventDefault();
+  const response = String(new FormData(form).get("response") || "").trim();
+  const button = form.querySelector("button[type='submit']");
+  const status = form.querySelector("[data-lab-status]");
+  button.disabled = true;
+  button.textContent = "Checking...";
+  try {
+    csLabState.result = await api("/api/labs/attempts", { method: "POST", body: { labId: csLabState.current.id, response, responseTimeMs: Math.round(performance.now() - csLabState.startedAt) } });
+    renderCsLab();
+    trackEvent("cs_lab_completed", { labId: csLabState.current.id, correct: csLabState.result.assessment.correct });
+  } catch (error) {
+    status.textContent = error.message;
+    status.className = "status-message error";
+    button.disabled = false;
+    button.textContent = "Check prediction";
+  }
 }
 
 async function startNeatQuiz(topicId) {
@@ -6196,7 +7541,7 @@ function renderGeneratedStudyAction(action, pack) {
     <div class="generated-study-panel">${view.html}</div>`;
 }
 
-function renderGeneratedStudyPack(pack, title = "Study pack") {
+function renderGeneratedStudyPack(pack, title = "Study pack", provenance = null) {
   revealStudyOutput();
   elements.insightsPanel.hidden = false;
   elements.insightsPanel.innerHTML = `
@@ -6205,6 +7550,11 @@ function renderGeneratedStudyPack(pack, title = "Study pack") {
       <span>${pack.flashcards.length} cards · ${pack.quiz.length} checks</span>
     </div>
     <div class="generated-study-panel">
+      ${provenance ? `<aside class="generated-provenance" aria-label="Generated resource provenance">
+        <span>Generated resource · Review required</span>
+        <p>${escapeHtml(provenance.notice || "Generated from your note. Review accuracy before revising from it.")}</p>
+        <small>Source note saved ${escapeHtml(formatDate(provenance.sourceNoteUpdatedAt || provenance.generatedAt))} · ${escapeHtml(provenance.method || "Neat Notes generator")}</small>
+      </aside>` : ""}
       <article><strong>Summary</strong><p>${escapeHtml(pack.summary)}</p></article>
       <article><strong>Key terms</strong><div class="key-term-cloud">${pack.keyTerms.map((term) => `<span>${escapeHtml(term)}</span>`).join("")}</div></article>
       <article><strong>Flashcards</strong><div class="flashcard-list">${pack.flashcards
@@ -6333,7 +7683,7 @@ async function showStudyPack() {
     return;
   }
 
-  renderGeneratedStudyPack(pack, "Synced study pack");
+  renderGeneratedStudyPack(pack, "Synced study pack", response.provenance);
   trackEvent("study_pack_generated", { source, noteQuality: pack.quality.score });
 }
 
@@ -6569,7 +7919,28 @@ function showWorkspaceMessage(message, type = "") {
   elements.workspaceMessage.className = `status-message ${type}`;
 }
 
-function downloadWorkspaceData() {
+async function downloadWorkspaceData() {
+  if (currentUser && !isGuestMode) {
+    elements.downloadDataButton.disabled = true;
+    try {
+      const response = await fetch("/api/account/export", { credentials: "same-origin", cache: "no-store" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || "The account export could not be prepared.");
+      }
+      const blob = await response.blob();
+      downloadBlob(blob, `neat-notes-account-export-${new Date().toISOString().slice(0, 10)}.json`);
+      elements.settingsMessage.textContent = "Account export downloaded.";
+      elements.settingsMessage.className = "status-message success";
+    } catch (error) {
+      elements.settingsMessage.textContent = error.message;
+      elements.settingsMessage.className = "status-message error";
+    } finally {
+      elements.downloadDataButton.disabled = false;
+    }
+    return;
+  }
+
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
   const payload = {
     exportedAt: new Date().toISOString(),
@@ -6579,14 +7950,18 @@ function downloadWorkspaceData() {
     notes,
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  downloadBlob(blob, `${slugify(activeWorkspace?.name || "neat-notes-workspace")}.json`);
+  elements.settingsMessage.textContent = "Workspace export prepared.";
+  elements.settingsMessage.className = "status-message success";
+}
+
+function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `${slugify(activeWorkspace?.name || "neat-notes-workspace")}.json`;
+  anchor.download = filename;
   anchor.click();
-  URL.revokeObjectURL(url);
-  elements.settingsMessage.textContent = "Workspace export prepared.";
-  elements.settingsMessage.className = "status-message success";
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function resetLocalPreferences() {

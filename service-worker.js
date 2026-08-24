@@ -1,12 +1,12 @@
-const CACHE_NAME = "neat-notes-shell-20260824";
+const CACHE_NAME = "neat-notes-shell-20260824-r9";
 const APP_SHELL = [
   "/",
-  "/styles.css?v=20260711-design-reset",
+  "/styles-relaunch.css?v=20260824-r6",
   "/theme-init.js?v=20260824-relaunch",
   "/learning-model.js?v=20260824-relaunch",
   "/revision-generator.js?v=20260705-production",
   "/neat-questions.js?v=20260824-relaunch",
-  "/app.js?v=20260824-relaunch",
+  "/app-relaunch.js?v=20260824-r8",
   "/favicon.svg"
 ];
 
@@ -39,6 +39,18 @@ self.addEventListener("fetch", (event) => {
           return response;
         })
         .catch(() => caches.match("/")),
+    );
+    return;
+  }
+
+  if (["script", "style"].includes(request.destination)) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+          return response;
+        })
+        .catch(() => caches.match(request)),
     );
     return;
   }

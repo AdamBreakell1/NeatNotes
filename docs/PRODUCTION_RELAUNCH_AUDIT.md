@@ -14,12 +14,20 @@ Neat Notes is a dependency-light web application: semantic HTML, a single browse
 - Stripe Checkout, Customer Portal and signed/idempotent webhook handling.
 - Contact enquiry persistence, SMTP delivery and retry queue.
 
-## Partial or staged systems
+## Completed relaunch systems
 
-- Adaptive learning is implemented for flashcard and quiz evidence; written exam marking is not yet implemented.
-- Teacher functionality exists but still shares the application shell and needs the dedicated product experience in the brief.
-- Offline support caches the application shell and preserves guest/local notes; authenticated API mutations are intentionally not queued yet.
-- Component 1 source content exists; a fully versioned specification/content CMS does not.
+- Concept-level adaptive scheduling combines flashcard, quiz, exam and lab evidence with due, fragile and misconception states.
+- Original exam questions use a transparent deterministic rubric coach with matched and missing points; the product does not claim OCR or AI marking.
+- Teacher Home, Classes, Assignments and Insights are separate role-aware views with permission-bound APIs and clean empty states.
+- The OCR H446 content model is versioned, validated in CI-style checks and exposed through an internal review queue for administrators.
+- First-run onboarding captures learner type, target, taught topics, exam dates and revision preferences.
+- Account export, deletion, password reset and session revocation are available from account settings.
+
+## Intentionally staged systems
+
+- Offline support caches only the application shell and local guest workspace; authenticated mutations are deliberately not queued.
+- A full editorial CMS, institutional SSO, teacher verification workflow and Component 02/NEA content remain future work.
+- SQLite is a single-instance pilot store, not the national-scale target architecture.
 
 ## Product and UX concerns addressed
 
@@ -31,5 +39,4 @@ The relaunch closes OAuth account pre-hijacking, stale/inactive Stripe entitleme
 
 ## Remaining architecture direction
 
-SQLite remains appropriate for the current pilot but should move to managed PostgreSQL before multi-instance scaling. The next backend layer should separate account, billing, learning, content and classroom services from `server.js`, introduce migrations, jobs, structured logs and monitored backups, while preserving the current public API contracts.
-
+SQLite remains appropriate for the current single-instance pilot but should move to managed PostgreSQL before multi-instance scaling. The next backend layer should separate account, billing, learning, content and classroom services from `server.js`, introduce versioned migrations, shared throttling, durable jobs, centralised redacted logs and monitored backups while preserving the current public API contracts.

@@ -18,7 +18,7 @@
     <link rel="icon" href="/favicon.svg?v=20260705-brand" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <script src="/theme-init.js?v=20260824-relaunch"></script>
-    <link rel="stylesheet" href="styles.css?v=20260711-design-reset" />
+    <link rel="stylesheet" href="/styles-relaunch.css?v=20260824-r6" />
   </head>
   <body>
     <a class="skip-link" href="#app-view">Skip to main content</a>
@@ -59,15 +59,15 @@
       <section id="landing-product" class="landing-hero">
         <div>
           <p class="eyebrow">OCR H446 revision workspace</p>
-          <h1>OCR A-Level Computer Science revision, notes and progress tracking in one workspace.</h1>
+          <h1>Master OCR A-Level Computer Science.</h1>
           <p>
-            Write or paste lesson notes, generate flashcards and quizzes, then track weak topics, confidence and
-            mastery across the OCR specification.
+            Turn lesson notes into active revision, then see what you know, what you are forgetting, and what to
+            practise next.
           </p>
           <div class="landing-hero-actions">
-            <button class="primary-account-button" type="button" data-landing-action="signup">Start free</button>
-            <button type="button" data-landing-action="demo">Open demo workspace</button>
-            <button type="button" data-landing-action="teacher">Explore teacher tools</button>
+            <button class="primary-account-button" type="button" data-landing-action="signup">Start revising free</button>
+            <button type="button" data-landing-action="demo">Try a revision session</button>
+            <button type="button" data-landing-action="teacher">For teachers</button>
           </div>
         </div>
         <aside class="landing-demo-card" aria-label="Demo workspace preview">
@@ -222,6 +222,8 @@
             </div>
             <p id="login-caps-warning" class="field-message warning" hidden>Caps Lock is on.</p>
 
+            <button class="auth-text-action" type="button" data-auth-recovery>Forgot password?</button>
+
             <button id="login-submit-button" class="primary-button" type="submit" aria-label="Log in to account">Log in</button>
             <p class="auth-trust-note">Free to start. Your notes stay in your workspace.</p>
           </form>
@@ -252,7 +254,25 @@
             <p class="auth-trust-note">Free to start. Your notes stay in your workspace.</p>
           </form>
 
-          <div class="auth-provider-list">
+          <form id="password-recovery-form" class="auth-form" hidden>
+            <p class="auth-form-intro">Enter the verified email on your account. Reset links expire after 30 minutes.</p>
+            <label for="recovery-email">Email</label>
+            <input id="recovery-email" name="recovery-email" type="email" autocomplete="email" required />
+            <button id="recovery-submit-button" class="primary-button" type="submit">Send reset link</button>
+            <button class="auth-text-action" type="button" data-auth-back-login>Back to log in</button>
+          </form>
+
+          <form id="password-reset-form" class="auth-form" hidden>
+            <p class="auth-form-intro">Choose a new password. Completing this will sign out every existing session.</p>
+            <label for="reset-password">New password</label>
+            <div class="password-field">
+              <input id="reset-password" name="reset-password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required />
+              <button class="password-toggle" type="button" data-toggle-password="reset-password" aria-label="Show password">Show</button>
+            </div>
+            <button id="reset-password-submit-button" class="primary-button" type="submit">Update password</button>
+          </form>
+
+          <div id="auth-provider-list" class="auth-provider-list">
             <a class="google-button" href="/api/auth/google">Continue with Google</a>
             <!-- Future provider hook: add a Microsoft sign-in button here once OAuth support exists. -->
           </div>
@@ -281,6 +301,9 @@
           <button id="mobile-notes-button" class="mobile-notes-button" type="button" aria-controls="notes-sidebar" aria-expanded="false">Browse notes</button>
         </div>
         <div class="topbar-utilities">
+          <button id="global-search-button" class="topbar-utility-button topbar-search-button" type="button" aria-haspopup="dialog">
+            <span>Search</span><kbd aria-hidden="true">⌘K</kbd>
+          </button>
           <button class="theme-toggle topbar-theme-toggle" id="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">
             <span class="theme-toggle-track" aria-hidden="true">
               <span class="theme-toggle-knob"></span>
@@ -551,7 +574,7 @@
       </section>
 
       <section id="revision-view" class="revision-view" aria-label="Student revision" hidden>
-        <div class="learning-mode-bar" aria-label="Student and teacher mode">
+        <div class="learning-mode-bar" aria-label="Student and teacher mode" hidden>
           <span>Viewing as:</span>
           <div id="learning-mode-switch" class="learning-mode-switch" role="tablist" aria-label="Learning mode">
             <button class="active" type="button" role="tab" aria-selected="true" data-learning-mode="student">Student</button>
@@ -593,6 +616,20 @@
 
         <section id="student-dashboard-panel" class="student-dashboard-panel student-revision-section" aria-label="Student revision dashboard"></section>
 
+        <section id="practice-mode-bar" class="practice-mode-bar student-revision-section" aria-label="Practice modes">
+          <div>
+            <p class="eyebrow">Practice</p>
+            <h2>Apply what you know</h2>
+            <p>Use fast retrieval for fluency or a written response for deeper exam evidence.</p>
+          </div>
+          <div class="practice-mode-tabs" role="tablist" aria-label="Choose practice mode">
+            <button class="active" type="button" role="tab" aria-selected="true" data-practice-mode="quick">Quick Practice</button>
+            <button type="button" role="tab" aria-selected="false" data-practice-mode="exam">Exam Practice</button>
+            <button type="button" role="tab" aria-selected="false" data-practice-mode="mock">Mini mock</button>
+            <button type="button" role="tab" aria-selected="false" data-practice-mode="labs">CS Labs</button>
+          </div>
+        </section>
+
         <section id="quick-practice-section" class="neat-questions-section student-revision-section" aria-labelledby="neat-questions-title">
           <div class="neat-questions-head">
             <div class="neat-questions-brand">
@@ -614,9 +651,27 @@
               <p class="eyebrow">Topic packs</p>
               <h3>Choose a focused OCR revision pack</h3>
             </div>
-            <p>Each pack combines self-marking quizzes, flashcards, Forms references and progress tracking.</p>
+            <p>Each pack combines self-marking questions, flashcards, instant feedback and progress tracking.</p>
           </div>
           <div id="neat-questions-grid" class="neat-questions-grid"></div>
+        </section>
+
+        <section id="exam-practice-section" class="exam-practice-section student-revision-section" aria-labelledby="exam-practice-title" hidden>
+          <header class="exam-practice-head">
+            <div>
+              <p class="eyebrow">Original Neat Notes questions</p>
+              <h3 id="exam-practice-title">Exam Answer Coach</h3>
+              <p>Write an answer, receive point-by-point rubric feedback, then improve the same response.</p>
+            </div>
+            <button id="exam-load-question-button" class="primary-button" type="button">Start exam practice</button>
+          </header>
+          <p class="exam-marking-notice">Suggested marks use a transparent Neat Notes rubric. They are not OCR examiner or AI marking.</p>
+          <div id="exam-practice-panel" class="exam-practice-panel" aria-live="polite">
+            <div class="exam-empty-state">
+              <strong>Practise the topic you are currently revising</strong>
+              <p>One focused written question will appear here, with marks, timing guidance and an improve-your-answer loop.</p>
+            </div>
+          </div>
         </section>
 
         <section class="revision-stage student-revision-section" aria-label="Current flashcard deck">
@@ -627,6 +682,7 @@
               <p id="revision-topic-summary">CPU components, registers and the fetch-decode-execute cycle.</p>
             </div>
             <div class="revision-actions">
+              <button id="revision-focus-button" type="button" aria-pressed="false">Focus mode</button>
               <button id="shuffle-revision-button" type="button">Shuffle</button>
               <button id="reset-revision-button" type="button">Reset progress</button>
             </div>
@@ -840,6 +896,87 @@
       </section>
     </main>
 
+    <div id="onboarding-modal" class="onboarding-modal" hidden>
+      <div class="onboarding-backdrop"></div>
+      <section class="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+        <header class="onboarding-head">
+          <div>
+            <p class="eyebrow">Set up Neat Notes</p>
+            <h2 id="onboarding-title">Make revision fit your course</h2>
+          </div>
+          <span id="onboarding-progress-label">Step 1 of 6</span>
+        </header>
+        <div class="onboarding-progress" aria-hidden="true"><span id="onboarding-progress-bar"></span></div>
+        <form id="onboarding-form" novalidate>
+          <section class="onboarding-step" data-onboarding-step="1">
+            <p class="eyebrow">About your course</p>
+            <h3>Where are you in your A-Level?</h3>
+            <p>This helps Neat Notes balance new learning with revision. You can change it later.</p>
+            <div class="choice-card-grid" role="radiogroup" aria-label="Learner stage">
+              <label><input type="radio" name="learner-type" value="year_12" required /><span><strong>Year 12</strong><small>Building course knowledge</small></span></label>
+              <label><input type="radio" name="learner-type" value="year_13" /><span><strong>Year 13</strong><small>Consolidating and preparing for exams</small></span></label>
+              <label><input type="radio" name="learner-type" value="independent" /><span><strong>Independent learner</strong><small>Studying outside a school timetable</small></span></label>
+            </div>
+          </section>
+          <section class="onboarding-step" data-onboarding-step="2" hidden>
+            <p class="eyebrow">Qualification</p>
+            <h3>OCR A-Level Computer Science H446</h3>
+            <p>OCR H446 is currently the supported qualification. The content map keeps each activity tied to a stable specification concept.</p>
+            <div class="qualification-confirmation"><span>OCR</span><div><strong>H446 A-Level Computer Science</strong><small>Components 01, 02 and Programming Project structure</small></div></div>
+          </section>
+          <section class="onboarding-step" data-onboarding-step="3" hidden>
+            <p class="eyebrow">Your target</p>
+            <h3>What outcome are you working towards?</h3>
+            <p>This is motivational context, not a predicted grade.</p>
+            <label for="onboarding-target-grade">Target grade <span>Optional</span></label>
+            <select id="onboarding-target-grade" name="target-grade">
+              <option value="">No grade selected</option><option>A*</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option>
+            </select>
+            <label for="onboarding-personal-target">Personal target <span>Optional</span></label>
+            <textarea id="onboarding-personal-target" name="personal-target" maxlength="240" placeholder="For example: explain algorithms clearly in longer answers."></textarea>
+            <div class="onboarding-date-grid">
+              <label for="onboarding-component-1-date">Component 01 exam <span>Optional</span>
+                <input id="onboarding-component-1-date" name="component-1-date" type="date" />
+              </label>
+              <label for="onboarding-component-2-date">Component 02 exam <span>Optional</span>
+                <input id="onboarding-component-2-date" name="component-2-date" type="date" />
+              </label>
+            </div>
+          </section>
+          <section class="onboarding-step" data-onboarding-step="4" hidden>
+            <p class="eyebrow">Course progress</p>
+            <h3>Which topics have you already been taught?</h3>
+            <p>Select any that apply. Leaving this blank is fine; Neat Notes will begin with the first topic.</p>
+            <div id="onboarding-topic-grid" class="onboarding-topic-grid"></div>
+          </section>
+          <section class="onboarding-step" data-onboarding-step="5" hidden>
+            <p class="eyebrow">Revision goal</p>
+            <h3>What should Neat Notes help with first?</h3>
+            <div class="choice-card-grid choice-card-grid-two" role="radiogroup" aria-label="Revision goal">
+              <label><input type="radio" name="revision-goal" value="keep_up" required /><span><strong>Keep up with lessons</strong><small>Review recently taught knowledge</small></span></label>
+              <label><input type="radio" name="revision-goal" value="weak_topics" /><span><strong>Improve weak topics</strong><small>Diagnose and repair gaps</small></span></label>
+              <label><input type="radio" name="revision-goal" value="mocks" /><span><strong>Prepare for mocks</strong><small>Mix retrieval and exam practice</small></span></label>
+              <label><input type="radio" name="revision-goal" value="final_exams" /><span><strong>Prepare for final exams</strong><small>Build coverage and exam readiness</small></span></label>
+            </div>
+          </section>
+          <section class="onboarding-step onboarding-finish" data-onboarding-step="6" hidden>
+            <p class="eyebrow">Ready</p>
+            <h3>Your first useful action is waiting</h3>
+            <p>Run a short diagnostic to give the adaptive scheduler better evidence, or explore the workspace and start when you are ready.</p>
+            <div class="onboarding-finish-grid">
+              <button class="onboarding-primary" type="submit" name="finish-action" value="diagnostic"><strong>Run a 5-minute diagnostic</strong><span>Recommended · about five questions</span></button>
+              <button type="submit" name="finish-action" value="explore"><strong>Start exploring</strong><span>Go to Today’s Revision</span></button>
+            </div>
+          </section>
+          <p id="onboarding-message" class="status-message" role="status" aria-live="polite"></p>
+          <footer class="onboarding-actions">
+            <button id="onboarding-back" type="button">Back</button>
+            <button id="onboarding-next" class="primary-button" type="button">Continue</button>
+          </footer>
+        </form>
+      </section>
+    </div>
+
     <div id="pricing-modal" class="pricing-modal" hidden>
       <div class="pricing-backdrop" data-close-pricing></div>
       <section class="pricing-dialog" aria-labelledby="pricing-title" aria-modal="true" role="dialog">
@@ -1000,6 +1137,7 @@
           <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
             <button type="button" role="tab" aria-selected="false" aria-controls="settings-account-panel" data-settings-tab="account">Account</button>
             <button class="active" type="button" role="tab" aria-selected="true" aria-controls="settings-general-panel" data-settings-tab="general">General</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="settings-revision-panel" data-settings-tab="revision">Revision</button>
             <button type="button" role="tab" aria-selected="false" aria-controls="settings-editor-panel" data-settings-tab="editor">Editor</button>
             <button type="button" role="tab" aria-selected="false" aria-controls="settings-data-panel" data-settings-tab="data">Data</button>
           </nav>
@@ -1018,6 +1156,13 @@
             <div class="settings-row avatar-settings-row">
               <label>Profile image</label>
               <div id="avatar-choice-group" class="avatar-choice-grid" role="radiogroup" aria-label="Choose profile image"></div>
+            </div>
+            <div id="account-session-tools" class="account-security-tools" hidden>
+              <div>
+                <strong>Account security</strong>
+                <span id="account-session-summary">Review active sessions or sign out other devices.</span>
+              </div>
+              <button id="revoke-other-sessions-button" type="button">Sign out other devices</button>
             </div>
           </section>
 
@@ -1041,6 +1186,37 @@
             </div>
           </section>
 
+          <section id="settings-revision-panel" class="settings-panel" role="tabpanel" data-settings-panel="revision" hidden>
+            <h3>Revision profile</h3>
+            <p>Keep recommendations aligned with your stage, target and exam timetable.</p>
+            <form id="settings-revision-form" class="settings-revision-form">
+              <div class="settings-field-grid">
+                <label for="settings-learner-type">Stage
+                  <select id="settings-learner-type" name="learnerType"><option value="year_12">Year 12</option><option value="year_13">Year 13</option><option value="independent">Independent learner</option></select>
+                </label>
+                <label for="settings-target-grade">Target grade
+                  <select id="settings-target-grade" name="targetGrade"><option value="">No grade selected</option><option>A*</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option></select>
+                </label>
+                <label for="settings-revision-goal">Primary goal
+                  <select id="settings-revision-goal" name="revisionGoal"><option value="keep_up">Keep up with lessons</option><option value="weak_topics">Improve weak topics</option><option value="mocks">Prepare for mocks</option><option value="final_exams">Prepare for final exams</option></select>
+                </label>
+              </div>
+              <div class="settings-field-grid">
+                <label for="settings-component-1-date">Component 01 exam
+                  <input id="settings-component-1-date" name="component1" type="date" />
+                </label>
+                <label for="settings-component-2-date">Component 02 exam
+                  <input id="settings-component-2-date" name="component2" type="date" />
+                </label>
+              </div>
+              <label for="settings-personal-target">Personal target
+                <textarea id="settings-personal-target" name="personalTarget" maxlength="240" placeholder="What would you like to improve?"></textarea>
+              </label>
+              <button type="submit">Save revision profile</button>
+              <p id="settings-revision-message" class="status-message" role="status"></p>
+            </form>
+          </section>
+
           <section id="settings-editor-panel" class="settings-panel" role="tabpanel" data-settings-panel="editor" hidden>
             <h3>Writing</h3>
             <p>Tune the editor for longer revision sessions or dense classroom work.</p>
@@ -1059,11 +1235,22 @@
           </section>
 
           <section id="settings-data-panel" class="settings-panel" role="tabpanel" data-settings-panel="data" hidden>
-            <h3>Local data tools</h3>
-            <p>Export the current workspace for review or clear local preferences on this device.</p>
+            <h3>Data and account controls</h3>
+            <p>Download your data, clear local preferences, or permanently close your Neat Notes account.</p>
+            <label class="privacy-consent-row" for="usage-analytics-consent">
+              <span><strong>Help improve Neat Notes</strong><small>Share privacy-safe feature usage with BreakellSystems. Note text, answers, names, and email addresses are never included.</small></span>
+              <input id="usage-analytics-consent" type="checkbox" />
+            </label>
             <div class="settings-actions">
               <button id="download-data-button" type="button">Download workspace JSON</button>
               <button id="reset-preferences-button" class="secondary-danger" type="button">Reset local preferences</button>
+            </div>
+            <div id="account-danger-zone" class="account-danger-zone" hidden>
+              <div>
+                <strong>Delete account</strong>
+                <span>Permanent. Active subscriptions must be cancelled first.</span>
+              </div>
+              <button id="delete-account-button" class="secondary-danger" type="button">Delete account</button>
             </div>
             <p id="settings-message" class="status-message"></p>
           </section>
@@ -1081,6 +1268,35 @@
       </section>
     </div>
 
+    <div id="global-search-modal" class="global-search-modal" hidden>
+      <div class="global-search-backdrop" data-close-global-search></div>
+      <section class="global-search-dialog" aria-labelledby="global-search-title" aria-modal="true" role="dialog">
+        <header class="global-search-head">
+          <div>
+            <p class="eyebrow">Find in Neat Notes</p>
+            <h2 id="global-search-title">Search topics, concepts and notes</h2>
+          </div>
+          <button class="modal-close-button" type="button" data-close-global-search aria-label="Close search">×</button>
+        </header>
+        <label class="global-search-field" for="global-search-input">
+          <span class="sr-only">Search Neat Notes</span>
+          <input id="global-search-input" type="search" autocomplete="off" placeholder="Try MAR, databases, or a note title" />
+          <kbd aria-hidden="true">Esc</kbd>
+        </label>
+        <div id="global-search-results" class="global-search-results" aria-live="polite">
+          <div class="global-search-empty">
+            <strong>Search the OCR course and your current workspace</strong>
+            <p>Use a topic code, concept, card prompt, note title or folder tag.</p>
+          </div>
+        </div>
+        <footer class="global-search-help">
+          <span><kbd>↑</kbd><kbd>↓</kbd> move</span>
+          <span><kbd>Enter</kbd> open</span>
+          <span><kbd>Space</kbd> reveal cards in Focus mode</span>
+        </footer>
+      </section>
+    </div>
+
     <footer class="site-footer" aria-label="Legal and trust links">
       <button type="button" data-legal-page="privacy">Privacy Policy</button>
       <button type="button" data-legal-page="terms">Terms of Service</button>
@@ -1091,10 +1307,11 @@
       <button type="button" data-open-pricing-footer>Pricing</button>
     </footer>
 
+    <script src="ocr-content.js?v=20260824-relaunch"></script>
     <script src="revision-generator.js?v=20260711-design-reset"></script>
     <script src="revision-topics.js?v=20260711-design-reset"></script>
     <script src="neat-questions.js?v=20260824-relaunch"></script>
     <script src="learning-model.js?v=20260824-relaunch"></script>
-    <script src="app.js?v=20260824-relaunch"></script>
+    <script src="/app-relaunch.js?v=20260824-r8"></script>
   </body>
 </html>

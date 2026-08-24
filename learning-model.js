@@ -17,6 +17,7 @@
     short_answer: 0.72,
     applied_question: 0.86,
     algorithm_trace: 0.9,
+    interactive_lab: 0.82,
     exam_response: 1,
     correction: 0.78,
   });

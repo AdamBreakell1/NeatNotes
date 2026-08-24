@@ -16,6 +16,9 @@ const {
   calculateRetrievability,
   updateMemoryState,
 } = require("./learning-model");
+const { buildContentModel, flattenContent, validateContentModel } = require("./ocr-content");
+const { QUESTION_BANK, getPublicQuestion, markAnswer, validateQuestionBank } = require("./exam-content");
+const { LABS, assessLab, getPublicLab, validateLabs } = require("./cs-labs");
 
 const app = express();
 const PORT = Number(process.env.PORT || 4173);
@@ -138,6 +141,15 @@ const PLAN_CATALOG = {
     },
   },
 };
+const PRODUCT_EVENT_NAMES = new Set([
+  "account_created", "onboarding_completed", "adaptive_session_started", "quick_practice_started",
+  "quick_practice_completed", "exam_question_started", "exam_question_submitted", "mini_mock_started",
+  "mini_mock_completed", "cs_lab_completed", "note_created", "note_revision_generated",
+  "instant_cards_generated", "study_pack_generated", "teacher_assignment_created", "teacher_assignment_prepared",
+  "pricing_opened", "demo_workspace_opened", "demo_exited_to_landing", "contact_enquiry_sent",
+  "checkout_started", "checkout_completed", "upgrade_prompt_viewed",
+]);
+const REVISION_TOPICS = loadRevisionTopicsFromAssets();
 
 const db = new DatabaseSync(DB_PATH);
 db.exec("PRAGMA foreign_keys = ON");
@@ -171,11 +183,65 @@ db.exec(`
     created_at TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    token_hash TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    expires_at TEXT NOT NULL,
+    used_at TEXT,
+    created_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     expires_at TEXT NOT NULL,
+    user_agent TEXT,
+    last_used_at TEXT,
     created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS audit_logs (
+    id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    action TEXT NOT NULL,
+    entity_type TEXT,
+    entity_id TEXT,
+    metadata TEXT,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS audit_logs_user_idx ON audit_logs(user_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS product_events (
+    id TEXT PRIMARY KEY,
+    user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    event_name TEXT NOT NULL,
+    metadata TEXT,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS product_events_name_idx ON product_events(event_name, created_at);
+
+  CREATE TABLE IF NOT EXISTS generated_resources (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    note_id TEXT REFERENCES notes(id) ON DELETE CASCADE,
+    resource_type TEXT NOT NULL,
+    source_note_updated_at TEXT,
+    provenance TEXT NOT NULL,
+    alignment_status TEXT NOT NULL DEFAULT 'needs_review',
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS generated_resources_note_idx ON generated_resources(note_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS content_reviews (
+    concept_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'unreviewed',
+    reviewer_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+    notes TEXT,
+    reviewed_at TEXT,
+    updated_at TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS workspaces (
@@ -251,6 +317,15 @@ db.exec(`
     user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     year_group TEXT,
     exam_board TEXT NOT NULL DEFAULT 'OCR A-Level',
+    learner_type TEXT,
+    target_grade TEXT,
+    personal_target TEXT,
+    taught_topic_ids TEXT NOT NULL DEFAULT '[]',
+    taught_topic_source TEXT NOT NULL DEFAULT 'self',
+    revision_goal TEXT,
+    exam_dates TEXT NOT NULL DEFAULT '{}',
+    notification_preferences TEXT NOT NULL DEFAULT '{}',
+    onboarding_completed_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -292,6 +367,7 @@ db.exec(`
     description TEXT,
     join_code TEXT NOT NULL UNIQUE,
     join_code_enabled INTEGER NOT NULL DEFAULT 1,
+    archived_at TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -378,10 +454,24 @@ db.exec(`
     deck_id TEXT REFERENCES flashcard_decks(id) ON DELETE SET NULL,
     title TEXT NOT NULL,
     instructions TEXT,
+    task_type TEXT NOT NULL DEFAULT 'topic_revision',
+    start_at TEXT,
     due_at TEXT,
+    estimated_minutes INTEGER,
+    status TEXT NOT NULL DEFAULT 'active',
     created_by TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS assignment_completions (
+    assignment_id TEXT NOT NULL REFERENCES class_assignments(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'not_started',
+    started_at TEXT,
+    completed_at TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (assignment_id, user_id)
   );
 
   CREATE TABLE IF NOT EXISTS learning_evidence (
@@ -439,12 +529,49 @@ db.exec(`
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS exam_attempts (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    class_id TEXT REFERENCES class_groups(id) ON DELETE SET NULL,
+    question_id TEXT NOT NULL,
+    topic_id TEXT NOT NULL,
+    original_attempt_id TEXT REFERENCES exam_attempts(id) ON DELETE SET NULL,
+    answer TEXT NOT NULL,
+    proposed_mark INTEGER NOT NULL,
+    maximum_mark INTEGER NOT NULL,
+    rubric_result TEXT NOT NULL,
+    confidence TEXT,
+    response_time_ms INTEGER,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS exam_attempts_user_idx ON exam_attempts(user_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS lab_attempts (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    lab_id TEXT NOT NULL,
+    topic_id TEXT NOT NULL,
+    response TEXT NOT NULL,
+    correct INTEGER NOT NULL,
+    response_time_ms INTEGER,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS lab_attempts_user_idx ON lab_attempts(user_id, created_at);
 `);
 
 migrateSchema();
 seedRevisionDecks();
+validatePublishedContent();
 
 app.set("trust proxy", 1);
+app.use((req, res, next) => {
+  req.requestId = String(req.get("x-request-id") || crypto.randomUUID()).slice(0, 100);
+  res.setHeader("x-request-id", req.requestId);
+  next();
+});
 app.use(securityHeaders);
 app.use(corsMiddleware);
 app.post("/api/billing/stripe/webhook", express.raw({ type: "application/json" }), asyncHandler(handleStripeWebhook));
@@ -526,8 +653,81 @@ app.get("/api/health", (req, res) => {
     databasePersistent: !DB_FALLBACK_ACTIVE,
     databaseFallbackActive: DB_FALLBACK_ACTIVE,
     deckCount,
+    emailConfigured: !getSmtpConfigError(),
+    googleConfigured: isGoogleConfigured(),
+    stripeConfigured: isStripeConfigured(),
+    release: String(process.env.RENDER_GIT_COMMIT || process.env.RELEASE_SHA || "development").slice(0, 12),
+    uptimeSeconds: Math.round(process.uptime()),
     timestamp: new Date().toISOString(),
   });
+});
+
+app.post("/api/events", requireUser, (req, res) => {
+  const eventName = String(req.body.name || "").trim();
+  if (!PRODUCT_EVENT_NAMES.has(eventName)) {
+    return res.status(400).json({ error: "Unsupported product event." });
+  }
+  const preferences = normalizeNotificationPreferences(parseJsonValue(getStudentProfile(req.user.id)?.notification_preferences, {}));
+  if (!preferences.usageAnalytics) return res.status(204).end();
+  const metadata = sanitizeEventMetadata(req.body.details);
+  const now = new Date().toISOString();
+  db.prepare("INSERT INTO product_events (id, user_id, event_name, metadata, created_at) VALUES (?, ?, ?, ?, ?)")
+    .run(crypto.randomUUID(), req.user.id, eventName, JSON.stringify(metadata), now);
+  db.prepare(`DELETE FROM product_events WHERE user_id = ? AND id NOT IN (
+    SELECT id FROM product_events WHERE user_id = ? ORDER BY datetime(created_at) DESC LIMIT 1000
+  )`).run(req.user.id, req.user.id);
+  res.status(202).json({ accepted: true });
+});
+
+app.get("/api/internal/product-metrics", requireUser, requireAdmin, (req, res) => {
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const events = db.prepare(`
+    SELECT event_name AS name, COUNT(*) AS count, COUNT(DISTINCT user_id) AS users
+    FROM product_events WHERE created_at >= ? GROUP BY event_name ORDER BY count DESC
+  `).all(since);
+  const accounts = db.prepare("SELECT COUNT(*) AS total, SUM(email_verified) AS verified FROM users").get();
+  const activeRevisers = db.prepare("SELECT COUNT(DISTINCT user_id) AS count FROM learning_evidence WHERE created_at >= ?").get(since).count;
+  res.json({ windowDays: 30, accounts, activeRevisers, events });
+});
+
+app.get("/api/internal/content-reviews", requireUser, requireAdmin, (req, res) => {
+  const model = buildContentModel(REVISION_TOPICS);
+  const { concepts: modelConcepts } = flattenContent(model);
+  const reviews = new Map(db.prepare("SELECT * FROM content_reviews").all().map((review) => [review.concept_id, review]));
+  const concepts = modelConcepts.map((concept) => {
+    const review = reviews.get(concept.id);
+    return {
+      id: concept.id,
+      topicId: concept.topicId,
+      title: concept.title,
+      publicationStatus: concept.reviewStatus,
+      reviewStatus: review?.status || "unreviewed",
+      reviewNotes: review?.notes || "",
+      reviewedAt: review?.reviewed_at || null,
+    };
+  });
+  res.json({ specification: model.specification, concepts });
+});
+
+app.put("/api/internal/content-reviews/:conceptId", requireUser, requireAdmin, (req, res) => {
+  const conceptId = String(req.params.conceptId || "").trim();
+  const model = buildContentModel(REVISION_TOPICS);
+  if (!flattenContent(model).concepts.some((concept) => concept.id === conceptId)) {
+    return res.status(404).json({ error: "OCR concept not found." });
+  }
+  const status = ["unreviewed", "in_review", "approved", "changes_required"].includes(req.body.status)
+    ? req.body.status
+    : "in_review";
+  const notes = String(req.body.notes || "").trim().slice(0, 2000);
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO content_reviews (concept_id, status, reviewer_id, notes, reviewed_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(concept_id) DO UPDATE SET status = excluded.status, reviewer_id = excluded.reviewer_id,
+      notes = excluded.notes, reviewed_at = excluded.reviewed_at, updated_at = excluded.updated_at
+  `).run(conceptId, status, req.user.id, notes, status === "approved" ? now : null, now);
+  writeAuditLog(req.user.id, "content_review_updated", "concept", conceptId, { status });
+  res.json({ conceptId, status, notes, updatedAt: now });
 });
 
 app.post("/api/billing/checkout-session", billingRateLimiter, requireUser, asyncHandler(async (req, res) => {
@@ -666,7 +866,7 @@ app.post("/api/auth/login", authRateLimiter, asyncHandler(async (req, res) => {
   }
 
   ensureAccountProfiles(user);
-  issueSession(res, user.id);
+  issueSession(res, user.id, req);
   res.json({ user: publicUser(user), plans: PLAN_CATALOG });
 }));
 
@@ -676,6 +876,153 @@ app.post("/api/auth/logout", requireUser, (req, res) => {
   }
   clearSessionCookie(res);
   res.json({ ok: true });
+});
+
+app.post("/api/auth/forgot-password", authRateLimiter, asyncHandler(async (req, res) => {
+  const responseNotBefore = Date.now() + 250;
+  const email = normalizeEmail(req.body.email);
+  const user = email ? getUserByEmail(email) : null;
+
+  if (user?.password_hash && user.email_verified) {
+    const rawToken = crypto.randomBytes(32).toString("base64url");
+    const tokenHash = hashToken(rawToken);
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 1000 * 60 * 30);
+    const resetUrl = `${BASE_URL}/?reset=${encodeURIComponent(rawToken)}`;
+
+    db.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").run(user.id);
+    db.prepare(`
+      INSERT INTO password_reset_tokens (token_hash, user_id, expires_at, created_at)
+      VALUES (?, ?, ?, ?)
+    `).run(tokenHash, user.id, expiresAt.toISOString(), now.toISOString());
+
+    if (hasSmtpConfig()) {
+      sendPasswordResetEmail(user, resetUrl).catch((error) => {
+        console.error("Password reset email delivery failed:", sanitizeMailerError(error));
+      });
+    } else if (process.env.NODE_ENV !== "production") {
+      console.log(`Development password reset link for ${user.email}: ${resetUrl}`);
+    }
+    writeAuditLog(user.id, "password_reset_requested", "user", user.id);
+  }
+
+  const remainingDelay = responseNotBefore - Date.now();
+  if (remainingDelay > 0) await new Promise((resolve) => setTimeout(resolve, remainingDelay));
+
+  res.status(202).json({
+    message: "If an eligible account exists for that email, a password reset link is on its way.",
+  });
+}));
+
+app.post("/api/auth/reset-password", authRateLimiter, (req, res) => {
+  const tokenHash = hashToken(String(req.body.token || ""));
+  const password = String(req.body.password || "");
+  if (password.length < 8 || password.length > 128) {
+    return res.status(400).json({ error: "Use a password between 8 and 128 characters." });
+  }
+
+  const reset = db.prepare(`
+    SELECT password_reset_tokens.* FROM password_reset_tokens
+    WHERE token_hash = ?
+  `).get(tokenHash);
+  if (!reset || reset.used_at || new Date(reset.expires_at) < new Date()) {
+    return res.status(400).json({ error: "That password reset link is invalid or has expired." });
+  }
+
+  const passwordRecord = hashPassword(password);
+  const now = new Date().toISOString();
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.prepare("UPDATE users SET password_hash = ?, password_salt = ?, updated_at = ? WHERE id = ?")
+      .run(passwordRecord.hash, passwordRecord.salt, now, reset.user_id);
+    db.prepare("UPDATE password_reset_tokens SET used_at = ? WHERE token_hash = ?").run(now, tokenHash);
+    db.prepare("DELETE FROM sessions WHERE user_id = ?").run(reset.user_id);
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+  writeAuditLog(reset.user_id, "password_reset_completed", "user", reset.user_id);
+  clearSessionCookie(res);
+  res.json({ message: "Password updated. Log in again on each device." });
+});
+
+app.get("/api/account/sessions", requireUser, (req, res) => {
+  const sessions = db.prepare(`
+    SELECT token_hash, created_at, last_used_at, expires_at, user_agent
+    FROM sessions WHERE user_id = ? ORDER BY datetime(COALESCE(last_used_at, created_at)) DESC
+  `).all(req.user.id).map((session) => ({
+    id: session.token_hash.slice(0, 12),
+    current: session.token_hash === req.sessionHash,
+    createdAt: session.created_at,
+    lastUsedAt: session.last_used_at || session.created_at,
+    expiresAt: session.expires_at,
+    device: describeUserAgent(session.user_agent),
+  }));
+  res.json({ sessions });
+});
+
+app.delete("/api/account/sessions/others", requireUser, (req, res) => {
+  const result = db.prepare("DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?")
+    .run(req.user.id, req.sessionHash);
+  writeAuditLog(req.user.id, "other_sessions_revoked", "user", req.user.id, { count: Number(result.changes) });
+  res.json({ message: `${Number(result.changes)} other session${Number(result.changes) === 1 ? "" : "s"} signed out.` });
+});
+
+app.get("/api/account/export", requireUser, (req, res) => {
+  const workspaces = db.prepare(`
+    SELECT workspaces.id, workspaces.name, workspaces.kind, workspace_members.role,
+      workspaces.created_at, workspaces.updated_at
+    FROM workspace_members JOIN workspaces ON workspaces.id = workspace_members.workspace_id
+    WHERE workspace_members.user_id = ?
+  `).all(req.user.id).filter((workspace) => workspace.role === "owner" || ownerHasWorkspaceCollaboration(workspace.id));
+  const workspaceIds = workspaces.map((workspace) => workspace.id);
+  const placeholders = workspaceIds.map(() => "?").join(",");
+  const exportData = {
+    exportedAt: new Date().toISOString(),
+    account: publicUser(req.user),
+    profile: getAccountProfiles(req.user.id),
+    workspaces,
+    notes: workspaceIds.length ? db.prepare(`
+      SELECT id, workspace_id, owner_id, body, tag, title, summary, created_at, updated_at
+      FROM notes WHERE workspace_id IN (${placeholders}) ORDER BY datetime(updated_at) DESC
+    `).all(...workspaceIds) : [],
+    revisionEvidence: db.prepare(`
+      SELECT concept_id, deck_id, activity_type, score, difficulty, response_type, confidence,
+        feedback_code, misconception_id, correction_successful, created_at
+      FROM learning_evidence WHERE user_id = ? ORDER BY datetime(created_at)
+    `).all(req.user.id),
+    reviewSchedule: db.prepare("SELECT * FROM review_schedules WHERE user_id = ?").all(req.user.id),
+    classMemberships: db.prepare(`
+      SELECT class_id, role, status, joined_at, left_at FROM class_memberships WHERE user_id = ?
+    `).all(req.user.id),
+  };
+  writeAuditLog(req.user.id, "account_data_exported", "user", req.user.id);
+  res.setHeader("Content-Disposition", `attachment; filename="neat-notes-account-export-${new Date().toISOString().slice(0, 10)}.json"`);
+  res.json(exportData);
+});
+
+app.delete("/api/account", requireUser, (req, res) => {
+  const confirmation = String(req.body.confirmation || "").trim();
+  const password = String(req.body.password || "");
+  if (confirmation !== "DELETE MY ACCOUNT") {
+    return res.status(400).json({ error: "Type DELETE MY ACCOUNT to confirm permanent deletion." });
+  }
+  if (req.user.password_hash && !verifyPassword(password, req.user.password_salt, req.user.password_hash)) {
+    return res.status(401).json({ error: "Enter your current password to delete this account." });
+  }
+  if (!req.user.password_hash && Date.now() - new Date(req.sessionCreatedAt).getTime() > 15 * 60 * 1000) {
+    return res.status(401).json({ error: "Sign in with Google again before deleting this account." });
+  }
+  if (["active", "trialing", "past_due"].includes(req.user.subscription_status)) {
+    return res.status(409).json({ error: "Cancel the active subscription in Billing before deleting this account." });
+  }
+
+  const userId = req.user.id;
+  db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+  clearSessionCookie(res);
+  console.info(JSON.stringify({ event: "account_deleted", userId, timestamp: new Date().toISOString() }));
+  res.json({ message: "Your Neat Notes account and associated personal data have been deleted." });
 });
 
 app.get("/api/auth/verify", (req, res) => {
@@ -760,7 +1107,7 @@ app.get("/api/auth/google/callback", asyncHandler(async (req, res) => {
     return res.status(400).send(renderMessagePage("Google sign-in failed", "Google did not confirm a verified email address."));
   }
   const user = upsertGoogleUser(profile);
-  issueSession(res, user.id);
+  issueSession(res, user.id, req);
   res.clearCookie("google_oauth_state");
   res.redirect("/");
 }));
@@ -987,7 +1334,37 @@ app.get("/api/notes/:id/study-pack", requireUser, (req, res) => {
     return res.status(402).json({ error: "Study packs are part of Pro and Teacher plans." });
   }
 
-  res.json({ studyPack: createStudyPack(note) });
+  const studyPack = createStudyPack(note);
+  const generatedAt = new Date().toISOString();
+  const resourceId = crypto.randomUUID();
+  db.prepare(`
+    INSERT INTO generated_resources (
+      id, user_id, note_id, resource_type, source_note_updated_at, provenance, alignment_status, created_at
+    ) VALUES (?, ?, ?, 'study_pack', ?, 'user_note_deterministic_generator', 'needs_review', ?)
+  `).run(resourceId, req.user.id, note.id, note.updated_at, generatedAt);
+  res.json({
+    studyPack,
+    provenance: {
+      id: resourceId,
+      sourceNoteId: note.id,
+      sourceNoteUpdatedAt: note.updated_at,
+      generatedAt,
+      method: "Deterministic Neat Notes generator",
+      alignmentStatus: "needs_review",
+      notice: "Generated from your note. Review accuracy and OCR alignment before revising from it.",
+    },
+  });
+});
+
+app.get("/api/notes/:id/generated-resources", requireUser, (req, res) => {
+  const note = getAccessibleNote(req.params.id, req.user.id);
+  if (!note) return res.status(404).json({ error: "Note not found." });
+  const resources = db.prepare(`
+    SELECT id, resource_type, source_note_updated_at, provenance, alignment_status, created_at
+    FROM generated_resources WHERE note_id = ? AND user_id = ?
+    ORDER BY datetime(created_at) DESC LIMIT 50
+  `).all(note.id, req.user.id);
+  res.json({ resources });
 });
 
 app.get("/api/notes/:id/export.pdf", requireUser, (req, res) => {
@@ -1025,15 +1402,60 @@ app.get("/api/profile", requireUser, (req, res) => {
 
 app.patch("/api/profile", requireUser, (req, res) => {
   const name = String(req.body.name || req.user.name).trim().slice(0, 120);
-  const requestedRole = normalizeUserRole(req.body.role || req.user.role);
-  const role = isTeacherUser(req.user) ? requestedRole : req.user.role || "student";
+  const role = normalizeUserRole(req.user.role || "student");
   if (!name) return res.status(400).json({ error: "Name is required." });
 
   const now = new Date().toISOString();
   db.prepare("UPDATE users SET name = ?, role = ?, updated_at = ? WHERE id = ?").run(name, role, now, req.user.id);
   const updatedUser = { ...req.user, name, role };
   ensureAccountProfiles(updatedUser);
-  res.json({ user: publicUser(updatedUser) });
+
+  const student = getStudentProfile(req.user.id);
+  const learnerType = normalizeLearnerType(req.body.learnerType ?? student?.learner_type);
+  const targetGrade = normalizeTargetGrade(req.body.targetGrade ?? student?.target_grade);
+  const personalTarget = String(req.body.personalTarget ?? student?.personal_target ?? "").trim().slice(0, 240) || null;
+  const revisionGoal = normalizeRevisionGoal(req.body.revisionGoal ?? student?.revision_goal);
+  const taughtTopicIds = normalizeTopicIdArray(req.body.taughtTopicIds ?? parseJsonValue(student?.taught_topic_ids, []));
+  const taughtTopicSource = ["self", "teacher", "class"].includes(req.body.taughtTopicSource)
+    ? req.body.taughtTopicSource
+    : student?.taught_topic_source || "self";
+  const examDates = normalizeExamDates(req.body.examDates ?? parseJsonValue(student?.exam_dates, {}));
+  const notificationPreferences = normalizeNotificationPreferences(
+    req.body.notificationPreferences ?? parseJsonValue(student?.notification_preferences, {}),
+  );
+  const completeOnboarding = req.body.completeOnboarding === true;
+
+  db.prepare(`
+    UPDATE student_profiles
+    SET year_group = ?, learner_type = ?, target_grade = ?, personal_target = ?,
+      taught_topic_ids = ?, taught_topic_source = ?, revision_goal = ?, exam_dates = ?,
+      notification_preferences = ?, onboarding_completed_at = CASE
+        WHEN ? THEN COALESCE(onboarding_completed_at, ?)
+        ELSE onboarding_completed_at
+      END,
+      updated_at = ?
+    WHERE user_id = ?
+  `).run(
+    learnerType === "year_12" ? "Year 12" : learnerType === "year_13" ? "Year 13" : "Independent learner",
+    learnerType,
+    targetGrade,
+    personalTarget,
+    JSON.stringify(taughtTopicIds),
+    taughtTopicSource,
+    revisionGoal,
+    JSON.stringify(examDates),
+    JSON.stringify(notificationPreferences),
+    completeOnboarding ? 1 : 0,
+    now,
+    now,
+    req.user.id,
+  );
+
+  res.json({
+    user: publicUser(updatedUser),
+    studentProfile: getStudentProfile(req.user.id),
+    teacherProfile: getTeacherProfile(req.user.id),
+  });
 });
 
 app.get("/api/centres", requireUser, (req, res) => {
@@ -1148,6 +1570,27 @@ app.post("/api/classes", requireUser, requireTeacher, (req, res) => {
   res.status(201).json({ class: decorateClassGroup(classGroup) });
 });
 
+app.post("/api/classes/preview", joinRateLimiter, requireUser, (req, res) => {
+  const code = normaliseClassCode(req.body.code);
+  if (!code || !isValidClassCode(code)) return res.status(400).json({ error: "That class code does not look right." });
+  const classGroup = db.prepare(`
+    SELECT class_groups.*, users.name AS teacher_name
+    FROM class_groups JOIN users ON users.id = class_groups.teacher_id
+    WHERE class_groups.join_code = ? AND class_groups.join_code_enabled = 1 AND class_groups.archived_at IS NULL
+  `).get(code);
+  if (!classGroup) return res.status(404).json({ error: "We could not find an active class with that code." });
+  res.json({
+    class: {
+      name: classGroup.name,
+      subject: classGroup.subject,
+      examBoard: classGroup.exam_board,
+      yearGroup: classGroup.year_group,
+      description: classGroup.description,
+      teacherName: classGroup.teacher_name,
+    },
+  });
+});
+
 app.post("/api/classes/join", joinRateLimiter, requireUser, (req, res) => {
   const code = normaliseClassCode(req.body.code);
   if (!code) return res.status(400).json({ error: "Enter a class code to continue." });
@@ -1155,7 +1598,7 @@ app.post("/api/classes/join", joinRateLimiter, requireUser, (req, res) => {
     return res.status(400).json({ error: "That class code does not look right. Check it and try again." });
   }
 
-  const classGroup = db.prepare("SELECT * FROM class_groups WHERE join_code = ? AND join_code_enabled = 1").get(code);
+  const classGroup = db.prepare("SELECT * FROM class_groups WHERE join_code = ? AND join_code_enabled = 1 AND archived_at IS NULL").get(code);
   if (!classGroup) return res.status(404).json({ error: "We could not find a class with that code." });
   if (classGroup.teacher_id === req.user.id) {
     return res.status(409).json({ error: "You already manage this class as the teacher." });
@@ -1207,8 +1650,117 @@ app.get("/api/classes/:id/students", requireUser, requireClassTeacher, (req, res
   res.json({ students: getClassStudents(req.classGroup.id) });
 });
 
+app.delete("/api/classes/:id/members/:userId", requireUser, requireClassTeacher, (req, res) => {
+  const membership = db.prepare(`
+    SELECT * FROM class_memberships WHERE class_id = ? AND user_id = ? AND role = 'student' AND status = 'active'
+  `).get(req.classGroup.id, req.params.userId);
+  if (!membership) return res.status(404).json({ error: "Active student membership not found." });
+  const now = new Date().toISOString();
+  db.prepare("UPDATE class_memberships SET status = 'removed', left_at = ? WHERE id = ?").run(now, membership.id);
+  writeAuditLog(req.user.id, "class_member_removed", "class", req.classGroup.id, { studentId: req.params.userId });
+  res.json({ message: "Student removed from the class." });
+});
+
+app.patch("/api/classes/:id/archive", requireUser, requireClassTeacher, (req, res) => {
+  const now = new Date().toISOString();
+  db.prepare("UPDATE class_groups SET archived_at = ?, join_code_enabled = 0, updated_at = ? WHERE id = ?")
+    .run(now, now, req.classGroup.id);
+  db.prepare("UPDATE class_assignments SET status = 'archived', updated_at = ? WHERE class_id = ? AND status = 'active'")
+    .run(now, req.classGroup.id);
+  writeAuditLog(req.user.id, "class_archived", "class", req.classGroup.id);
+  res.json({ message: "Class archived and its join code disabled." });
+});
+
+app.get("/api/assignments", requireUser, (req, res) => {
+  const classes = isTeacherUser(req.user) ? listTeacherClasses(req.user.id) : listStudentClasses(req.user.id);
+  const classIds = classes.map((classGroup) => classGroup.id);
+  if (!classIds.length) return res.json({ assignments: [] });
+  const placeholders = classIds.map(() => "?").join(",");
+  const assignments = db.prepare(`
+    SELECT class_assignments.*, flashcard_decks.topic_id, flashcard_decks.code, flashcard_decks.title AS topic_title,
+      class_groups.name AS class_name,
+      (SELECT COUNT(*) FROM assignment_completions WHERE assignment_id = class_assignments.id AND status = 'complete') AS completed_count,
+      (SELECT COUNT(*) FROM class_memberships WHERE class_id = class_assignments.class_id AND role = 'student' AND status = 'active') AS student_count,
+      (SELECT status FROM assignment_completions WHERE assignment_id = class_assignments.id AND user_id = ?) AS user_status
+    FROM class_assignments
+    JOIN class_groups ON class_groups.id = class_assignments.class_id
+    LEFT JOIN flashcard_decks ON flashcard_decks.id = class_assignments.deck_id
+    WHERE class_assignments.class_id IN (${placeholders})
+    ORDER BY CASE WHEN class_assignments.due_at IS NULL THEN 1 ELSE 0 END, datetime(class_assignments.due_at)
+  `).all(req.user.id, ...classIds).map(decorateAssignment);
+  res.json({ assignments });
+});
+
+app.post("/api/classes/:id/assignments", requireUser, requireClassTeacher, (req, res) => {
+  const topicId = String(req.body.topicId || "").trim();
+  const deck = db.prepare("SELECT * FROM flashcard_decks WHERE id = ? OR topic_id = ?").get(topicId, topicId);
+  if (!deck) return res.status(400).json({ error: "Choose a published OCR topic." });
+  const taskType = normalizeAssignmentType(req.body.taskType);
+  const instructions = String(req.body.instructions || "").trim().slice(0, 1000);
+  const startAt = normalizeOptionalDate(req.body.startAt);
+  const dueAt = normalizeOptionalDate(req.body.dueAt);
+  if (startAt && dueAt && new Date(dueAt) < new Date(startAt)) {
+    return res.status(400).json({ error: "Due date must be after the start date." });
+  }
+  const estimatedMinutes = Math.min(120, Math.max(5, Number(req.body.estimatedMinutes) || 15));
+  const now = new Date().toISOString();
+  const assignment = {
+    id: crypto.randomUUID(), class_id: req.classGroup.id, deck_id: deck.id,
+    title: String(req.body.title || `${deck.code} ${deck.title}`).trim().slice(0, 160),
+    instructions, task_type: taskType, start_at: startAt, due_at: dueAt,
+    estimated_minutes: estimatedMinutes, status: "active", created_by: req.user.id,
+    created_at: now, updated_at: now,
+  };
+  db.prepare(`
+    INSERT INTO class_assignments (
+      id, class_id, deck_id, title, instructions, task_type, start_at, due_at,
+      estimated_minutes, status, created_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
+  `).run(
+    assignment.id, assignment.class_id, assignment.deck_id, assignment.title, assignment.instructions,
+    assignment.task_type, assignment.start_at, assignment.due_at, assignment.estimated_minutes,
+    assignment.created_by, assignment.created_at, assignment.updated_at,
+  );
+  writeAuditLog(req.user.id, "assignment_created", "assignment", assignment.id, { classId: req.classGroup.id, taskType });
+  res.status(201).json({ assignment: decorateAssignment({ ...assignment, topic_id: deck.topic_id, code: deck.code, topic_title: deck.title, class_name: req.classGroup.name, completed_count: 0, student_count: getClassStudents(req.classGroup.id).length }) });
+});
+
+app.patch("/api/assignments/:id/status", requireUser, (req, res) => {
+  const assignment = db.prepare(`
+    SELECT class_assignments.* FROM class_assignments
+    JOIN class_groups ON class_groups.id = class_assignments.class_id
+    JOIN class_memberships ON class_memberships.class_id = class_assignments.class_id
+    WHERE class_assignments.id = ? AND class_memberships.user_id = ?
+      AND class_memberships.role = 'student' AND class_memberships.status = 'active'
+      AND class_assignments.status = 'active' AND class_groups.archived_at IS NULL
+  `).get(req.params.id, req.user.id);
+  if (!assignment) return res.status(404).json({ error: "Assignment not found for this account." });
+  const status = ["started", "complete"].includes(req.body.status) ? req.body.status : "started";
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO assignment_completions (assignment_id, user_id, status, started_at, completed_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(assignment_id, user_id) DO UPDATE SET
+      status = excluded.status,
+      started_at = COALESCE(assignment_completions.started_at, excluded.started_at),
+      completed_at = excluded.completed_at,
+      updated_at = excluded.updated_at
+  `).run(assignment.id, req.user.id, status, now, status === "complete" ? now : null, now);
+  recordStudentActivity(req.user.id, assignment.class_id, assignment.deck_id, `assignment_${status}`, { assignmentId: assignment.id });
+  res.json({ status, updatedAt: now });
+});
+
 app.get("/api/classes/:id/dashboard", requireUser, requireClassTeacher, (req, res) => {
   res.json(getClassDashboard(req.classGroup.id));
+});
+
+app.get("/api/classes/:id/insights", requireUser, requireClassTeacher, (req, res) => {
+  const students = getClassStudents(req.classGroup.id);
+  res.json({
+    dashboard: getClassDashboard(req.classGroup.id),
+    students,
+    studentProfiles: students.map((student) => getStudentConfidenceProfile(req.classGroup.id, student.id)),
+  });
 });
 
 app.get("/api/classes/:id/students/:studentId/dashboard", requireUser, requireClassTeacher, (req, res) => {
@@ -1307,7 +1859,9 @@ app.post("/api/revision/attempts", revisionRateLimiter, requireUser, (req, res) 
   }
 
   const quizCorrect = req.body.quizCorrect === undefined ? null : (req.body.quizCorrect ? 1 : 0);
-  const responseTimeMs = Number.isFinite(Number(req.body.responseTimeMs)) ? Math.max(0, Number(req.body.responseTimeMs)) : null;
+  const responseTimeMs = req.body.responseTimeMs !== null && req.body.responseTimeMs !== undefined && Number.isFinite(Number(req.body.responseTimeMs))
+    ? Math.max(0, Number(req.body.responseTimeMs))
+    : null;
   const now = new Date().toISOString();
   const attempt = {
     id: crypto.randomUUID(),
@@ -1402,6 +1956,111 @@ app.post("/api/learning/mistakes/:id/correct", requireUser, (req, res) => {
   res.json({ mistake: { ...mistake, corrected_at: now, updated_at: now } });
 });
 
+app.get("/api/exam/questions", requireUser, (req, res) => {
+  const topicId = String(req.query.topicId || "").trim();
+  const available = QUESTION_BANK.filter((question) => !topicId || question.topicId === topicId)
+    .filter((question) => canAccessRevisionDeck(req.user, question.topicId));
+  res.json({
+    questions: available.map(getPublicQuestion),
+    lockedTopicIds: QUESTION_BANK
+      .filter((question) => !canAccessRevisionDeck(req.user, question.topicId))
+      .map((question) => question.topicId),
+    markingNotice: "Marks are suggested using a transparent Neat Notes rubric, not OCR examiner or AI marking.",
+  });
+});
+
+app.post("/api/exam/attempts", revisionRateLimiter, requireUser, (req, res) => {
+  const questionId = String(req.body.questionId || "").trim();
+  const answer = String(req.body.answer || "").trim().slice(0, 4000);
+  const question = QUESTION_BANK.find((item) => item.id === questionId);
+  if (!question) return res.status(404).json({ error: "Exam-practice question not found." });
+  if (!canAccessRevisionDeck(req.user, question.topicId)) {
+    return res.status(402).json({ error: "Choose this as your free deck or upgrade to Pro to submit this question." });
+  }
+  if (answer.length < 8) return res.status(400).json({ error: "Write a little more before submitting your answer." });
+
+  const originalAttemptId = String(req.body.originalAttemptId || "").trim() || null;
+  if (originalAttemptId) {
+    const original = db.prepare("SELECT id FROM exam_attempts WHERE id = ? AND user_id = ? AND question_id = ?")
+      .get(originalAttemptId, req.user.id, question.id);
+    if (!original) return res.status(400).json({ error: "The original answer could not be matched to this account." });
+  }
+  const confidence = ["low", "medium", "high"].includes(req.body.confidence) ? req.body.confidence : null;
+  const responseTimeMs = req.body.responseTimeMs !== null && req.body.responseTimeMs !== undefined && Number.isFinite(Number(req.body.responseTimeMs))
+    ? Math.min(1000 * 60 * 120, Math.max(0, Number(req.body.responseTimeMs)))
+    : null;
+  const result = markAnswer(question, answer);
+  const now = new Date().toISOString();
+  const attemptId = crypto.randomUUID();
+  db.prepare(`
+    INSERT INTO exam_attempts (
+      id, user_id, class_id, question_id, topic_id, original_attempt_id, answer,
+      proposed_mark, maximum_mark, rubric_result, confidence, response_time_ms, created_at
+    ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    attemptId, req.user.id, question.id, question.topicId, originalAttemptId, answer,
+    result.proposedMark, result.maximumMark, JSON.stringify(result), confidence, responseTimeMs, now,
+  );
+  const learning = recordExamLearningEvidence(req.user.id, question, result, {
+    attemptId, confidence, responseTimeMs, corrected: Boolean(originalAttemptId), now,
+  });
+  pruneExtendedAttemptHistory(req.user.id, question.conceptIds[0]);
+  recordStudentActivity(req.user.id, null, question.topicId, originalAttemptId ? "exam_answer_improved" : "exam_question_submitted", {
+    questionId: question.id,
+    proposedMark: result.proposedMark,
+    maximumMark: result.maximumMark,
+  });
+  res.status(201).json({
+    attemptId,
+    question: getPublicQuestion(question),
+    result: { ...result, modelReasoning: question.modelReasoning },
+    learning,
+    notice: "This is a suggested mark from the published Neat Notes rubric. Equivalent valid wording may need teacher review.",
+  });
+});
+
+app.get("/api/exam/attempts", requireUser, (req, res) => {
+  const attempts = db.prepare(`
+    SELECT id, question_id, topic_id, original_attempt_id, proposed_mark, maximum_mark,
+      confidence, response_time_ms, created_at
+    FROM exam_attempts WHERE user_id = ? ORDER BY datetime(created_at) DESC LIMIT 100
+  `).all(req.user.id);
+  res.json({ attempts });
+});
+
+app.get("/api/labs", requireUser, (req, res) => {
+  const available = LABS.filter((labItem) => canAccessRevisionDeck(req.user, labItem.topicId));
+  res.json({
+    labs: available.map(getPublicLab),
+    lockedCount: LABS.length - available.length,
+    notice: "Interactive tasks use original Neat Notes scenarios and feed the adaptive mastery model.",
+  });
+});
+
+app.post("/api/labs/attempts", revisionRateLimiter, requireUser, (req, res) => {
+  const labId = String(req.body.labId || "").trim();
+  const response = String(req.body.response || "").trim().slice(0, 2000);
+  const labItem = LABS.find((item) => item.id === labId);
+  if (!labItem) return res.status(404).json({ error: "Interactive task not found." });
+  if (!canAccessRevisionDeck(req.user, labItem.topicId)) {
+    return res.status(402).json({ error: "Choose this as your free deck or upgrade to Pro to submit this task." });
+  }
+  if (!response) return res.status(400).json({ error: "Enter or choose an answer first." });
+  const assessment = assessLab(labItem, response);
+  const responseTimeMs = req.body.responseTimeMs !== null && req.body.responseTimeMs !== undefined && Number.isFinite(Number(req.body.responseTimeMs))
+    ? Math.min(1000 * 60 * 60, Math.max(0, Number(req.body.responseTimeMs)))
+    : null;
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT INTO lab_attempts (id, user_id, lab_id, topic_id, response, correct, response_time_ms, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(crypto.randomUUID(), req.user.id, labItem.id, labItem.topicId, response, assessment.correct ? 1 : 0, responseTimeMs, now);
+  const learning = recordLabLearningEvidence(req.user.id, labItem, assessment, { responseTimeMs, now });
+  pruneExtendedAttemptHistory(req.user.id, labItem.conceptId);
+  recordStudentActivity(req.user.id, null, labItem.topicId, "interactive_lab_completed", { labId, correct: assessment.correct });
+  res.status(201).json({ assessment, learning });
+});
+
 app.use((req, res, next) => {
   if (req.path.startsWith("/api/")) {
     return res.status(404).json({ error: "API route not found." });
@@ -1448,10 +2107,18 @@ function asyncHandler(handler) {
 }
 
 function registerPublicAssetRoutes() {
+  app.get("/app-relaunch.js", (req, res) => {
+    res.type("application/javascript").sendFile(path.join(__dirname, "app.js"));
+  });
+  app.get("/styles-relaunch.css", (req, res) => {
+    res.type("text/css").sendFile(path.join(__dirname, "styles.css"));
+  });
+
   const publicAssets = new Map([
     ["/app.js", "application/javascript"],
     ["/theme-init.js", "application/javascript"],
     ["/learning-model.js", "application/javascript"],
+    ["/ocr-content.js", "application/javascript"],
     ["/service-worker.js", "application/javascript"],
     ["/manifest.webmanifest", "application/manifest+json"],
     ["/styles.css", "text/css"],
@@ -1485,11 +2152,35 @@ function registerPublicAssetRoutes() {
     res.type("text/plain").send(`User-agent: *\nAllow: /\nSitemap: ${BASE_URL}/sitemap.xml\n`);
   });
 
+  app.get("/ocr-h446/:code", (req, res) => {
+    const topic = REVISION_TOPICS.find((item) => item.code === req.params.code);
+    if (!topic) return res.status(404).type("text/plain").send("Topic not found.");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.type("html").send(renderPublicTopicPage(topic));
+  });
+
   app.get("/sitemap.xml", (req, res) => {
+    const urls = [BASE_URL, ...REVISION_TOPICS.map((topic) => `${BASE_URL}/ocr-h446/${encodeURIComponent(topic.code)}`)];
     res.type("application/xml").send(
-      `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${escapeHtml(BASE_URL)}</loc></url></urlset>`,
+      `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map((url) => `<url><loc>${escapeHtml(url)}</loc></url>`).join("")}</urlset>`,
     );
   });
+}
+
+function renderPublicTopicPage(topic) {
+  const description = String(topic.summary || `Revise OCR H446 ${topic.code} ${topic.title} with Neat Notes.`).slice(0, 220);
+  const concepts = (topic.cards || []).slice(0, 6).map((card) => `<li><strong>${escapeHtml(card.front)}</strong><span>${escapeHtml(card.category || "Knowledge")}</span></li>`).join("");
+  const canonical = `${BASE_URL}/ocr-h446/${encodeURIComponent(topic.code)}`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>${escapeHtml(topic.code)} ${escapeHtml(topic.title)} | OCR H446 revision | Neat Notes</title>
+    <meta name="description" content="${escapeHtml(description)}"><link rel="canonical" href="${escapeHtml(canonical)}">
+    <meta property="og:title" content="${escapeHtml(topic.code)} ${escapeHtml(topic.title)} | Neat Notes"><meta property="og:description" content="${escapeHtml(description)}">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"></head>
+    <body class="public-topic-page"><header><a class="public-topic-brand" href="/"><span class="brand-mark">NN</span><span><strong>Neat Notes</strong><small>A BreakellSystems product</small></span></a><a class="primary-account-button" href="/?signup=1">Start free</a></header>
+    <main><p class="eyebrow">OCR H446 · Component 01</p><h1>${escapeHtml(topic.code)} ${escapeHtml(topic.title)}</h1><p class="public-topic-summary">${escapeHtml(description)}</p>
+    <section><div><p class="eyebrow">Topic overview</p><h2>Build accurate recall, then apply it.</h2><p>Neat Notes combines active flashcards, quick checks, exam practice and scheduled review. Progress is based on learning evidence rather than passive completion.</p></div><ul>${concepts}</ul></section>
+    <aside><div><strong>${Number(topic.cards?.length || 0)} original retrieval cards</strong><span>Mapped to stable OCR concepts</span></div><a href="/?demo=1">Try the interactive demo</a><a href="/?signup=1">Create a free account</a></aside>
+    <p class="public-topic-disclaimer">Neat Notes is independently produced and is not endorsed by OCR. OCR is a registered trademark of OCR.</p></main></body></html>`;
 }
 
 function getOptionalSessionUser(req) {
@@ -1718,17 +2409,33 @@ function migrateSchema() {
   addColumnIfMissing("users", "plan_updated_at", "TEXT");
   addColumnIfMissing("users", "free_revision_deck_id", "TEXT");
   addColumnIfMissing("workspaces", "kind", "TEXT NOT NULL DEFAULT 'project'");
+  addColumnIfMissing("sessions", "user_agent", "TEXT");
+  addColumnIfMissing("sessions", "last_used_at", "TEXT");
+  addColumnIfMissing("class_assignments", "task_type", "TEXT NOT NULL DEFAULT 'topic_revision'");
+  addColumnIfMissing("class_assignments", "start_at", "TEXT");
+  addColumnIfMissing("class_assignments", "estimated_minutes", "INTEGER");
+  addColumnIfMissing("class_assignments", "status", "TEXT NOT NULL DEFAULT 'active'");
+  addColumnIfMissing("class_groups", "archived_at", "TEXT");
+  addColumnIfMissing("student_profiles", "learner_type", "TEXT");
+  addColumnIfMissing("student_profiles", "target_grade", "TEXT");
+  addColumnIfMissing("student_profiles", "personal_target", "TEXT");
+  addColumnIfMissing("student_profiles", "taught_topic_ids", "TEXT NOT NULL DEFAULT '[]'");
+  addColumnIfMissing("student_profiles", "taught_topic_source", "TEXT NOT NULL DEFAULT 'self'");
+  addColumnIfMissing("student_profiles", "revision_goal", "TEXT");
+  addColumnIfMissing("student_profiles", "exam_dates", "TEXT NOT NULL DEFAULT '{}'");
+  addColumnIfMissing("student_profiles", "notification_preferences", "TEXT NOT NULL DEFAULT '{}'");
+  addColumnIfMissing("student_profiles", "onboarding_completed_at", "TEXT");
   db.prepare("UPDATE workspaces SET kind = 'personal' WHERE kind = 'project' AND name LIKE ?").run("%'s Notes");
   db.prepare("UPDATE users SET plan = 'pro' WHERE plan = 'plus'").run();
   db.prepare("UPDATE users SET role = 'teacher' WHERE role = 'student' AND plan IN ('teacher', 'institution')").run();
   db.prepare("SELECT id, join_code FROM class_groups").all().forEach((classGroup) => {
-    if (String(classGroup.join_code || "").length < 35) {
+    if (isLegacyClassJoinCode(classGroup.join_code)) {
       db.prepare("UPDATE class_groups SET join_code = ?, updated_at = ? WHERE id = ?")
         .run(createJoinCode("NN"), new Date().toISOString(), classGroup.id);
     }
   });
   db.prepare("SELECT id, code FROM centres").all().forEach((centre) => {
-    if (String(centre.code || "").length < 39) {
+    if (isLegacyCentreCode(centre.code)) {
       db.prepare("UPDATE centres SET code = ?, updated_at = ? WHERE id = ?")
         .run(createJoinCode("CENTRE"), new Date().toISOString(), centre.id);
     }
@@ -1802,6 +2509,36 @@ function seedRevisionDecks() {
   });
 }
 
+function validatePublishedContent() {
+  const model = buildContentModel(loadRevisionTopicsFromAssets());
+  const result = validateContentModel(model);
+  if (!result.valid) {
+    throw new Error(`OCR content validation failed: ${result.errors.slice(0, 8).join("; ")}`);
+  }
+  const questionResult = validateQuestionBank();
+  const labResult = validateLabs();
+  const conceptIds = new Set(model.components.flatMap((component) => component.sections.flatMap((section) =>
+    section.topics.flatMap((topic) => topic.concepts.map((concept) => concept.id)),
+  )));
+  const invalidMappings = QUESTION_BANK.flatMap((question) => question.conceptIds.filter((id) => !conceptIds.has(id)));
+  const invalidLabMappings = LABS.filter((labItem) => !conceptIds.has(labItem.conceptId)).map((labItem) => labItem.conceptId);
+  if (!questionResult.valid || !labResult.valid || invalidMappings.length || invalidLabMappings.length) {
+    throw new Error(`Practice content validation failed: ${[
+      ...questionResult.errors,
+      ...labResult.errors,
+      ...invalidMappings.map((id) => `Unknown concept ${id}`),
+      ...invalidLabMappings.map((id) => `Unknown lab concept ${id}`),
+    ].join("; ")}`);
+  }
+  console.info(JSON.stringify({
+    event: "content_validated",
+    ...result.counts,
+    examQuestions: questionResult.count,
+    interactiveLabs: labResult.count,
+    specification: "ocr-h446-2020",
+  }));
+}
+
 function loadRevisionTopicsFromAssets() {
   const topicsPath = path.join(__dirname, "revision-topics.js");
   if (!fs.existsSync(topicsPath)) return [];
@@ -1816,6 +2553,13 @@ function requireTeacher(req, res, next) {
     return res.status(403).json({ error: "Teacher access is required." });
   }
 
+  next();
+}
+
+function requireAdmin(req, res, next) {
+  if (req.user?.role !== "admin") {
+    return res.status(403).json({ error: "Administrator access is required." });
+  }
   next();
 }
 
@@ -1847,6 +2591,106 @@ function requireClassAccess(req, res, next) {
 function normalizeUserRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
   return ["student", "teacher", "centre_admin", "admin"].includes(normalized) ? normalized : "student";
+}
+
+function normalizeLearnerType(value) {
+  const normalized = String(value || "independent").trim().toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
+  return ["year_12", "year_13", "independent"].includes(normalized) ? normalized : "independent";
+}
+
+function normalizeTargetGrade(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return ["A*", "A", "B", "C", "D", "E"].includes(normalized) ? normalized : null;
+}
+
+function normalizeRevisionGoal(value) {
+  const normalized = String(value || "keep_up").trim().toLowerCase();
+  return ["keep_up", "weak_topics", "mocks", "final_exams"].includes(normalized) ? normalized : "keep_up";
+}
+
+function normalizeTopicIdArray(value) {
+  if (!Array.isArray(value)) return [];
+  const validIds = new Set(db.prepare("SELECT topic_id FROM flashcard_decks").all().map((row) => row.topic_id));
+  return [...new Set(value.map((item) => String(item || "").trim()).filter((item) => validIds.has(item)))].slice(0, 100);
+}
+
+function normalizeExamDates(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return Object.fromEntries(
+    ["mock", "paper1", "paper2"].flatMap((key) => {
+      const date = String(source[key] || "").trim();
+      return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T12:00:00Z`)) ? [[key, date]] : [];
+    }),
+  );
+}
+
+function normalizeNotificationPreferences(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return {
+    weeklyProgress: source.weeklyProgress === true,
+    dueRevision: source.dueRevision === true,
+    assignmentDue: source.assignmentDue !== false,
+    billingSecurity: source.billingSecurity !== false,
+    usageAnalytics: source.usageAnalytics === true,
+  };
+}
+
+function sanitizeEventMetadata(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const safe = {};
+  const blocked = /email|name|answer|message|body|content|password|token/i;
+  Object.entries(value).slice(0, 20).forEach(([key, item]) => {
+    if (blocked.test(key)) return;
+    if (["string", "number", "boolean"].includes(typeof item)) {
+      safe[String(key).slice(0, 60)] = typeof item === "string" ? item.slice(0, 160) : item;
+    }
+  });
+  return safe;
+}
+
+function normalizeAssignmentType(value) {
+  const normalized = String(value || "topic_revision").trim().toLowerCase();
+  const allowed = new Set(["adaptive_session", "topic_revision", "flashcards", "quick_quiz", "exam_questions", "mini_mock", "interactive_lab"]);
+  return allowed.has(normalized) ? normalized : "topic_revision";
+}
+
+function normalizeOptionalDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const parsed = new Date(raw.length === 10 ? `${raw}T16:00:00.000Z` : raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function decorateAssignment(assignment) {
+  return {
+    id: assignment.id,
+    classId: assignment.class_id,
+    className: assignment.class_name,
+    deckId: assignment.deck_id,
+    topicId: assignment.topic_id || assignment.deck_id,
+    topicCode: assignment.code,
+    topicTitle: assignment.topic_title,
+    title: assignment.title,
+    instructions: assignment.instructions,
+    taskType: assignment.task_type,
+    startAt: assignment.start_at,
+    dueAt: assignment.due_at,
+    estimatedMinutes: assignment.estimated_minutes,
+    status: assignment.status,
+    userStatus: assignment.user_status || "not_started",
+    completedCount: Number(assignment.completed_count || 0),
+    studentCount: Number(assignment.student_count || 0),
+    createdAt: assignment.created_at,
+    updatedAt: assignment.updated_at,
+  };
+}
+
+function parseJsonValue(value, fallback) {
+  try {
+    return JSON.parse(value || "") ?? fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 function normalizeCentreType(type) {
@@ -1884,6 +2728,41 @@ function getTeacherProfile(userId) {
   return db.prepare("SELECT * FROM teacher_profiles WHERE user_id = ?").get(userId) || null;
 }
 
+function getAccountProfiles(userId) {
+  return {
+    student: getStudentProfile(userId),
+    teacher: getTeacherProfile(userId),
+  };
+}
+
+function writeAuditLog(userId, action, entityType = null, entityId = null, metadata = {}) {
+  db.prepare(`
+    INSERT INTO audit_logs (id, user_id, action, entity_type, entity_id, metadata, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    crypto.randomUUID(),
+    userId || null,
+    String(action || "unknown").slice(0, 80),
+    entityType ? String(entityType).slice(0, 60) : null,
+    entityId ? String(entityId).slice(0, 160) : null,
+    JSON.stringify(metadata || {}).slice(0, 4000),
+    new Date().toISOString(),
+  );
+}
+
+function describeUserAgent(userAgent) {
+  const value = String(userAgent || "");
+  const browser = value.includes("Edg/") ? "Edge"
+    : value.includes("Firefox/") ? "Firefox"
+      : value.includes("Chrome/") ? "Chrome"
+        : value.includes("Safari/") ? "Safari"
+          : "Browser";
+  const device = /iPhone|Android.+Mobile/i.test(value) ? "phone"
+    : /iPad|Android/i.test(value) ? "tablet"
+      : "computer";
+  return `${browser} on this ${device}`;
+}
+
 function normaliseClassCode(value) {
   return String(value || "")
     .trim()
@@ -1897,12 +2776,28 @@ function isValidClassCode(code) {
   return /^[A-Z0-9]{2,}(?:-[A-Z0-9]{2,})+$/.test(code);
 }
 
+function isLegacyClassJoinCode(value) {
+  return /^NN-[A-Z0-9]{5}$/i.test(String(value || ""));
+}
+
+function isLegacyCentreCode(value) {
+  return /^CENTRE-[A-Z0-9]{5}$/i.test(String(value || ""));
+}
+
 function createJoinCode(prefix) {
+  const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const randomSegment = (length) => {
+    let segment = "";
+    while (segment.length < length) {
+      const byte = crypto.randomBytes(1)[0];
+      if (byte >= 224) continue;
+      segment += alphabet[byte % alphabet.length];
+    }
+    return segment;
+  };
   let code;
   do {
-    const left = crypto.randomBytes(8).toString("hex").toUpperCase();
-    const right = crypto.randomBytes(8).toString("hex").toUpperCase();
-    code = `${normaliseClassCode(prefix)}-${left}-${right}`;
+    code = `${normaliseClassCode(prefix)}-${randomSegment(5)}-${randomSegment(5)}`;
   } while (
     db.prepare("SELECT 1 FROM class_groups WHERE join_code = ?").get(code) ||
     db.prepare("SELECT 1 FROM centres WHERE code = ?").get(code)
@@ -1984,8 +2879,9 @@ function listTeacherClasses(userId) {
     SELECT class_groups.*
     FROM class_groups
     LEFT JOIN centre_memberships ON centre_memberships.centre_id = class_groups.centre_id
-    WHERE class_groups.teacher_id = ?
-       OR (centre_memberships.user_id = ? AND centre_memberships.role IN ('owner', 'admin'))
+    WHERE (class_groups.teacher_id = ?
+       OR (centre_memberships.user_id = ? AND centre_memberships.role IN ('owner', 'admin')))
+      AND class_groups.archived_at IS NULL
     GROUP BY class_groups.id
     ORDER BY datetime(class_groups.updated_at) DESC
   `).all(userId, userId).map((classGroup) => decorateClassGroup(classGroup));
@@ -1999,6 +2895,7 @@ function listStudentClasses(userId) {
     WHERE class_memberships.user_id = ?
       AND class_memberships.role = 'student'
       AND class_memberships.status = 'active'
+      AND class_groups.archived_at IS NULL
     ORDER BY datetime(class_memberships.joined_at) DESC
   `).all(userId).map((classGroup) => decorateClassGroup(classGroup, userId));
 }
@@ -2239,6 +3136,142 @@ function recordLearningEvidenceFromAttempt(userId, attempt, card, rating) {
   };
 }
 
+function recordExamLearningEvidence(userId, question, result, context) {
+  const conceptId = question.conceptIds[0];
+  const score = result.maximumMark ? result.proposedMark / result.maximumMark : 0;
+  const rating = score >= 0.85 ? "easy" : score >= 0.6 ? "good" : score >= 0.35 ? "hard" : "again";
+  const existingSchedule = db.prepare("SELECT * FROM review_schedules WHERE user_id = ? AND concept_id = ?")
+    .get(userId, conceptId);
+  const previousState = existingSchedule ? {
+    difficulty: existingSchedule.difficulty,
+    stabilityDays: existingSchedule.stability_days,
+    retrievability: existingSchedule.retrievability,
+    lastReviewAt: existingSchedule.last_review_at,
+    nextReviewAt: existingSchedule.next_review_at,
+    successfulRetrievals: existingSchedule.successful_retrievals,
+    lapses: existingSchedule.lapses,
+  } : {};
+  const memoryState = updateMemoryState(previousState, rating, context.now);
+  const possibleMismatch = context.confidence === "high" && score < 0.5;
+
+  db.prepare(`
+    INSERT INTO learning_evidence (
+      id, user_id, class_id, concept_id, deck_id, card_id, activity_type, score, difficulty,
+      response_type, confidence, previous_due_at, feedback_code, misconception_id,
+      correction_successful, response_time_ms, created_at
+    ) VALUES (?, ?, NULL, ?, ?, NULL, 'exam_response', ?, ?, 'free_text', ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    crypto.randomUUID(), userId, conceptId, question.topicId, score, question.difficulty,
+    context.confidence, existingSchedule?.next_review_at || null,
+    possibleMismatch ? "confidence_mismatch" : context.corrected ? "answer_improved" : "rubric_feedback",
+    possibleMismatch ? `${conceptId}:confidence_mismatch` : null,
+    context.corrected && score >= 0.6 ? 1 : 0,
+    context.responseTimeMs,
+    context.now,
+  );
+  db.prepare(`
+    INSERT INTO review_schedules (
+      user_id, concept_id, deck_id, difficulty, stability_days, retrievability, last_review_at,
+      next_review_at, successful_retrievals, lapses, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, concept_id) DO UPDATE SET
+      deck_id = excluded.deck_id, difficulty = excluded.difficulty,
+      stability_days = excluded.stability_days, retrievability = excluded.retrievability,
+      last_review_at = excluded.last_review_at, next_review_at = excluded.next_review_at,
+      successful_retrievals = excluded.successful_retrievals, lapses = excluded.lapses,
+      updated_at = excluded.updated_at
+  `).run(
+    userId, conceptId, question.topicId, memoryState.difficulty, memoryState.stabilityDays,
+    memoryState.retrievability, memoryState.lastReviewAt, memoryState.nextReviewAt,
+    memoryState.successfulRetrievals, memoryState.lapses, context.now,
+  );
+
+  if (score < 0.6) {
+    const existing = db.prepare(`
+      SELECT id FROM mistake_journal WHERE user_id = ? AND concept_id = ? AND corrected_at IS NULL LIMIT 1
+    `).get(userId, conceptId);
+    if (existing) {
+      db.prepare("UPDATE mistake_journal SET explanation = ?, updated_at = ? WHERE id = ?")
+        .run(question.modelReasoning, context.now, existing.id);
+    } else {
+      db.prepare(`
+        INSERT INTO mistake_journal (
+          id, user_id, class_id, concept_id, deck_id, card_id, activity_type, explanation,
+          misconception_id, corrected_at, created_at, updated_at
+        ) VALUES (?, ?, NULL, ?, ?, NULL, 'exam_response', ?, ?, NULL, ?, ?)
+      `).run(
+        crypto.randomUUID(), userId, conceptId, question.topicId, question.modelReasoning,
+        possibleMismatch ? `${conceptId}:confidence_mismatch` : null, context.now, context.now,
+      );
+    }
+  } else if (context.corrected) {
+    db.prepare(`
+      UPDATE mistake_journal SET corrected_at = ?, updated_at = ?
+      WHERE user_id = ? AND concept_id = ? AND corrected_at IS NULL
+    `).run(context.now, context.now, userId, conceptId);
+  }
+  return { conceptId, mastery: calculateMastery(getConceptEvidence(userId, conceptId)), schedule: memoryState };
+}
+
+function recordLabLearningEvidence(userId, labItem, assessment, context) {
+  const existingSchedule = db.prepare("SELECT * FROM review_schedules WHERE user_id = ? AND concept_id = ?")
+    .get(userId, labItem.conceptId);
+  const previousState = existingSchedule ? {
+    difficulty: existingSchedule.difficulty,
+    stabilityDays: existingSchedule.stability_days,
+    retrievability: existingSchedule.retrievability,
+    lastReviewAt: existingSchedule.last_review_at,
+    nextReviewAt: existingSchedule.next_review_at,
+    successfulRetrievals: existingSchedule.successful_retrievals,
+    lapses: existingSchedule.lapses,
+  } : {};
+  const memoryState = updateMemoryState(previousState, assessment.correct ? "good" : "again", context.now);
+  db.prepare(`
+    INSERT INTO learning_evidence (
+      id, user_id, class_id, concept_id, deck_id, card_id, activity_type, score, difficulty,
+      response_type, confidence, previous_due_at, feedback_code, misconception_id,
+      correction_successful, response_time_ms, created_at
+    ) VALUES (?, ?, NULL, ?, ?, NULL, ?, ?, 2, ?, NULL, ?, ?, NULL, ?, ?, ?)
+  `).run(
+    crypto.randomUUID(), userId, labItem.conceptId, labItem.topicId, labItem.activityType,
+    assessment.score, labItem.responseType, existingSchedule?.next_review_at || null,
+    assessment.correct ? "interactive_success" : "interactive_correction",
+    assessment.correct ? 1 : 0, context.responseTimeMs, context.now,
+  );
+  db.prepare(`
+    INSERT INTO review_schedules (
+      user_id, concept_id, deck_id, difficulty, stability_days, retrievability, last_review_at,
+      next_review_at, successful_retrievals, lapses, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(user_id, concept_id) DO UPDATE SET
+      deck_id = excluded.deck_id, difficulty = excluded.difficulty,
+      stability_days = excluded.stability_days, retrievability = excluded.retrievability,
+      last_review_at = excluded.last_review_at, next_review_at = excluded.next_review_at,
+      successful_retrievals = excluded.successful_retrievals, lapses = excluded.lapses,
+      updated_at = excluded.updated_at
+  `).run(
+    userId, labItem.conceptId, labItem.topicId, memoryState.difficulty, memoryState.stabilityDays,
+    memoryState.retrievability, memoryState.lastReviewAt, memoryState.nextReviewAt,
+    memoryState.successfulRetrievals, memoryState.lapses, context.now,
+  );
+  if (!assessment.correct) {
+    const existing = db.prepare("SELECT id FROM mistake_journal WHERE user_id = ? AND concept_id = ? AND corrected_at IS NULL LIMIT 1")
+      .get(userId, labItem.conceptId);
+    if (existing) {
+      db.prepare("UPDATE mistake_journal SET explanation = ?, updated_at = ? WHERE id = ?")
+        .run(labItem.explanation, context.now, existing.id);
+    } else {
+      db.prepare(`
+        INSERT INTO mistake_journal (
+          id, user_id, class_id, concept_id, deck_id, card_id, activity_type, explanation,
+          misconception_id, corrected_at, created_at, updated_at
+        ) VALUES (?, ?, NULL, ?, ?, NULL, ?, ?, NULL, NULL, ?, ?)
+      `).run(crypto.randomUUID(), userId, labItem.conceptId, labItem.topicId, labItem.activityType, labItem.explanation, context.now, context.now);
+    }
+  }
+  return { conceptId: labItem.conceptId, mastery: calculateMastery(getConceptEvidence(userId, labItem.conceptId)), schedule: memoryState };
+}
+
 function upsertMistakeJournalEntry(userId, attempt, card, conceptId, activityType, now) {
   const existing = db.prepare(`
     SELECT id FROM mistake_journal
@@ -2286,14 +3319,32 @@ function pruneLearningHistory(userId, cardId, conceptId) {
     )
   `).run(userId, conceptId);
   db.prepare(`
-    DELETE FROM student_activity_events
-    WHERE id IN (
-      SELECT id FROM student_activity_events
-      WHERE user_id = ?
-      ORDER BY datetime(created_at) DESC
-      LIMIT -1 OFFSET 1200
+    DELETE FROM student_activity_events WHERE id IN (
+      SELECT id FROM student_activity_events WHERE user_id = ?
+      ORDER BY datetime(created_at) DESC LIMIT -1 OFFSET 1200
     )
   `).run(userId);
+}
+
+function pruneExtendedAttemptHistory(userId, conceptId) {
+  db.prepare(`
+    DELETE FROM exam_attempts WHERE id IN (
+      SELECT id FROM exam_attempts WHERE user_id = ?
+      ORDER BY datetime(created_at) DESC LIMIT -1 OFFSET 500
+    )
+  `).run(userId);
+  db.prepare(`
+    DELETE FROM lab_attempts WHERE id IN (
+      SELECT id FROM lab_attempts WHERE user_id = ?
+      ORDER BY datetime(created_at) DESC LIMIT -1 OFFSET 500
+    )
+  `).run(userId);
+  db.prepare(`
+    DELETE FROM learning_evidence WHERE id IN (
+      SELECT id FROM learning_evidence WHERE user_id = ? AND concept_id = ?
+      ORDER BY datetime(created_at) DESC LIMIT -1 OFFSET 150
+    )
+  `).run(userId, conceptId);
 }
 
 function getConceptEvidence(userId, conceptId) {
@@ -2453,6 +3504,12 @@ function recordStudentActivity(userId, classId, deckId, type, metadata = {}) {
     JSON.stringify(metadata),
     new Date().toISOString(),
   );
+  db.prepare(`
+    DELETE FROM student_activity_events WHERE id IN (
+      SELECT id FROM student_activity_events WHERE user_id = ?
+      ORDER BY datetime(created_at) DESC LIMIT -1 OFFSET 1200
+    )
+  `).run(userId);
 }
 
 function getRevisionRecommendations(userId, classId = null) {
@@ -2572,33 +3629,49 @@ function requireUser(req, res, next) {
 
   const tokenHash = hashToken(token);
   const session = db.prepare(`
-    SELECT sessions.*, users.*
+    SELECT sessions.token_hash AS session_token_hash,
+      sessions.created_at AS session_created_at,
+      sessions.expires_at AS session_expires_at,
+      sessions.last_used_at AS session_last_used_at,
+      users.*
     FROM sessions
     JOIN users ON users.id = sessions.user_id
     WHERE sessions.token_hash = ?
   `).get(tokenHash);
 
-  if (!session || new Date(session.expires_at) < new Date()) {
+  if (!session || new Date(session.session_expires_at) < new Date()) {
     db.prepare("DELETE FROM sessions WHERE token_hash = ?").run(tokenHash);
     clearSessionCookie(res);
     return res.status(401).json({ error: "Please log in again." });
   }
 
   req.sessionHash = tokenHash;
+  req.sessionCreatedAt = session.session_created_at;
   req.user = session;
   ensureAccountProfiles(session);
-  db.prepare("UPDATE users SET last_accessed_at = ? WHERE id = ?").run(new Date().toISOString(), session.id);
+  const now = new Date().toISOString();
+  db.prepare("UPDATE users SET last_accessed_at = ? WHERE id = ?").run(now, session.id);
+  db.prepare("UPDATE sessions SET last_used_at = ? WHERE token_hash = ?").run(now, tokenHash);
   next();
 }
 
-function issueSession(res, userId) {
+function issueSession(res, userId, req = null) {
   const token = crypto.randomBytes(32).toString("base64url");
   const tokenHash = hashToken(token);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24 * 30);
 
-  db.prepare("INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)")
-    .run(tokenHash, userId, expiresAt.toISOString(), now.toISOString());
+  db.prepare(`
+    INSERT INTO sessions (token_hash, user_id, expires_at, user_agent, last_used_at, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    tokenHash,
+    userId,
+    expiresAt.toISOString(),
+    String(req?.headers?.["user-agent"] || "").slice(0, 300) || null,
+    now.toISOString(),
+    now.toISOString(),
+  );
 
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
@@ -2660,6 +3733,17 @@ async function createAndSendVerification(userId, email, name) {
     console.log(`Development verification link for ${email}: ${verificationUrl}`);
   }
   return process.env.NODE_ENV === "production" ? {} : { devVerificationUrl: verificationUrl };
+}
+
+async function sendPasswordResetEmail(user, resetUrl) {
+  const transport = createMailTransport();
+  await transport.sendMail({
+    from: getEmailFromAddress(),
+    to: user.email,
+    subject: "Reset your Neat Notes password",
+    text: `Hi ${user.name},\n\nReset your Neat Notes password here:\n${resetUrl}\n\nThis link expires in 30 minutes. If you did not request it, you can ignore this email.`,
+    html: `<p>Hi ${escapeHtml(user.name)},</p><p>Use the link below to reset your Neat Notes password.</p><p><a href="${escapeHtml(resetUrl)}">Reset password</a></p><p>This link expires in 30 minutes. If you did not request it, you can ignore this email.</p>`,
+  });
 }
 
 async function sendContactEmail({ name, email, reason, message }) {
