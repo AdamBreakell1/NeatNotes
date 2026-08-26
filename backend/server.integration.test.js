@@ -141,6 +141,28 @@ test("free account cannot bypass deck or teacher entitlements", async () => {
   assert.equal(classResponse.status, 403);
 });
 
+test("mutation origin checks accept the deployed host and reject foreign sites", async () => {
+  const deploymentHeaders = {
+    "Content-Type": "application/json",
+    Cookie: cookie,
+    Origin: baseUrl.replace("http://", "https://"),
+    "X-Forwarded-Proto": "https",
+  };
+  const sameHostResponse = await fetch(`${baseUrl}/api/learning/session`, {
+    method: "POST",
+    headers: deploymentHeaders,
+    body: JSON.stringify({ durationMinutes: 5 }),
+  });
+  assert.equal(sameHostResponse.status, 201);
+
+  const foreignOriginResponse = await fetch(`${baseUrl}/api/learning/session`, {
+    method: "POST",
+    headers: { ...deploymentHeaders, Origin: "https://attacker.example" },
+    body: JSON.stringify({ durationMinutes: 5 }),
+  });
+  assert.equal(foreignOriginResponse.status, 403);
+});
+
 async function createVerifiedAccount({ name, email, password }) {
   const signupResponse = await fetch(`${baseUrl}/api/auth/signup`, {
     method: "POST",

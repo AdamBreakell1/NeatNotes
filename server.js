@@ -38,7 +38,7 @@ const DB_PATH = DATABASE_CONFIG.path;
 const DB_FALLBACK_ACTIVE = DATABASE_CONFIG.fallbackActive;
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || BASE_URL)
   .split(",")
-  .map((origin) => origin.trim())
+  .map((origin) => normalizeOrigin(origin))
   .filter(Boolean);
 const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
@@ -2337,10 +2337,10 @@ function securityHeaders(req, res, next) {
 
 function corsMiddleware(req, res, next) {
   const origin = req.headers.origin;
-  const allowed = !origin || ALLOWED_ORIGINS.includes(origin);
+  const allowed = isAllowedRequestOrigin(req, origin);
 
   if (origin && allowed) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Origin", normalizeOrigin(origin));
     res.setHeader("Vary", "Origin");
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -2358,11 +2358,38 @@ function enforceSameOriginMutation(req, res, next) {
   if (!["POST", "PATCH", "PUT", "DELETE"].includes(req.method)) return next();
 
   const origin = req.headers.origin;
-  if (origin && !ALLOWED_ORIGINS.includes(origin)) {
+  if (!isAllowedRequestOrigin(req, origin)) {
     return res.status(403).json({ error: "This request did not originate from Neat Notes." });
   }
 
   next();
+}
+
+function isAllowedRequestOrigin(req, origin) {
+  if (!origin) return true;
+  const normalizedOrigin = normalizeOrigin(origin);
+  if (!normalizedOrigin) return false;
+  if (ALLOWED_ORIGINS.includes(normalizedOrigin)) return true;
+  return originMatchesRequestHost(req, normalizedOrigin);
+}
+
+function originMatchesRequestHost(req, normalizedOrigin) {
+  const requestHost = String(req.get("host") || "").trim().toLowerCase();
+  if (!requestHost) return false;
+  try {
+    return new URL(normalizedOrigin).host.toLowerCase() === requestHost;
+  } catch {
+    return false;
+  }
+}
+
+function normalizeOrigin(value) {
+  try {
+    const parsed = new URL(String(value || "").trim());
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed.origin : "";
+  } catch {
+    return "";
+  }
 }
 
 function createRateLimiter({ windowMs, max }) {
