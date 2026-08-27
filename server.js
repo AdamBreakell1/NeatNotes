@@ -148,6 +148,7 @@ const PRODUCT_EVENT_NAMES = new Set([
   "instant_cards_generated", "study_pack_generated", "teacher_assignment_created", "teacher_assignment_prepared",
   "pricing_opened", "demo_workspace_opened", "demo_exited_to_landing", "contact_enquiry_sent",
   "checkout_started", "checkout_completed", "upgrade_prompt_viewed",
+  "profile_updated",
 ]);
 const REVISION_TOPICS = loadRevisionTopicsFromAssets();
 
@@ -315,6 +316,7 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS student_profiles (
     user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    avatar_id TEXT NOT NULL DEFAULT 'notebook',
     year_group TEXT,
     exam_board TEXT NOT NULL DEFAULT 'OCR A-Level',
     learner_type TEXT,
@@ -1401,9 +1403,10 @@ app.get("/api/profile", requireUser, (req, res) => {
 });
 
 app.patch("/api/profile", requireUser, (req, res) => {
-  const name = String(req.body.name || req.user.name).trim().slice(0, 120);
+  const name = String(req.body.name ?? req.user.name).trim();
   const role = normalizeUserRole(req.user.role || "student");
-  if (!name) return res.status(400).json({ error: "Name is required." });
+  if (name.length < 2) return res.status(400).json({ error: "Enter a display name with at least 2 characters." });
+  if (name.length > 80) return res.status(400).json({ error: "Display names must be 80 characters or fewer." });
 
   const now = new Date().toISOString();
   db.prepare("UPDATE users SET name = ?, role = ?, updated_at = ? WHERE id = ?").run(name, role, now, req.user.id);
@@ -1411,6 +1414,7 @@ app.patch("/api/profile", requireUser, (req, res) => {
   ensureAccountProfiles(updatedUser);
 
   const student = getStudentProfile(req.user.id);
+  const avatarId = normalizeProfileAvatarId(req.body.avatarId ?? student?.avatar_id);
   const learnerType = normalizeLearnerType(req.body.learnerType ?? student?.learner_type);
   const targetGrade = normalizeTargetGrade(req.body.targetGrade ?? student?.target_grade);
   const personalTarget = String(req.body.personalTarget ?? student?.personal_target ?? "").trim().slice(0, 240) || null;
@@ -1427,7 +1431,7 @@ app.patch("/api/profile", requireUser, (req, res) => {
 
   db.prepare(`
     UPDATE student_profiles
-    SET year_group = ?, learner_type = ?, target_grade = ?, personal_target = ?,
+    SET avatar_id = ?, year_group = ?, learner_type = ?, target_grade = ?, personal_target = ?,
       taught_topic_ids = ?, taught_topic_source = ?, revision_goal = ?, exam_dates = ?,
       notification_preferences = ?, onboarding_completed_at = CASE
         WHEN ? THEN COALESCE(onboarding_completed_at, ?)
@@ -1436,6 +1440,7 @@ app.patch("/api/profile", requireUser, (req, res) => {
       updated_at = ?
     WHERE user_id = ?
   `).run(
+    avatarId,
     learnerType === "year_12" ? "Year 12" : learnerType === "year_13" ? "Year 13" : "Independent learner",
     learnerType,
     targetGrade,
@@ -2444,6 +2449,7 @@ function migrateSchema() {
   addColumnIfMissing("class_assignments", "status", "TEXT NOT NULL DEFAULT 'active'");
   addColumnIfMissing("class_groups", "archived_at", "TEXT");
   addColumnIfMissing("student_profiles", "learner_type", "TEXT");
+  addColumnIfMissing("student_profiles", "avatar_id", "TEXT NOT NULL DEFAULT 'notebook'");
   addColumnIfMissing("student_profiles", "target_grade", "TEXT");
   addColumnIfMissing("student_profiles", "personal_target", "TEXT");
   addColumnIfMissing("student_profiles", "taught_topic_ids", "TEXT NOT NULL DEFAULT '[]'");
@@ -2620,6 +2626,13 @@ function normalizeUserRole(role) {
   return ["student", "teacher", "centre_admin", "admin"].includes(normalized) ? normalized : "student";
 }
 
+function normalizeProfileAvatarId(value) {
+  const normalized = String(value || "notebook").trim().toLowerCase();
+  return ["notebook", "code", "formula", "revision", "exam", "lab"].includes(normalized)
+    ? normalized
+    : "notebook";
+}
+
 function normalizeLearnerType(value) {
   const normalized = String(value || "independent").trim().toLowerCase().replaceAll("-", "_").replaceAll(" ", "_");
   return ["year_12", "year_13", "independent"].includes(normalized) ? normalized : "independent";
@@ -2643,9 +2656,14 @@ function normalizeTopicIdArray(value) {
 
 function normalizeExamDates(value) {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const normalizedSource = {
+    ...source,
+    paper1: source.paper1 || source.component1,
+    paper2: source.paper2 || source.component2,
+  };
   return Object.fromEntries(
     ["mock", "paper1", "paper2"].flatMap((key) => {
-      const date = String(source[key] || "").trim();
+      const date = String(normalizedSource[key] || "").trim();
       return /^\d{4}-\d{2}-\d{2}$/.test(date) && !Number.isNaN(Date.parse(`${date}T12:00:00Z`)) ? [[key, date]] : [];
     }),
   );

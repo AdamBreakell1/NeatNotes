@@ -108,6 +108,23 @@ test("student account verifies, logs in and cannot elevate its role", async () =
   assert.equal(profileResponse.status, 200);
   assert.equal(profile.user.role, "student");
   assert.equal(profile.studentProfile.learner_type, "year_13");
+
+  const identityResponse = await fetch(`${baseUrl}/api/profile`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ name: "Ada Student", avatarId: "code" }),
+  });
+  const identity = await identityResponse.json();
+  assert.equal(identityResponse.status, 200);
+  assert.equal(identity.user.name, "Ada Student");
+  assert.equal(identity.studentProfile.avatar_id, "code");
+
+  const invalidIdentityResponse = await fetch(`${baseUrl}/api/profile`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Cookie: cookie },
+    body: JSON.stringify({ name: "A", avatarId: "untrusted-avatar" }),
+  });
+  assert.equal(invalidIdentityResponse.status, 400);
 });
 
 test("free account cannot bypass deck or teacher entitlements", async () => {

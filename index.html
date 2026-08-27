@@ -18,7 +18,7 @@
     <link rel="icon" href="/favicon.svg?v=20260705-brand" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <script src="/theme-init.js?v=20260824-relaunch"></script>
-    <link rel="stylesheet" href="/styles-relaunch.css?v=20260824-r6" />
+    <link rel="stylesheet" href="/styles-relaunch.css?v=20260827-profile-r2" />
   </head>
   <body>
     <a class="skip-link" href="#app-view">Skip to main content</a>
@@ -1135,7 +1135,7 @@
 
         <div class="settings-body">
           <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
-            <button type="button" role="tab" aria-selected="false" aria-controls="settings-account-panel" data-settings-tab="account">Account</button>
+            <button type="button" role="tab" aria-selected="false" aria-controls="settings-account-panel" data-settings-tab="account">Profile</button>
             <button class="active" type="button" role="tab" aria-selected="true" aria-controls="settings-general-panel" data-settings-tab="general">General</button>
             <button type="button" role="tab" aria-selected="false" aria-controls="settings-revision-panel" data-settings-tab="revision">Revision</button>
             <button type="button" role="tab" aria-selected="false" aria-controls="settings-editor-panel" data-settings-tab="editor">Editor</button>
@@ -1143,20 +1143,57 @@
           </nav>
 
           <section id="settings-account-panel" class="settings-panel" role="tabpanel" data-settings-panel="account" hidden>
-            <h3>Account identity</h3>
-            <p>Choose a simple education profile image for this device and review the account currently using Neat Notes.</p>
-            <div class="account-settings-card">
+            <div class="settings-panel-intro">
+              <p class="eyebrow">Your account</p>
+              <h3>Profile and identity</h3>
+              <p>Make your workspace recognisable and keep the identity shown across your Neat Notes account up to date.</p>
+            </div>
+            <div class="account-settings-card profile-summary-card">
               <span id="settings-profile-avatar" class="profile-avatar profile-avatar-large" data-avatar="notebook">NB</span>
-              <div>
+              <div class="profile-summary-copy">
                 <strong id="settings-account-name">Guest workspace</strong>
                 <span id="settings-account-email">Not signed in</span>
                 <small id="settings-account-plan">Local browser storage</small>
               </div>
+              <span id="settings-profile-sync" class="profile-sync-badge">Stored locally</span>
             </div>
-            <div class="settings-row avatar-settings-row">
-              <label>Profile image</label>
-              <div id="avatar-choice-group" class="avatar-choice-grid" role="radiogroup" aria-label="Choose profile image"></div>
-            </div>
+            <form id="settings-identity-form" class="settings-identity-form">
+              <section class="settings-section-card">
+                <header class="settings-section-head">
+                  <div>
+                    <h4>Account details</h4>
+                    <p>Your display name appears in shared notes, classes and account menus.</p>
+                  </div>
+                </header>
+                <div class="profile-field-grid">
+                  <label for="settings-display-name">Display name
+                    <input id="settings-display-name" name="name" type="text" minlength="2" maxlength="80" autocomplete="name" required />
+                  </label>
+                  <label for="settings-account-email-field">Email address
+                    <input id="settings-account-email-field" type="email" autocomplete="email" readonly aria-describedby="settings-email-help" />
+                    <small id="settings-email-help">Contact support to change your sign-in email.</small>
+                  </label>
+                </div>
+              </section>
+              <section class="settings-section-card profile-image-section">
+                <header class="settings-section-head">
+                  <div>
+                    <h4>Profile image</h4>
+                    <p>Choose an education-themed mark. It will sync anywhere you use this account.</p>
+                  </div>
+                </header>
+                <input id="settings-avatar-id" name="avatarId" type="hidden" value="notebook" />
+                <div id="avatar-choice-group" class="avatar-choice-grid" role="radiogroup" aria-label="Choose profile image"></div>
+              </section>
+              <div id="settings-profile-guest-note" class="profile-guest-note" hidden>
+                <strong>Using Neat Notes as a guest</strong>
+                <span>Your profile image is stored on this device. Create an account to sync your identity and study profile.</span>
+              </div>
+              <footer class="settings-form-footer">
+                <p id="settings-identity-message" class="status-message" role="status" aria-live="polite"></p>
+                <button id="settings-save-identity" type="submit">Save profile</button>
+              </footer>
+            </form>
             <div id="account-session-tools" class="account-security-tools" hidden>
               <div>
                 <strong>Account security</strong>
@@ -1187,33 +1224,55 @@
           </section>
 
           <section id="settings-revision-panel" class="settings-panel" role="tabpanel" data-settings-panel="revision" hidden>
-            <h3>Revision profile</h3>
-            <p>Keep recommendations aligned with your stage, target and exam timetable.</p>
+            <div class="settings-panel-intro">
+              <p class="eyebrow">Personalisation</p>
+              <h3>Revision profile</h3>
+              <p>Give Neat Notes enough context to recommend the right topic and pace without adding unnecessary setup.</p>
+            </div>
+            <div id="settings-revision-guest-note" class="profile-guest-note" hidden>
+              <strong>Sign in to save a revision profile</strong>
+              <span>Your guest flashcard progress still stays on this device.</span>
+            </div>
             <form id="settings-revision-form" class="settings-revision-form">
-              <div class="settings-field-grid">
-                <label for="settings-learner-type">Stage
-                  <select id="settings-learner-type" name="learnerType"><option value="year_12">Year 12</option><option value="year_13">Year 13</option><option value="independent">Independent learner</option></select>
+              <fieldset class="settings-section-card">
+                <legend>Study context</legend>
+                <p>Used to tune recommendations and the language shown in your dashboard.</p>
+                <div class="settings-field-grid">
+                  <label for="settings-learner-type">Stage
+                    <select id="settings-learner-type" name="learnerType"><option value="year_12">Year 12</option><option value="year_13">Year 13</option><option value="independent">Independent learner</option></select>
+                  </label>
+                  <label for="settings-target-grade">Target grade
+                    <select id="settings-target-grade" name="targetGrade"><option value="">No grade selected</option><option>A*</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option></select>
+                  </label>
+                  <label for="settings-revision-goal">Primary goal
+                    <select id="settings-revision-goal" name="revisionGoal"><option value="keep_up">Keep up with lessons</option><option value="weak_topics">Improve weak topics</option><option value="mocks">Prepare for mocks</option><option value="final_exams">Prepare for final exams</option></select>
+                  </label>
+                </div>
+              </fieldset>
+              <fieldset class="settings-section-card">
+                <legend>Exam timetable</legend>
+                <p>Optional. Dates help Neat Notes prioritise the work with the least time remaining.</p>
+                <div class="settings-exam-date-grid">
+                  <label for="settings-component-1-date">Component 01
+                    <input id="settings-component-1-date" name="paper1" type="date" />
+                  </label>
+                  <label for="settings-component-2-date">Component 02
+                    <input id="settings-component-2-date" name="paper2" type="date" />
+                  </label>
+                </div>
+              </fieldset>
+              <fieldset class="settings-section-card">
+                <legend>Personal focus</legend>
+                <p>Add one practical goal that you want to see reflected in recommendations.</p>
+                <label for="settings-personal-target">Target
+                  <textarea id="settings-personal-target" name="personalTarget" maxlength="240" placeholder="For example: become more confident with trace tables"></textarea>
                 </label>
-                <label for="settings-target-grade">Target grade
-                  <select id="settings-target-grade" name="targetGrade"><option value="">No grade selected</option><option>A*</option><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option></select>
-                </label>
-                <label for="settings-revision-goal">Primary goal
-                  <select id="settings-revision-goal" name="revisionGoal"><option value="keep_up">Keep up with lessons</option><option value="weak_topics">Improve weak topics</option><option value="mocks">Prepare for mocks</option><option value="final_exams">Prepare for final exams</option></select>
-                </label>
-              </div>
-              <div class="settings-field-grid">
-                <label for="settings-component-1-date">Component 01 exam
-                  <input id="settings-component-1-date" name="component1" type="date" />
-                </label>
-                <label for="settings-component-2-date">Component 02 exam
-                  <input id="settings-component-2-date" name="component2" type="date" />
-                </label>
-              </div>
-              <label for="settings-personal-target">Personal target
-                <textarea id="settings-personal-target" name="personalTarget" maxlength="240" placeholder="What would you like to improve?"></textarea>
-              </label>
-              <button type="submit">Save revision profile</button>
-              <p id="settings-revision-message" class="status-message" role="status"></p>
+                <span id="settings-personal-target-counter" class="field-character-count">0 / 240</span>
+              </fieldset>
+              <footer class="settings-form-footer">
+                <p id="settings-revision-message" class="status-message" role="status" aria-live="polite"></p>
+                <button type="submit">Save revision profile</button>
+              </footer>
             </form>
           </section>
 
@@ -1312,6 +1371,6 @@
     <script src="revision-topics.js?v=20260711-design-reset"></script>
     <script src="neat-questions.js?v=20260824-relaunch"></script>
     <script src="learning-model.js?v=20260824-relaunch"></script>
-    <script src="/app-relaunch.js?v=20260824-r8"></script>
+    <script src="/app-relaunch.js?v=20260827-profile-r2"></script>
   </body>
 </html>

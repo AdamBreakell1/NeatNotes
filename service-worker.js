@@ -1,12 +1,12 @@
-const CACHE_NAME = "neat-notes-shell-20260824-r9";
+const CACHE_NAME = "neat-notes-shell-20260827-profile-r2";
 const APP_SHELL = [
   "/",
-  "/styles-relaunch.css?v=20260824-r6",
+  "/styles-relaunch.css?v=20260827-profile-r2",
   "/theme-init.js?v=20260824-relaunch",
   "/learning-model.js?v=20260824-relaunch",
   "/revision-generator.js?v=20260705-production",
   "/neat-questions.js?v=20260824-relaunch",
-  "/app-relaunch.js?v=20260824-r8",
+  "/app-relaunch.js?v=20260827-profile-r2",
   "/favicon.svg"
 ];
 

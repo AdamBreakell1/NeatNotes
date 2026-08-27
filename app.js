@@ -111,6 +111,7 @@ let activeAdaptiveSession = null;
 let accountProfile = null;
 let serverStudentTopicConfidence = new Map();
 let focusBeforeGlobalSearch = null;
+let focusBeforeSettings = null;
 let globalSearchSelection = 0;
 let onboardingStep = 1;
 let focusBeforeOnboarding = null;
@@ -267,6 +268,14 @@ const elements = {
   settingsAccountEmail: document.querySelector("#settings-account-email"),
   settingsAccountName: document.querySelector("#settings-account-name"),
   settingsAccountPlan: document.querySelector("#settings-account-plan"),
+  settingsAccountEmailField: document.querySelector("#settings-account-email-field"),
+  settingsAvatarId: document.querySelector("#settings-avatar-id"),
+  settingsDisplayName: document.querySelector("#settings-display-name"),
+  settingsIdentityForm: document.querySelector("#settings-identity-form"),
+  settingsIdentityMessage: document.querySelector("#settings-identity-message"),
+  settingsProfileGuestNote: document.querySelector("#settings-profile-guest-note"),
+  settingsProfileSync: document.querySelector("#settings-profile-sync"),
+  settingsSaveIdentity: document.querySelector("#settings-save-identity"),
   settingsProfileAvatar: document.querySelector("#settings-profile-avatar"),
   accountSessionTools: document.querySelector("#account-session-tools"),
   accountSessionSummary: document.querySelector("#account-session-summary"),
@@ -276,6 +285,8 @@ const elements = {
   usageAnalyticsConsent: document.querySelector("#usage-analytics-consent"),
   settingsRevisionForm: document.querySelector("#settings-revision-form"),
   settingsRevisionMessage: document.querySelector("#settings-revision-message"),
+  settingsRevisionGuestNote: document.querySelector("#settings-revision-guest-note"),
+  settingsPersonalTargetCounter: document.querySelector("#settings-personal-target-counter"),
   settingsTabs: document.querySelector(".settings-tabs"),
   legalModal: document.querySelector("#legal-modal"),
   legalContent: document.querySelector("#legal-content"),
@@ -383,14 +394,16 @@ elements.achievementCollectionButton.addEventListener("click", () => {
   openBadgeModal();
 });
 elements.achievementModal.addEventListener("click", handleAchievementModalClick);
-elements.settingsButton.addEventListener("click", openSettingsModal);
+elements.settingsButton.addEventListener("click", () => openSettingsModal());
 elements.closeSettingsButton.addEventListener("click", closeSettingsModal);
 elements.settingsModal.addEventListener("click", handleSettingsModalClick);
+elements.settingsModal.addEventListener("keydown", trapSettingsFocus);
 elements.legalModal.addEventListener("click", handleLegalModalClick);
 elements.siteFooter.addEventListener("click", handleFooterClick);
 elements.settingsTabs.addEventListener("click", switchSettingsTab);
 elements.themeChoiceGroup.addEventListener("click", chooseTheme);
 elements.avatarChoiceGroup.addEventListener("click", chooseProfileAvatar);
+elements.avatarChoiceGroup.addEventListener("keydown", handleAvatarChoiceKeydown);
 elements.settingsDensity.addEventListener("change", updateSettingsFromControls);
 elements.settingsEditorFont.addEventListener("change", updateSettingsFromControls);
 elements.settingsDefaultTag.addEventListener("input", updateSettingsFromControls);
@@ -404,6 +417,12 @@ elements.revokeOtherSessionsButton.addEventListener("click", revokeOtherSessions
 elements.deleteAccountButton.addEventListener("click", deleteAccount);
 elements.usageAnalyticsConsent.addEventListener("change", updateAnalyticsConsent);
 elements.settingsRevisionForm.addEventListener("submit", saveRevisionProfile);
+elements.settingsRevisionForm.elements.personalTarget.addEventListener("input", updatePersonalTargetCounter);
+elements.settingsIdentityForm.addEventListener("submit", saveAccountProfile);
+elements.settingsDisplayName.addEventListener("input", () => {
+  elements.settingsDisplayName.removeAttribute("aria-invalid");
+  elements.settingsIdentityMessage.textContent = "";
+});
 document.addEventListener("keydown", handleGlobalKeydown);
 elements.themeToggle.addEventListener("click", toggleTheme);
 elements.topbarSectionSwitch.addEventListener("click", switchAppSection);
@@ -1496,8 +1515,8 @@ function renderSettingsControls() {
   elements.settingsDensity.value = appSettings.density;
   elements.settingsEditorFont.value = appSettings.editorFontSize;
   elements.settingsDefaultTag.value = appSettings.defaultTag;
-  renderAvatarChoiceGroup();
   renderSettingsAccountPanel();
+  renderAvatarChoiceGroup();
   const notificationPreferences = parseClientJson(accountProfile?.studentProfile?.notification_preferences, {});
   elements.usageAnalyticsConsent.checked = notificationPreferences.usageAnalytics === true;
   elements.usageAnalyticsConsent.disabled = isGuestMode || !currentUser;
@@ -1513,12 +1532,19 @@ function renderRevisionProfileSettings() {
   elements.settingsRevisionForm.elements.learnerType.value = profile.learner_type || "independent";
   elements.settingsRevisionForm.elements.targetGrade.value = profile.target_grade || "";
   elements.settingsRevisionForm.elements.revisionGoal.value = profile.revision_goal || "keep_up";
-  elements.settingsRevisionForm.elements.component1.value = examDates.component1 || "";
-  elements.settingsRevisionForm.elements.component2.value = examDates.component2 || "";
+  elements.settingsRevisionForm.elements.paper1.value = examDates.paper1 || examDates.component1 || "";
+  elements.settingsRevisionForm.elements.paper2.value = examDates.paper2 || examDates.component2 || "";
   elements.settingsRevisionForm.elements.personalTarget.value = profile.personal_target || "";
+  elements.settingsRevisionGuestNote.hidden = Boolean(currentUser) && !isGuestMode;
   [...elements.settingsRevisionForm.elements].forEach((control) => {
     control.disabled = isGuestMode || !currentUser;
   });
+  updatePersonalTargetCounter();
+}
+
+function updatePersonalTargetCounter() {
+  const length = elements.settingsRevisionForm.elements.personalTarget.value.length;
+  elements.settingsPersonalTargetCounter.textContent = `${length} / 240`;
 }
 
 async function saveRevisionProfile(event) {
@@ -1538,8 +1564,8 @@ async function saveRevisionProfile(event) {
         personalTarget: data.get("personalTarget") || "",
         revisionGoal: data.get("revisionGoal"),
         examDates: {
-          component1: data.get("component1") || null,
-          component2: data.get("component2") || null,
+          paper1: data.get("paper1") || null,
+          paper2: data.get("paper2") || null,
         },
       },
     });
@@ -1607,28 +1633,42 @@ function chooseProfileAvatar(event) {
   if (!button) return;
 
   const avatarId = getProfileAvatar(button.dataset.avatarChoice).id;
-  if (currentUser?.id && !isGuestMode) {
-    appSettings.profileAvatars = {
-      ...(appSettings.profileAvatars || {}),
-      [currentUser.id]: avatarId,
-    };
-  } else {
+  elements.settingsAvatarId.value = avatarId;
+  if (!currentUser?.id || isGuestMode) {
     appSettings.profileAvatar = avatarId;
+    saveSettings();
+    renderAccountChrome();
+    elements.settingsIdentityMessage.textContent = "Profile image saved on this device.";
+    elements.settingsIdentityMessage.className = "status-message success";
+  } else {
+    elements.settingsIdentityMessage.textContent = "Profile image selected. Save your profile to sync it.";
+    elements.settingsIdentityMessage.className = "status-message";
   }
-  saveSettings();
-  renderSettingsControls();
-  renderAccountChrome();
+  renderAvatarChoiceGroup(avatarId);
+  renderProfileAvatar(elements.settingsProfileAvatar, avatarId);
 }
 
-function renderAvatarChoiceGroup() {
+function handleAvatarChoiceKeydown(event) {
+  if (!event.target.matches("[data-avatar-choice]")) return;
+  const choices = [...elements.avatarChoiceGroup.querySelectorAll("[data-avatar-choice]")];
+  const offset = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[event.key];
+  if (!offset) return;
+  event.preventDefault();
+  const next = choices[(choices.indexOf(event.target) + offset + choices.length) % choices.length];
+  next.focus();
+  next.click();
+}
+
+function renderAvatarChoiceGroup(selectedId = elements.settingsAvatarId?.value || getActiveProfileAvatarId()) {
   if (!elements.avatarChoiceGroup) return;
 
-  const selectedAvatar = getProfileAvatar(getActiveProfileAvatarId());
+  const selectedAvatar = getProfileAvatar(selectedId);
   elements.avatarChoiceGroup.innerHTML = PROFILE_AVATARS.map((avatar) => {
     const isActive = avatar.id === selectedAvatar.id;
-    return `<button class="${isActive ? "active" : ""}" type="button" role="radio" aria-checked="${String(isActive)}" data-avatar-choice="${escapeHtml(avatar.id)}">
+    return `<button class="${isActive ? "active" : ""}" type="button" role="radio" aria-checked="${String(isActive)}" tabindex="${isActive ? "0" : "-1"}" data-avatar-choice="${escapeHtml(avatar.id)}">
       <span class="profile-avatar profile-avatar-choice" data-avatar="${escapeHtml(avatar.id)}">${escapeHtml(avatar.mark)}</span>
       <strong>${escapeHtml(avatar.label)}</strong>
+      <span class="avatar-selected-label">${isActive ? "Selected" : "Choose"}</span>
     </button>`;
   }).join("");
 }
@@ -1638,19 +1678,76 @@ function renderSettingsAccountPanel() {
 
   const isSignedIn = Boolean(currentUser) && !isGuestMode;
   const planName = getCurrentPlanLabel();
+  const avatarId = getActiveProfileAvatarId();
+  elements.settingsAvatarId.value = avatarId;
   renderProfileAvatar(elements.settingsProfileAvatar);
   elements.settingsAccountName.textContent = isSignedIn ? currentUser.name || "Neat Notes account" : "Guest workspace";
   elements.settingsAccountEmail.textContent = isSignedIn ? currentUser.email : "Not signed in";
   elements.settingsAccountPlan.textContent = isSignedIn
     ? `${planName} · synced workspace`
     : "Local browser storage · create an account to sync";
+  elements.settingsProfileSync.textContent = isSignedIn ? "Synced account" : "Stored locally";
+  elements.settingsProfileSync.classList.toggle("is-synced", isSignedIn);
+  elements.settingsDisplayName.value = isSignedIn ? currentUser.name || "" : "Guest";
+  elements.settingsDisplayName.disabled = !isSignedIn;
+  elements.settingsAccountEmailField.value = isSignedIn ? currentUser.email : "Not signed in";
+  elements.settingsSaveIdentity.disabled = !isSignedIn;
+  elements.settingsSaveIdentity.textContent = isSignedIn ? "Save profile" : "Sign in to sync";
+  elements.settingsProfileGuestNote.hidden = isSignedIn;
   elements.accountSessionTools.hidden = !isSignedIn;
   elements.accountDangerZone.hidden = !isSignedIn;
 }
 
+async function saveAccountProfile(event) {
+  event.preventDefault();
+  if (!currentUser || isGuestMode) return;
+
+  const name = elements.settingsDisplayName.value.trim();
+  if (name.length < 2) {
+    elements.settingsDisplayName.setAttribute("aria-invalid", "true");
+    elements.settingsIdentityMessage.textContent = "Enter a display name with at least 2 characters.";
+    elements.settingsIdentityMessage.className = "status-message error";
+    elements.settingsDisplayName.focus();
+    return;
+  }
+
+  const originalLabel = elements.settingsSaveIdentity.textContent;
+  elements.settingsSaveIdentity.disabled = true;
+  elements.settingsSaveIdentity.textContent = "Saving...";
+  elements.settingsIdentityMessage.textContent = "Saving your profile...";
+  elements.settingsIdentityMessage.className = "status-message";
+  try {
+    const response = await api("/api/profile", {
+      method: "PATCH",
+      body: { name, avatarId: elements.settingsAvatarId.value },
+    });
+    accountProfile = response;
+    currentUser = { ...currentUser, ...response.user };
+    appSettings.profileAvatars = {
+      ...(appSettings.profileAvatars || {}),
+      [currentUser.id]: response.studentProfile?.avatar_id || elements.settingsAvatarId.value,
+    };
+    saveSettings();
+    renderSettingsAccountPanel();
+    renderAvatarChoiceGroup();
+    renderAccountChrome();
+    elements.settingsIdentityMessage.textContent = "Profile saved and synced to your account.";
+    elements.settingsIdentityMessage.className = "status-message success";
+    trackEvent("profile_updated", { avatar: response.studentProfile?.avatar_id || "notebook" });
+  } catch (error) {
+    elements.settingsIdentityMessage.textContent = error.message;
+    elements.settingsIdentityMessage.className = "status-message error";
+  } finally {
+    elements.settingsSaveIdentity.disabled = false;
+    elements.settingsSaveIdentity.textContent = originalLabel;
+  }
+}
+
 function getActiveProfileAvatarId() {
   if (currentUser?.id && !isGuestMode) {
-    return appSettings.profileAvatars?.[currentUser.id] || appSettings.profileAvatar;
+    return accountProfile?.studentProfile?.avatar_id
+      || appSettings.profileAvatars?.[currentUser.id]
+      || appSettings.profileAvatar;
   }
   return appSettings.profileAvatar;
 }
@@ -1659,9 +1756,9 @@ function getProfileAvatar(avatarId = getActiveProfileAvatarId()) {
   return PROFILE_AVATARS.find((avatar) => avatar.id === avatarId) || PROFILE_AVATARS[0];
 }
 
-function renderProfileAvatar(target = elements.topbarProfileAvatar) {
+function renderProfileAvatar(target = elements.topbarProfileAvatar, avatarId = getActiveProfileAvatarId()) {
   if (!target) return;
-  const avatar = getProfileAvatar(getActiveProfileAvatarId());
+  const avatar = getProfileAvatar(avatarId);
   target.dataset.avatar = avatar.id;
   target.textContent = avatar.mark;
   target.title = avatar.label;
@@ -1674,11 +1771,14 @@ function getCurrentPlanLabel() {
 }
 
 function openSettingsModal(tab = "general") {
+  if (typeof tab !== "string") tab = "general";
+  focusBeforeSettings = document.activeElement;
   renderSettingsControls();
   selectSettingsTab(tab);
   elements.settingsModal.hidden = false;
   document.body.classList.add("modal-open");
   if (tab === "account" && currentUser && !isGuestMode) loadAccountSessions();
+  window.setTimeout(() => document.querySelector(`[data-settings-tab="${tab}"]`)?.focus(), 0);
 }
 
 async function loadAccountSessions() {
@@ -1727,6 +1827,24 @@ async function deleteAccount() {
 function closeSettingsModal() {
   elements.settingsModal.hidden = true;
   document.body.classList.remove("modal-open");
+  focusBeforeSettings?.focus?.();
+}
+
+function trapSettingsFocus(event) {
+  if (event.key !== "Tab") return;
+  const focusable = [...elements.settingsModal.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )].filter((control) => !control.closest("[hidden]"));
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function handleSettingsModalClick(event) {
