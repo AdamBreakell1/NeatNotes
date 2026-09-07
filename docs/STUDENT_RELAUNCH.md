@@ -1,6 +1,6 @@
 # Student relaunch checkpoint
 
-Baseline: `96410c0`, 7 September 2026. Work branch: `codex/student-centric-relaunch`.
+Baseline: `96410c0`, 7 September 2026. Work branch: `codex/student-centric-relaunch`; promoted to `main` with explicit user approval.
 The original brief did not authorise deployment. On 7 September 2026 the user explicitly requested deployment to the existing Render service. This authorises the guarded application release, not publication of unreviewed content, live financial transactions, destructive data operations or unrelated provider changes.
 
 ## Inventory and decisions
@@ -68,11 +68,21 @@ Implemented and locally verified; guarded Render deployment authorised:
 - `STUDENT_RELAUNCH_RESEARCH.md`: sources, design reasoning, under-18 legal questions and proposed pilot.
 - `STUDENT_RELEASE_RUNBOOK.md`: staged verification, approvals, rollout and rollback.
 
+## Deployment record
+
+- GitHub CLI authenticated as `AdamBreakell1`; Git credential integration configured. Authentication blocker resolved. No token is recorded in the repository or this document.
+- Published the feature branch, verified remote `main` remained at the baseline, then fast-forwarded and pushed `main` without force. Application release: `0d7cb8f4afd221dcb3d184effe565af1e78843da` (engineering changes in `39fce97`).
+- Existing Render service: `srv-d93qpma8qa3s73b9k7jg`, linked to `AdamBreakell1/NeatNotes` / `main`. Deployment `dep-dafhfjss728c738va7j0` automatically started on 7 September 2026 at 21:00:15 BST and reported **Deploy succeeded | Live** after 1m02s.
+- Live URL: https://neatnotes.onrender.com/. Health verified release `0d7cb8f4afd2`, persistent database with no fallback, 24 seeded decks, email and Stripe configured. Google remains unconfigured. These configuration flags do not prove real provider delivery or payment lifecycle checks.
+- Daily Render disk snapshot verified for 7 September 2026 at 01:06 (dashboard display), mount `/var/data`, size 1 GB. A fresh manual backup was attempted through Web Shell, but the shell did not establish a working session; no fresh backup or production restore is claimed. No snapshot restore or destructive database action was performed.
+- Live `app.js`, `student-layout.css`, `revision-session.js` and `service-worker.js` match the local release byte-for-byte. Catalogue has 24 metadata entries; all eight C2 packs have no delivered cards and `contentAvailable: false`. Guest access contains exactly one released deck; catalogue is private/no-store.
+- Logged-out revision/deck, exam, labs and history API requests return 401. Public C1 topic returns 200; draft C2 topic returns 404 and is excluded from sitemap. `/component-two.js` returns the HTML app-shell fallback, not the raw draft module (its HTTP 200 must not be misreported as content exposure or as a 404).
+- Browser checked Today/Revise, answer hidden before reveal, reveal/rating controls and the C2 academic-review screen on the deployed site. No real accounts, charges or customer emails were created for these checks.
+- This documentation-only checkpoint uses `[skip render]`, as supported by https://render.com/docs/deploys#skipping-an-auto-deploy, to avoid another application restart. The deployed application SHA can therefore differ from the latest documentation commit on `main`.
+
 ## Next action
 
-Code and evidence are committed locally as `39fce97` on `codex/student-centric-relaunch`. The initial HTTPS push failed because no GitHub credential was available. GitHub CLI has since been installed from Homebrew and browser authentication requested. The GitHub connector is not connected. Render's existing Safari session is available; live health confirmed baseline `96410c0034f0`, persistent storage and configured email/Stripe on 7 September 2026. Deployment is not complete merely because it is authorised.
-
-After authentication, compare the current remote deployment branch with the verified baseline, publish the feature branch and promote without force-pushing or discarding remote changes. Check the Render service branch and backup state, deploy the guarded release, then record the resulting commit and live checks here. Keep C2 academic approvals empty until a human review actually occurs.
+Deployment is complete; do not repeat GitHub setup or redeploy the baseline. Keep C2 academic approvals empty until a human review actually occurs.
 
 Do not restart the relaunch from scratch. Review the feature-branch commit and these documents. Next authorised work is editorial C1 mapping and human review of the C2 draft bank, followed by the staged provider/device/legal checks. Validate shared-device draft retention, long-session/load limits and signup/verification return-to-task across devices before broad release. These are explicit remaining acceptance items, not claims of completion.
 
