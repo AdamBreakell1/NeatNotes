@@ -1,6 +1,6 @@
 # Student relaunch: release and rollback
 
-7 September 2026. Current decision: **NO-GO for an unrestricted production relaunch**. Engineering validation is local; academic, legal, provider and real-device gates below remain open. This branch must not be merged/deployed automatically.
+7 September 2026. Current decision: **NO-GO for an unrestricted production relaunch**. Engineering validation is local; academic, legal, provider and real-device gates below remain open. The user subsequently explicitly authorised deployment to the existing Render service. Deploy only the guarded engineering release, preserving C2 review restrictions and existing provider settings. This permission does not establish academic approval or completion of the remaining launch gates.
 
 ## Boundary and inventory
 

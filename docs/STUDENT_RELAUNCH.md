@@ -1,7 +1,7 @@
 # Student relaunch checkpoint
 
 Baseline: `96410c0`, 7 September 2026. Work branch: `codex/student-centric-relaunch`.
-Production deployment and provider changes are NOT authorised by this brief.
+The original brief did not authorise deployment. On 7 September 2026 the user explicitly requested deployment to the existing Render service. This authorises the guarded application release, not publication of unreviewed content, live financial transactions, destructive data operations or unrelated provider changes.
 
 ## Inventory and decisions
 
@@ -39,7 +39,7 @@ Initial audit verified against current checkout: global lifetime completion filt
 
 ## Working checkpoint
 
-Implemented locally, not yet release-approved:
+Implemented and locally verified; guarded Render deployment authorised:
 
 - Session-specific ordered retrieval queues, preview-to-delivery consistency, reload state and retry-safe flashcard receipts.
 - Guided written rubric review replaces keyword marks. Historic unreliable marks are excluded from current evidence and schedule projections without destroying records.
@@ -70,8 +70,10 @@ Implemented locally, not yet release-approved:
 
 ## Next action
 
-Code and evidence are committed locally as `39fce97` on `codex/student-centric-relaunch`. HTTPS push failed because this environment cannot obtain a GitHub username/credential. GitHub CLI is not installed; an existing trusted SSH connection was not available. No credentials, remote configuration or SSH trust settings were changed. Authenticate using the user's Git client, then run `git push -u origin codex/student-centric-relaunch`. Do not push or merge main as a workaround.
+Code and evidence are committed locally as `39fce97` on `codex/student-centric-relaunch`. The initial HTTPS push failed because no GitHub credential was available. GitHub CLI has since been installed from Homebrew and browser authentication requested. The GitHub connector is not connected. Render's existing Safari session is available; live health confirmed baseline `96410c0034f0`, persistent storage and configured email/Stripe on 7 September 2026. Deployment is not complete merely because it is authorised.
+
+After authentication, compare the current remote deployment branch with the verified baseline, publish the feature branch and promote without force-pushing or discarding remote changes. Check the Render service branch and backup state, deploy the guarded release, then record the resulting commit and live checks here. Keep C2 academic approvals empty until a human review actually occurs.
 
 Do not restart the relaunch from scratch. Review the feature-branch commit and these documents. Next authorised work is editorial C1 mapping and human review of the C2 draft bank, followed by the staged provider/device/legal checks. Validate shared-device draft retention, long-session/load limits and signup/verification return-to-task across devices before broad release. These are explicit remaining acceptance items, not claims of completion.
 
-Keep the work on `codex/student-centric-relaunch`; do not merge main or deploy without approval. No production data, Stripe objects, customer communications, DNS or live provider settings were changed. Production relaunch remains **NO-GO pending the listed gates**.
+The user has approved deployment to the existing Render service. No Stripe objects, customer communications, DNS or content-review approvals have been changed. An unrestricted commercial relaunch remains **NO-GO pending the listed gates**, even after the guarded engineering release is deployed.
