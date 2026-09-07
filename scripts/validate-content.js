@@ -1,14 +1,14 @@
-const fs = require("node:fs");
-const path = require("node:path");
-const vm = require("node:vm");
 const { buildContentModel, validateContentModel } = require("../ocr-content");
+const { validateCoverage } = require("../curriculum-coverage");
+const { QUESTION_BANK } = require("../exam-content");
+const { LABS } = require("../cs-labs");
+const review = require("../content-review.json");
 
-const source = fs.readFileSync(path.join(__dirname, "..", "revision-topics.js"), "utf8");
-const sandbox = { window: {} };
-vm.createContext(sandbox);
-vm.runInContext(source, sandbox, { filename: "revision-topics.js", timeout: 1000 });
-
-const result = validateContentModel(buildContentModel(sandbox.window.REVISION_TOPICS || []));
+const { loadTopics } = require("../backend/services/contentRepository");
+const result = validateContentModel(buildContentModel(loadTopics()));
+const coverage = validateCoverage(loadTopics({ ...review, quarantinedConceptIds: [] }), QUESTION_BANK, LABS, review);
+result.errors.push(...coverage.errors);
+result.valid = result.valid && coverage.valid;
 if (!result.valid) {
   console.error(result.errors.join("\n"));
   process.exitCode = 1;

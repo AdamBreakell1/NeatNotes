@@ -47,6 +47,14 @@ const BADGE_BLUEPRINTS = [
   { mark: "BOOL", a: "#e879f9", b: "#7c3aed", c: "#27113f" },
   { mark: "LAW", a: "#f472b6", b: "#ec4899", c: "#3b0a2a" },
   { mark: "ETH", a: "#818cf8", b: "#4f46e5", c: "#17113f" },
+  { mark: "ABS", a: "#2dd4bf", b: "#0891b2", c: "#134e4a" },
+  { mark: "PLAN", a: "#a3e635", b: "#16a34a", c: "#14532d" },
+  { mark: "STEP", a: "#38bdf8", b: "#2563eb", c: "#1e3a8a" },
+  { mark: "IF", a: "#fbbf24", b: "#e11d48", c: "#881337" },
+  { mark: "SYNC", a: "#f472b6", b: "#7c3aed", c: "#4c1d95" },
+  { mark: "CODE", a: "#22d3ee", b: "#4f46e5", c: "#312e81" },
+  { mark: "SOLVE", a: "#fda4af", b: "#db2777", c: "#831843" },
+  { mark: "ALG", a: "#facc15", b: "#0d9488", c: "#134e4a" },
 ];
 const PROFILE_AVATARS = [
   { id: "notebook", mark: "NB", label: "Notebook", tone: "teal" },
@@ -78,6 +86,7 @@ let saveTimer = null;
 let isGuestMode = true;
 let activeAppSection = "home";
 let activeRevisionTopicId = "cs-1-1-1";
+let activeComponentId = localStorage.getItem("neat-active-component") === "h446-02" ? "h446-02" : "h446-01";
 let revisionCardOrder = {};
 let earnedRevisionBadges = loadRevisionBadges();
 let studyHistory = loadStudyHistory();
@@ -90,6 +99,8 @@ let revisionAutoResetTimer = null;
 let neatQuizProgress = loadNeatQuizProgress();
 let neatQuizState = createEmptyNeatQuizState();
 let cardAttempts = loadLocalArray(CARD_ATTEMPTS_KEY);
+let serverLearningEvidence = [];
+let liveLearningAttemptIds = new Set();
 let activityEvents = loadLocalArray(ACTIVITY_EVENTS_KEY);
 let classGroups = loadLocalArray(CLASS_GROUPS_KEY);
 let classMemberships = loadLocalArray(CLASS_MEMBERSHIPS_KEY);
@@ -108,6 +119,7 @@ let studentClassCodeDraft = "";
 let reviewSchedules = loadLocalObject(REVIEW_SCHEDULES_KEY);
 let mistakeJournal = loadLocalArray(MISTAKE_JOURNAL_KEY);
 let activeAdaptiveSession = null;
+let adaptivePlanPreview = null;
 let accountProfile = null;
 let serverStudentTopicConfidence = new Map();
 let focusBeforeGlobalSearch = null;
@@ -119,12 +131,51 @@ let activePracticeMode = "quick";
 let examPracticeState = null;
 let miniMockState = null;
 let miniMockTimer = null;
+let practiceRequestId = 0;
 let csLabState = null;
 let activePasswordResetToken = "";
 
 const REVISION_TOPICS = window.REVISION_TOPICS || [];
 const NEAT_QUESTIONS = window.NEAT_QUESTIONS || [];
 const LEARNING_MODEL = window.NEAT_LEARNING_MODEL;
+
+function getComponentTopics() {
+  return REVISION_TOPICS.filter((topic) => (topic.componentId || "h446-01") === activeComponentId);
+}
+
+function renderComponentContext() {
+  const topics = getComponentTopics();
+  document.querySelectorAll("[data-component]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.component === activeComponentId)));
+  const select = document.querySelector("#component-topic-select");
+  select.innerHTML = topics.map((topic) => `<option value="${escapeHtml(topic.id)}" ${activeRevisionTopicId === topic.id ? "selected" : ""}>${escapeHtml(topic.code)} ${escapeHtml(topic.title)}</option>`).join("");
+  const pending = topics.some((topic) => topic.reviewStatus === "review_pending");
+  document.querySelector("#component-content-status").textContent = pending
+    ? `${topics.length} topic packs · Academic review pending. ${topics.some((topic) => topic.contentAvailable) ? "Local editorial preview; not yet approved for public release." : "New material is being reviewed before release."}`
+    : `${topics.length} topic packs · OCR H446. Completion reflects the available study material, not full specification mastery.`;
+  document.querySelector("#progress-component-label").textContent = `OCR Component ${activeComponentId === "h446-02" ? "2" : "1"}`;
+}
+
+function changeComponent(componentId) {
+  practiceRequestId += 1;
+  activeComponentId = componentId === "h446-02" ? "h446-02" : "h446-01";
+  localStorage.setItem("neat-active-component", activeComponentId);
+  const topics = getComponentTopics();
+  activeRevisionTopicId = topics.find((topic) => topic.id === getSelectedFreeRevisionTopicId())?.id || topics[0]?.id;
+  activeAdaptiveSession = null;
+  revisionReviewMode = null;
+  adaptivePlanPreview = null;
+  neatQuizState = createEmptyNeatQuizState();
+  examPracticeState = null;
+  miniMockState = null;
+  csLabState = null;
+  clearInterval(miniMockTimer);
+  renderRevisionPage();
+  if (activeAppSection === "practice") {
+    if (activePracticeMode === "exam") loadExamPracticeQuestion();
+    if (activePracticeMode === "mock") loadMiniMock();
+    if (activePracticeMode === "labs") loadCsLabs();
+  }
+}
 
 const elements = {
   activeFolderLabel: document.querySelector("#active-folder-label"),
@@ -453,14 +504,50 @@ elements.neatQuestionsGrid.addEventListener("click", handleNeatQuestionsClick);
 elements.neatQuizPanel.addEventListener("click", handleNeatQuizPanelClick);
 elements.practiceModeBar.addEventListener("click", handlePracticeModeChange);
 elements.examLoadQuestionButton.addEventListener("click", () => {
-  if (activePracticeMode === "mock") loadMiniMock();
+  if (activePracticeMode === "mock") loadMiniMock({ restart: true });
   else if (activePracticeMode === "labs") loadCsLabs(true);
-  else loadExamPracticeQuestion();
+  else loadExamPracticeQuestion({ next: true });
 });
 elements.examPracticePanel.addEventListener("submit", submitExamPracticeAnswer);
 elements.examPracticePanel.addEventListener("submit", submitCsLab);
 elements.examPracticePanel.addEventListener("click", handleExamPracticeClick);
 elements.examPracticePanel.addEventListener("input", handleMiniMockInput);
+document.querySelectorAll("[data-global-action]").forEach((button) => button.addEventListener("click", () => {
+  button.closest("details").open = false;
+  const actions = { settings: () => openSettingsModal(), plans: openPlansModal, contact: () => setAppSection("contact"), login: () => openAuthModal("login"), signup: () => openAuthModal("signup"), logout: () => elements.topbarLogoutButton.click(), theme: () => document.querySelector(".theme-toggle").click() };
+  actions[button.dataset.globalAction]?.();
+}));
+document.addEventListener("click", (event) => {
+  const component = event.target.closest("[data-component]");
+  if (component) changeComponent(component.dataset.component);
+  const accountMenu = document.querySelector(".global-account-menu");
+  if (accountMenu.open && !accountMenu.contains(event.target)) accountMenu.open = false;
+});
+document.addEventListener("keydown", (event) => {
+  const accountMenu = document.querySelector(".global-account-menu");
+  if (event.key === "Escape" && accountMenu.open) {
+    accountMenu.open = false;
+    accountMenu.querySelector("summary").focus();
+  }
+});
+window.addEventListener("online", () => {
+  if (!currentUser || isGuestMode) return;
+  Object.values(loadLocalObject(`neat-pending-attempts:${currentUser.id}`)).slice(0, 30).forEach(syncRevisionAttempt);
+});
+document.querySelector("#component-topic-select").addEventListener("change", (event) => {
+  activeRevisionTopicId = event.target.value;
+  activeAdaptiveSession = null;
+  revisionReviewMode = null;
+  neatQuizState = createEmptyNeatQuizState();
+  examPracticeState = null;
+  renderRevisionPage();
+  if (activeAppSection === "practice" && activePracticeMode === "exam") loadExamPracticeQuestion();
+});
+elements.examPracticePanel.addEventListener("input", (event) => {
+  if (event.target.id !== "exam-answer" || !examPracticeState?.question || !currentUser) return;
+  examPracticeState.answer = event.target.value;
+  localStorage.setItem(`neat-exam-draft:${currentUser.id}:${examPracticeState.question.id}`, event.target.value);
+});
 elements.newButton.addEventListener("click", () => {
   setAppSection("notes");
   createNote();
@@ -566,11 +653,20 @@ function setAppSection(section) {
 function handlePracticeModeChange(event) {
   const button = event.target.closest("[data-practice-mode]");
   if (!button) return;
+  practiceRequestId += 1;
   activePracticeMode = ["exam", "mock", "labs"].includes(button.dataset.practiceMode) ? button.dataset.practiceMode : "quick";
   renderPracticeMode();
-  if (activePracticeMode === "exam" && !examPracticeState) loadExamPracticeQuestion();
-  if (activePracticeMode === "mock" && !miniMockState) loadMiniMock();
-  if (activePracticeMode === "labs" && !csLabState) loadCsLabs();
+  clearInterval(miniMockTimer);
+  elements.examLoadQuestionButton.disabled = false;
+  elements.examPracticePanel.removeAttribute("aria-busy");
+  if (activePracticeMode === "exam") examPracticeState ? renderExamPracticeQuestion() : loadExamPracticeQuestion();
+  if (activePracticeMode === "mock") {
+    if (miniMockState) {
+      renderMiniMock();
+      if (!miniMockState.submitted) miniMockTimer = window.setInterval(updateMiniMockTimer, 1000);
+    } else loadMiniMock();
+  }
+  if (activePracticeMode === "labs") csLabState ? renderCsLab() : loadCsLabs();
 }
 
 function renderPracticeMode() {
@@ -586,12 +682,15 @@ function renderPracticeMode() {
   elements.examPracticeSection.hidden = activePracticeMode === "quick";
   if (activePracticeMode === "mock") {
     document.querySelector("#exam-practice-title").textContent = "Timed mini mock";
+    document.querySelector("#exam-practice-description").textContent = "Practise a short mixed-topic set at your own pace, then review your reasoning. Drafts resume on this device for seven days.";
     elements.examLoadQuestionButton.textContent = "New mini mock";
   } else if (activePracticeMode === "labs") {
     document.querySelector("#exam-practice-title").textContent = "Computer Science Labs";
+    document.querySelector("#exam-practice-description").textContent = "Make a prediction or test a constrained query, then use the explanation to correct your reasoning.";
     elements.examLoadQuestionButton.textContent = "Choose another lab";
   } else {
     document.querySelector("#exam-practice-title").textContent = "Exam Answer Coach";
+    document.querySelector("#exam-practice-description").textContent = "Write an answer, compare its reasoning with a rubric, then improve the same response.";
     elements.examLoadQuestionButton.textContent = "Start exam practice";
   }
   elements.practiceModeBar.querySelectorAll("[data-practice-mode]").forEach((button) => {
@@ -634,7 +733,7 @@ function renderDailyStudyPanel() {
   elements.dailyStreakLabel.textContent = `${streak} day${streak === 1 ? "" : "s"} streak`;
 
   if (today.cards >= DAILY_REVIEW_GOAL) {
-    elements.dailyMissionCopy.textContent = "Daily mission complete. Push on for bonus mastery or bank the win.";
+    elements.dailyMissionCopy.textContent = "Daily mission complete. Push on for additional practice or bank the win.";
     elements.startDailyReviewButton.textContent = "Continue reviewing";
     return;
   }
@@ -647,7 +746,7 @@ function renderDailyStudyPanel() {
 
 function loadStudyHistory() {
   try {
-    const history = JSON.parse(localStorage.getItem(STUDY_HISTORY_KEY) || "{}");
+    const history = JSON.parse(localStorage.getItem(learningStorageKey(STUDY_HISTORY_KEY)) || "{}");
     return history && typeof history === "object" && !Array.isArray(history) ? history : {};
   } catch {
     return {};
@@ -655,12 +754,12 @@ function loadStudyHistory() {
 }
 
 function saveStudyHistory() {
-  localStorage.setItem(STUDY_HISTORY_KEY, JSON.stringify(studyHistory));
+  localStorage.setItem(learningStorageKey(STUDY_HISTORY_KEY), JSON.stringify(studyHistory));
 }
 
 function loadNeatQuizProgress() {
   try {
-    const progress = JSON.parse(localStorage.getItem(NEAT_QUIZ_PROGRESS_KEY) || "{}");
+    const progress = JSON.parse(localStorage.getItem(learningStorageKey(NEAT_QUIZ_PROGRESS_KEY)) || "{}");
     return progress && typeof progress === "object" && !Array.isArray(progress) ? progress : {};
   } catch {
     return {};
@@ -668,7 +767,7 @@ function loadNeatQuizProgress() {
 }
 
 function saveNeatQuizProgress() {
-  localStorage.setItem(NEAT_QUIZ_PROGRESS_KEY, JSON.stringify(neatQuizProgress));
+  localStorage.setItem(learningStorageKey(NEAT_QUIZ_PROGRESS_KEY), JSON.stringify(neatQuizProgress));
 }
 
 function loadFreeRevisionTopicId() {
@@ -686,16 +785,43 @@ function saveFreeRevisionTopicId(topicId) {
 
 function loadLocalArray(key) {
   try {
-    const value = JSON.parse(localStorage.getItem(key) || "[]");
+    const value = JSON.parse(localStorage.getItem(learningStorageKey(key)) || "[]");
     return Array.isArray(value) ? value : [];
   } catch {
     return [];
   }
 }
 
+function learningStorageKey(key) {
+  return [CARD_ATTEMPTS_KEY, ACTIVITY_EVENTS_KEY, REVIEW_SCHEDULES_KEY, MISTAKE_JOURNAL_KEY,
+    STUDY_HISTORY_KEY, REVISION_BADGES_KEY, NEAT_QUIZ_PROGRESS_KEY].includes(key)
+    ? `${key}:${currentUser?.id || "guest"}` : key;
+}
+
+function selectAccountLearningState() {
+  cardAttempts = loadLocalArray(CARD_ATTEMPTS_KEY).filter((attempt) => !String(attempt.source).startsWith("demo"));
+  activityEvents = loadLocalArray(ACTIVITY_EVENTS_KEY);
+  reviewSchedules = loadLocalObject(REVIEW_SCHEDULES_KEY);
+  mistakeJournal = loadLocalArray(MISTAKE_JOURNAL_KEY);
+  studyHistory = loadStudyHistory();
+  earnedRevisionBadges = loadRevisionBadges();
+  neatQuizProgress = loadNeatQuizProgress();
+  serverLearningEvidence = [];
+  liveLearningAttemptIds = new Set();
+  activeAdaptiveSession = null;
+  adaptivePlanPreview = null;
+  neatQuizState = createEmptyNeatQuizState();
+  examPracticeState = null;
+  miniMockState = null;
+  csLabState = null;
+  clearInterval(miniMockTimer);
+  completedRevisionCards.clear();
+  flippedRevisionCards.clear();
+}
+
 function loadLocalObject(key) {
   try {
-    const value = JSON.parse(localStorage.getItem(key) || "{}");
+    const value = JSON.parse(localStorage.getItem(learningStorageKey(key)) || "{}");
     return value && typeof value === "object" && !Array.isArray(value) ? value : {};
   } catch {
     return {};
@@ -703,7 +829,7 @@ function loadLocalObject(key) {
 }
 
 function saveLocalArray(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
+  localStorage.setItem(learningStorageKey(key), JSON.stringify(value));
 }
 
 function createRevisionSession(topicId, mode = "full", cardIds = null) {
@@ -743,6 +869,7 @@ function recordCardAttempt(cardId, topicId, confidence, options = {}) {
   };
 
   cardAttempts = [attempt, ...cardAttempts].slice(0, 1200);
+  liveLearningAttemptIds.add(attempt.id);
   saveLocalArray(CARD_ATTEMPTS_KEY, cardAttempts);
   updateLocalLearningState(attempt);
   recordActivityEvent({ type: "card_rated", topicId, classId: attempt.classId });
@@ -760,7 +887,7 @@ function updateLocalLearningState(attempt) {
   const previous = reviewSchedules[attempt.cardId] || {};
   const memoryState = LEARNING_MODEL.updateMemoryState(previous, rating, attempt.createdAt);
   reviewSchedules = { ...reviewSchedules, [attempt.cardId]: memoryState };
-  localStorage.setItem(REVIEW_SCHEDULES_KEY, JSON.stringify(reviewSchedules));
+  localStorage.setItem(learningStorageKey(REVIEW_SCHEDULES_KEY), JSON.stringify(reviewSchedules));
 
   const incorrect = attempt.quizCorrect === false || rating === "again";
   const existingIndex = mistakeJournal.findIndex((entry) => entry.conceptId === attempt.cardId && !entry.correctedAt);
@@ -801,12 +928,13 @@ function getLearningActivityType(attempt) {
 
 function getAdaptiveLearningItems() {
   if (!LEARNING_MODEL) return [];
-  return REVISION_TOPICS
+  return getComponentTopics()
     .filter((topic) => canAccessRevisionTopic(topic.id))
     .flatMap((topic) => getTopicCards(topic).map((card) => {
       const conceptId = getRevisionCardKey(topic, card);
       const evidence = cardAttempts
-        .filter((attempt) => attempt.cardId === conceptId)
+        .filter((attempt) => attempt.cardId === conceptId && !String(attempt.source).startsWith("demo")
+          && (!currentUser || liveLearningAttemptIds.has(attempt.id)))
         .map((attempt) => ({
           activityType: getLearningActivityType(attempt),
           score: typeof attempt.quizCorrect === "boolean"
@@ -817,6 +945,7 @@ function getAdaptiveLearningItems() {
           occurredAt: attempt.createdAt,
           memoryState: reviewSchedules[conceptId],
         }));
+      if (currentUser) evidence.push(...serverLearningEvidence.filter((entry) => entry.conceptId === conceptId));
       const memoryState = reviewSchedules[conceptId] || {};
       return {
         conceptId,
@@ -838,44 +967,73 @@ function getAdaptiveLearningItems() {
 
 function getAdaptiveSessionPlan(durationMinutes = 15) {
   if (!LEARNING_MODEL) return { durationMinutes, itemBudget: 0, items: [], reasons: [] };
-  return LEARNING_MODEL.buildSession({ items: getAdaptiveLearningItems(), durationMinutes });
+  const items = getAdaptiveLearningItems();
+  const saved = restoreAdaptiveSession(loadLocalObject(`neat-adaptive:${currentUser?.id || "guest"}`), items);
+  if (saved && !saved.completedAt && saved.durationMinutes === durationMinutes) return { ...saved, resuming: true, items: saved.items.filter((item) => !saved.completedConceptIds.includes(item.cardId)) };
+  const fingerprint = `${currentUser?.id || "guest"}:${durationMinutes}:${cardAttempts[0]?.id}:${items.map((item) => item.cardId).join(",")}`;
+  if (adaptivePlanPreview?.fingerprint === fingerprint) return adaptivePlanPreview.plan;
+  const plan = LEARNING_MODEL.buildSession({ items, durationMinutes });
+  adaptivePlanPreview = { fingerprint, plan };
+  return plan;
 }
 
 function startAdaptiveRevisionSession(durationMinutes = 15) {
+  const saved = loadLocalObject(`neat-adaptive:${currentUser?.id || "guest"}`);
+  const restored = restoreAdaptiveSession(saved, getAdaptiveLearningItems());
+  if (restored && !restored.completedAt && restored.durationMinutes === durationMinutes) {
+    activeAdaptiveSession = restored;
+    openNextAdaptiveSessionTopic();
+    setAppSection("revise");
+    return;
+  }
   const plan = getAdaptiveSessionPlan(durationMinutes);
   if (!plan.items.length) {
     setAppSection("revise");
     return;
   }
 
-  activeAdaptiveSession = {
-    ...plan,
-    id: createLocalId("adaptive"),
-    startedAt: new Date().toISOString(),
-    completedConceptIds: [],
-  };
+  activeAdaptiveSession = window.NEAT_REVISION_SESSION.create(plan, createLocalId("adaptive"));
+  persistAdaptiveSession();
   openNextAdaptiveSessionTopic();
   setAppSection("revise");
   trackEvent("adaptive_session_started", { durationMinutes, itemCount: plan.items.length });
 }
 
 function openNextAdaptiveSessionTopic() {
-  const nextItem = activeAdaptiveSession?.items.find((item) => !completedRevisionCards.has(item.cardId));
+  const nextItem = window.NEAT_REVISION_SESSION.next(activeAdaptiveSession);
   if (!nextItem) {
     if (activeAdaptiveSession) activeAdaptiveSession.completedAt = new Date().toISOString();
     return false;
   }
 
   activeRevisionTopicId = nextItem.topicId;
-  const topicCardIds = activeAdaptiveSession.items
-    .filter((item) => item.topicId === nextItem.topicId && !completedRevisionCards.has(item.cardId))
-    .map((item) => item.cardId);
+  const topicCardIds = [nextItem.cardId];
+  completedRevisionCards.delete(nextItem.cardId);
   startRevisionSession(nextItem.topicId, "adaptive", topicCardIds);
   revisionReviewMode = { topicId: nextItem.topicId, cardIds: topicCardIds, mode: "adaptive" };
   return true;
 }
 
+function persistAdaptiveSession() {
+  if (!activeAdaptiveSession) return;
+  const items = activeAdaptiveSession.items.map(({ cardId, topicId, reason, due }) => ({ cardId, topicId, reason, due }));
+  localStorage.setItem(`neat-adaptive:${currentUser?.id || "guest"}`, JSON.stringify({ ...activeAdaptiveSession, items }));
+}
+
+function restoreAdaptiveSession(saved, availableItems) {
+  const restored = window.NEAT_REVISION_SESSION.restore(saved, new Set(availableItems.map((item) => item.cardId)));
+  if (!restored) return null;
+  return { ...restored, items: restored.items.map((item) => ({
+    ...availableItems.find((available) => available.cardId === item.cardId), reason: item.reason, due: item.due,
+  })) };
+}
+
 async function syncRevisionAttempt(attempt) {
+  if (!currentUser || attempt.userId !== currentUser.id) return;
+  const pendingKey = `neat-pending-attempts:${currentUser.id}`;
+  const pending = loadLocalObject(pendingKey);
+  pending[attempt.id] = attempt;
+  localStorage.setItem(pendingKey, JSON.stringify(pending));
   const topic = getQuizTopicById(attempt.topicId);
   const localCardId = String(attempt.cardId || "").split(":").slice(1).join(":");
   const card = getTopicCards(topic).find((candidate) => candidate.id === localCardId || candidate.serverCardId === localCardId);
@@ -887,6 +1045,7 @@ async function syncRevisionAttempt(attempt) {
       method: "POST",
       body: {
         deckId: topic.id,
+        clientAttemptId: attempt.id,
         cardId: serverCardId,
         classId: attempt.classId || null,
         confidence: attempt.confidence,
@@ -896,6 +1055,9 @@ async function syncRevisionAttempt(attempt) {
         rating: attempt.difficulty || undefined,
       },
     });
+    const remaining = loadLocalObject(pendingKey);
+    delete remaining[attempt.id];
+    localStorage.setItem(pendingKey, JSON.stringify(remaining));
   } catch (error) {
     trackEvent("revision_attempt_sync_failed", {
       topicId: topic.id,
@@ -1120,7 +1282,30 @@ function createEmptyNeatQuizState() {
     score: 0,
     streak: 0,
     bestStreak: 0,
+    missedIds: [],
   };
+}
+
+function quizSessionKey(topicId) {
+  return `neat-quiz-session:${currentUser?.id || "guest"}:${topicId}`;
+}
+
+function persistQuizSession() {
+  if (!neatQuizState.quizId) return;
+  const { questions, ...state } = neatQuizState;
+  localStorage.setItem(quizSessionKey(state.quizId), JSON.stringify({
+    ...state, questionIds: questions.map((question) => question.id),
+    signature: hashString(JSON.stringify(questions)),
+  }));
+}
+
+function restoreQuizSession(topic, bank) {
+  const saved = loadLocalObject(quizSessionKey(topic.id));
+  if (saved.completed || !Array.isArray(saved.questionIds) || !saved.questionIds.length) return null;
+  const questions = saved.questionIds.map((id) => bank.find((question) => question.id === id));
+  if (questions.some((question) => !question) || saved.signature !== hashString(JSON.stringify(questions))) return null;
+  if (!Number.isInteger(saved.currentIndex) || saved.currentIndex < 0 || saved.currentIndex >= questions.length) return null;
+  return { ...createEmptyNeatQuizState(), ...saved, questions };
 }
 
 function getStudyDayKey(date = new Date()) {
@@ -1182,7 +1367,7 @@ function getRecommendedRevisionTopic() {
     if (recommendedTopic && isRevisionTopicRecommendable(recommendedTopic.id)) return recommendedTopic;
   }
 
-  const availableTopics = REVISION_TOPICS.filter((topic) => isRevisionTopicRecommendable(topic.id));
+  const availableTopics = getComponentTopics().filter((topic) => isRevisionTopicRecommendable(topic.id));
   const candidates = availableTopics.filter((topic) => !earnedRevisionBadges[topic.id]);
   const topicPool = candidates.length ? candidates : availableTopics;
 
@@ -1223,7 +1408,7 @@ function renderAchievementSummary() {
 
   elements.badgeCount.textContent = badgeCount;
   elements.badgeProgressPercent.textContent = `${totals.percent}%`;
-  elements.badgeProgressLabel.textContent = `${cardCount} cards mastered`;
+  elements.badgeProgressLabel.textContent = `${cardCount} cards completed`;
   elements.badgeProgressBar.style.width = `${totals.percent}%`;
 
   elements.badgeCoursePercent.textContent = `${totals.percent}%`;
@@ -1231,17 +1416,17 @@ function renderAchievementSummary() {
   elements.badgeCourseBar.style.width = `${totals.percent}%`;
   elements.badgeCollectionSummary.textContent =
     totals.earnedTopics === totals.totalTopics && totals.totalTopics
-      ? "Every Computer Science deck is complete. That collection is looking seriously sharp."
+      ? "Every deck in this component has been completed. Return for spaced retrieval to strengthen recall."
       : `${totals.earnedTopics} of ${totals.totalTopics} deck badges unlocked. Complete decks to fill the collection.`;
 
   elements.revisionCoursePercent.textContent = `${totals.percent}%`;
-  elements.revisionCourseLabel.textContent = `${cardCount} cards mastered`;
+  elements.revisionCourseLabel.textContent = `${cardCount} cards completed`;
   elements.revisionCourseBar.style.width = `${totals.percent}%`;
 }
 
 function renderBadgeCollection() {
-  elements.badgeCollectionGrid.innerHTML = REVISION_TOPICS.map((topic, index) => {
-    const badge = getRevisionBadge(topic, index);
+  elements.badgeCollectionGrid.innerHTML = getComponentTopics().map((topic) => {
+    const badge = getRevisionBadge(topic);
     const earnedAt = earnedRevisionBadges[topic.id];
     const earnedClass = earnedAt ? " earned" : " locked";
     const earnedLabel = earnedAt ? `Unlocked ${formatDate(earnedAt)}` : "Not yet unlocked";
@@ -1280,7 +1465,7 @@ function showAchievementModal(topic) {
   elements.achievementBadge.outerHTML = renderBadgeEmblem(badge, false, "achievement-badge");
   elements.achievementBadge = document.querySelector("#achievement-badge");
   elements.achievementTitle.textContent = `${badge.name} badge unlocked`;
-  elements.achievementText.textContent = `${topic.code} ${topic.title} is complete. ${getRevisionTopicCardCount(topic)} Computer Science cards have been added to your total mastery.`;
+  elements.achievementText.textContent = `${topic.code} ${topic.title}: ${getRevisionTopicCardCount(topic)} cards completed. This badge celebrates completing the deck; delayed retrieval builds stronger evidence of recall.`;
   elements.achievementModal.hidden = false;
   document.body.classList.add("modal-open");
 }
@@ -1298,7 +1483,7 @@ function handleAchievementModalClick(event) {
 
 function loadRevisionBadges() {
   try {
-    const storedBadges = JSON.parse(localStorage.getItem(REVISION_BADGES_KEY) || "{}");
+    const storedBadges = JSON.parse(localStorage.getItem(learningStorageKey(REVISION_BADGES_KEY)) || "{}");
     return storedBadges && typeof storedBadges === "object" && !Array.isArray(storedBadges) ? storedBadges : {};
   } catch {
     return {};
@@ -1306,7 +1491,7 @@ function loadRevisionBadges() {
 }
 
 function saveRevisionBadges() {
-  localStorage.setItem(REVISION_BADGES_KEY, JSON.stringify(earnedRevisionBadges));
+  localStorage.setItem(learningStorageKey(REVISION_BADGES_KEY), JSON.stringify(earnedRevisionBadges));
 }
 
 function awardRevisionBadge(topic) {
@@ -1322,9 +1507,10 @@ function awardRevisionBadge(topic) {
 }
 
 function getRevisionAchievementTotals() {
-  const totalCards = REVISION_TOPICS.reduce((sum, topic) => sum + getRevisionTopicCardCount(topic), 0);
-  const earnedTopics = REVISION_TOPICS.filter((topic) => earnedRevisionBadges[topic.id]).length;
-  const earnedCards = REVISION_TOPICS.reduce(
+  const topics = getComponentTopics();
+  const totalCards = topics.reduce((sum, topic) => sum + getRevisionTopicCardCount(topic), 0);
+  const earnedTopics = topics.filter((topic) => earnedRevisionBadges[topic.id]).length;
+  const earnedCards = topics.reduce(
     (sum, topic) => sum + (earnedRevisionBadges[topic.id] ? getRevisionTopicCardCount(topic) : getCompletedRevisionCount(topic)),
     0,
   );
@@ -1334,7 +1520,7 @@ function getRevisionAchievementTotals() {
     earnedTopics,
     percent: totalCards ? Math.round((earnedCards / totalCards) * 100) : 0,
     totalCards,
-    totalTopics: REVISION_TOPICS.length,
+    totalTopics: topics.length,
   };
 }
 
@@ -1966,6 +2152,9 @@ function selectSettingsTab(tabName = "general") {
 }
 
 async function boot() {
+  api("/api/auth/providers").then((providers) => {
+    document.querySelector(".google-button").hidden = !providers.google;
+  }).catch(() => {});
   const params = new URLSearchParams(location.search);
   const passwordResetToken = params.get("reset");
   const emailWasVerified = params.get("verified") === "1";
@@ -2089,7 +2278,13 @@ function openDemoWorkspace(options = {}) {
     activeLearningMode = "teacher";
     localStorage.setItem(LEARNING_MODE_KEY, "teacher");
   }
-  setAppSection(options.section || "home");
+  activeComponentId = "h446-01";
+  setAppSection(options.section === "contact" ? "contact" : "revise");
+  if (options.section !== "contact") {
+    const plan = getAdaptiveSessionPlan(5);
+    activeAdaptiveSession = window.NEAT_REVISION_SESSION.create({ ...plan, items: plan.items.slice(0, 4) }, createLocalId("demo"));
+    openNextAdaptiveSessionTopic();
+  }
   render();
   if (options.teacher) {
     renderRevisionPage();
@@ -2183,6 +2378,7 @@ async function logout() {
 
 function applyAuthenticatedSession(user, nextPlans = null) {
   currentUser = user;
+  selectAccountLearningState();
   plans = nextPlans || plans;
   isGuestMode = false;
   elements.authView.hidden = true;
@@ -2400,6 +2596,7 @@ function setAuthLoading(mode, isLoading) {
 function loadGuestApp(options = {}) {
   isGuestMode = true;
   currentUser = null;
+  selectAccountLearningState();
   plans = {
     ...plans,
     guest: {
@@ -2429,7 +2626,7 @@ function loadGuestApp(options = {}) {
   if (activeWorkspaceId === "demo-ocr-workspace") {
     activeRevisionTopicId = DEFAULT_GUEST_REVISION_DECK_ID;
     saveFreeRevisionTopicId(DEFAULT_GUEST_REVISION_DECK_ID);
-    seedDemoProgress();
+    // Old sample records remain on disk but are excluded from learning evidence.
   }
   elements.authView.hidden = true;
   elements.appView.hidden = Boolean(options.showLanding);
@@ -2453,6 +2650,8 @@ async function loadApp() {
   accountProfile = profileResponse;
   if (profileResponse.user) currentUser = profileResponse.user;
   await refreshAccessibleRevisionContent();
+  for (const attempt of Object.values(loadLocalObject(`neat-pending-attempts:${currentUser.id}`)).slice(0, 30)) await syncRevisionAttempt(attempt);
+  await loadAccountLearningHistory();
   pruneRevisionTopicCardsForCurrentPlan();
   renderPlan();
 
@@ -2493,6 +2692,47 @@ async function loadAccountLearningWorkspace() {
     activityEvents = [];
     serverStudentTopicConfidence = new Map();
   }
+}
+
+async function loadAccountLearningHistory() {
+  const userId = currentUser?.id;
+  if (!userId) return;
+  const history = await api("/api/revision/history");
+  if (currentUser?.id !== userId) return;
+  serverLearningEvidence = history.evidence;
+  mistakeJournal = history.mistakes.map((row) => ({ id: row.id, conceptId: row.concept_id, topicId: row.deck_id,
+    prompt: row.front, explanation: row.explanation, activityType: row.activity_type,
+    createdAt: row.created_at, updatedAt: row.updated_at, correctedAt: row.corrected_at }));
+  saveLocalArray(MISTAKE_JOURNAL_KEY, mistakeJournal);
+  const pending = Object.values(loadLocalObject(`neat-pending-attempts:${userId}`));
+  liveLearningAttemptIds = new Set(pending.map((attempt) => attempt.id));
+  cardAttempts = [...pending, ...history.attempts.map((attempt) => ({
+    id: attempt.id, userId, cardId: `${attempt.deck_id}:${attempt.card_key}`, topicId: attempt.deck_id,
+    confidence: attempt.confidence, quizCorrect: attempt.quiz_correct === null ? undefined : Boolean(attempt.quiz_correct),
+    source: attempt.source, createdAt: attempt.created_at, classId: attempt.class_id,
+  }))];
+  reviewSchedules = Object.fromEntries(history.schedules.map((row) => [row.concept_id, {
+    difficulty: row.difficulty, stabilityDays: row.stability_days, retrievability: row.retrievability,
+    lastReviewAt: row.last_review_at, nextReviewAt: row.next_review_at, successfulRetrievals: row.successful_retrievals, lapses: row.lapses,
+  }]));
+  studyHistory = {};
+  for (const attempt of cardAttempts) {
+    const key = getStudyDayKey(new Date(attempt.createdAt));
+    const day = studyHistory[key] ||= { cards: 0, topics: [] };
+    day.cards += 1;
+    if (!day.topics.includes(attempt.topicId)) day.topics.push(attempt.topicId);
+    completedRevisionCards.add(attempt.cardId);
+  }
+  for (const topic of REVISION_TOPICS) {
+    if (topic.cards.length && topic.cards.every((card) => completedRevisionCards.has(`${topic.id}:${card.id}`))) {
+      earnedRevisionBadges[topic.id] ||= cardAttempts.find((attempt) => attempt.topicId === topic.id)?.createdAt;
+    }
+  }
+  saveStudyHistory();
+  saveRevisionBadges();
+  saveLocalArray(CARD_ATTEMPTS_KEY, cardAttempts);
+  localStorage.setItem(learningStorageKey(REVIEW_SCHEDULES_KEY), JSON.stringify(reviewSchedules));
+  adaptivePlanPreview = null;
 }
 
 function normaliseServerClass(group) {
@@ -2564,8 +2804,8 @@ function openOnboarding() {
   document.querySelector("#onboarding-target-grade").value = profile.target_grade || "";
   document.querySelector("#onboarding-personal-target").value = profile.personal_target || "";
   const examDates = parseClientJson(profile.exam_dates, {});
-  document.querySelector("#onboarding-component-1-date").value = examDates.component1 || "";
-  document.querySelector("#onboarding-component-2-date").value = examDates.component2 || "";
+  document.querySelector("#onboarding-component-1-date").value = examDates.paper1 || examDates.component1 || "";
+  document.querySelector("#onboarding-component-2-date").value = examDates.paper2 || examDates.component2 || "";
   const taughtTopics = parseClientJson(profile.taught_topic_ids, []);
   taughtTopics.forEach((topicId) => {
     const input = elements.onboardingTopicGrid.querySelector(`input[value="${topicId}"]`);
@@ -2582,8 +2822,8 @@ function renderOnboardingStep() {
   elements.onboardingForm.querySelectorAll("[data-onboarding-step]").forEach((section) => {
     section.hidden = Number(section.dataset.onboardingStep) !== onboardingStep;
   });
-  elements.onboardingProgressLabel.textContent = `Step ${onboardingStep} of 6`;
-  elements.onboardingProgressBar.style.width = `${(onboardingStep / 6) * 100}%`;
+  elements.onboardingProgressLabel.textContent = `Step ${onboardingStep === 1 ? 1 : 2} of 2`;
+  elements.onboardingProgressBar.style.width = `${onboardingStep === 1 ? 50 : 100}%`;
   elements.onboardingBack.hidden = onboardingStep === 1;
   elements.onboardingNext.hidden = onboardingStep === 6;
   const heading = elements.onboardingForm.querySelector(`[data-onboarding-step="${onboardingStep}"] h3`);
@@ -2592,8 +2832,7 @@ function renderOnboardingStep() {
 }
 
 function moveOnboardingStep(direction) {
-  if (direction > 0 && !validateOnboardingStep()) return;
-  onboardingStep = Math.max(1, Math.min(6, onboardingStep + direction));
+  onboardingStep = direction > 0 ? 6 : 1;
   elements.onboardingMessage.textContent = "";
   renderOnboardingStep();
 }
@@ -2627,8 +2866,8 @@ async function completeOnboarding(event) {
         taughtTopicSource: "self",
         revisionGoal: data.get("revision-goal") || "keep_up",
         examDates: {
-          component1: data.get("component-1-date") || null,
-          component2: data.get("component-2-date") || null,
+          paper1: data.get("component-1-date") || null,
+          paper2: data.get("component-2-date") || null,
         },
         completeOnboarding: true,
       },
@@ -2801,7 +3040,7 @@ function ensureDemoWorkspace(options = {}) {
   selectedId = notes[0]?.id || null;
   activeRevisionTopicId = "cs-1-1-1";
   saveFreeRevisionTopicId("cs-1-1-1");
-  seedDemoProgress();
+  // Start a real short activity without inventing a study history.
 }
 
 function getDemoNoteBody() {
@@ -3256,6 +3495,11 @@ function closePlansModal() {
 }
 
 function handlePricingModalClick(event) {
+  if (event.target.closest("[data-auth-mode]")) {
+    closePlansModal();
+    openAuthModal("signup");
+    return;
+  }
   if (event.target.closest("[data-close-pricing]")) {
     closePlansModal();
     return;
@@ -3278,10 +3522,10 @@ function handleGlobalKeydown(event) {
     return;
   }
   if (!isTyping && elements.appView.classList.contains("revision-focus-active")) {
-    const activeCard = elements.revisionCardGrid.querySelector(".revision-card");
+    const activeCard = elements.revisionCardGrid.querySelector(".focused-retrieval-card");
     const confidenceIndex = { Digit1: 0, Digit2: 1, Digit3: 2 }[event.code];
     if (confidenceIndex !== undefined) {
-      const confidenceButton = activeCard?.querySelectorAll(".confidence-button")[confidenceIndex];
+      const confidenceButton = activeCard?.querySelectorAll("[data-card-confidence]")[confidenceIndex];
       if (confidenceButton && confidenceButton.tabIndex === 0) {
         event.preventDefault();
         confidenceButton.click();
@@ -3662,10 +3906,17 @@ function render() {
 
 function renderAccountChrome() {
   const isSignedIn = Boolean(currentUser) && !isGuestMode;
+  const menuLabel = document.querySelector("#global-menu-label");
+  menuLabel.innerHTML = isSignedIn ? `<span class="profile-avatar profile-avatar-small" id="menu-profile-avatar"></span><span>${escapeHtml((currentUser.name || "My account").split(" ")[0])}</span>` : "Account";
+  if (isSignedIn) renderProfileAvatar(document.querySelector("#menu-profile-avatar"));
+  menuLabel.setAttribute("aria-label", isSignedIn ? `Signed in as ${currentUser.name || "your account"}. Open account menu` : "Open account and help menu");
+  document.querySelectorAll('[data-global-action="login"], [data-global-action="signup"]').forEach((button) => { button.hidden = isSignedIn; });
+  document.querySelector('[data-global-action="logout"]').hidden = !isSignedIn;
+  document.querySelectorAll(".teacher-entry-button").forEach((button) => { button.hidden = !currentUser?.isTeacher; });
   elements.guestAccountActions.hidden = isSignedIn;
   elements.signedInAccountActions.hidden = !isSignedIn;
-  elements.topbarBrandButton.setAttribute("aria-label", isSignedIn ? "Return to Notes" : "Exit demo and return to the Neat Notes homepage");
-  elements.topbarBrandButton.title = isSignedIn ? "Return to Notes" : "Exit demo";
+  elements.topbarBrandButton.setAttribute("aria-label", isSignedIn ? "Return to Today" : "Exit demo and return to the Neat Notes homepage");
+  elements.topbarBrandButton.title = isSignedIn ? "Return to Today" : "Exit demo";
   renderProfileAvatar(elements.topbarProfileAvatar);
 
   if (isSignedIn) {
@@ -3697,13 +3948,15 @@ function renderAccountChrome() {
 function renderRevisionMasteryMap() {
   const recommendedTopic = getRecommendedRevisionTopic();
   const learningItems = getAdaptiveLearningItems();
-  const secureTopics = REVISION_TOPICS.filter((topic) => getTopicLearningSummary(topic.id, learningItems).state === "Secure").length;
+  const topics = getComponentTopics();
+  const secureTopics = topics.filter((topic) => getTopicLearningSummary(topic.id, learningItems).state === "Secure").length;
 
   elements.revisionMasteryMap.innerHTML = `
     <div class="mastery-map-head">
       <div>
-        <span>OCR Component 01 evidence map</span>
-        <strong>${secureTopics}/${REVISION_TOPICS.length} topics currently secure</strong>
+        <span>Evidence estimate · Component ${activeComponentId === "h446-02" ? "2" : "1"}</span>
+        <strong>${secureTopics}/${topics.length} topics currently secure</strong>
+        <p>Exposure shows what you have attempted. Ratings report confidence. Secure estimates require varied, spaced retrieval evidence; they do not predict a grade.</p>
       </div>
       ${
         recommendedTopic
@@ -3712,7 +3965,7 @@ function renderRevisionMasteryMap() {
       }
     </div>
     <div class="mastery-map-grid">
-      ${REVISION_TOPICS.map((topic) => {
+      ${topics.map((topic) => {
         const summary = getTopicLearningSummary(topic.id, learningItems);
         const activeClass = topic.id === activeRevisionTopicId ? " active" : "";
         const earnedClass = summary.state === "Secure" ? " earned" : "";
@@ -3772,6 +4025,8 @@ function switchLearningMode(event) {
 
 function renderStudentClassPanel() {
   const memberships = getStudentClassMemberships();
+  elements.studentClassPanel.hidden = memberships.length === 0;
+  if (!memberships.length) return;
   if (memberships.length === 1 && !activeStudentClassId) {
     activeStudentClassId = memberships[0].classId;
     localStorage.setItem(ACTIVE_STUDENT_CLASS_KEY, activeStudentClassId);
@@ -5284,9 +5539,19 @@ function createInviteCode(prefix) {
 }
 
 function renderRevisionPage() {
+  if (!getComponentTopics().some((topic) => topic.id === activeRevisionTopicId)) activeRevisionTopicId = getComponentTopics()[0]?.id;
+  renderComponentContext();
   let topic = getActiveRevisionTopic();
   renderLearningMode();
   renderPracticeMode();
+
+  if (!topic) {
+    elements.revisionTopicTitle.textContent = "Revision content is unavailable";
+    elements.revisionCardGrid.innerHTML = `<section class="exam-empty-state"><h3>Reconnect to load your course</h3><p>Account-protected revision content is not cached for offline access. Your local notes remain on this device.</p><button type="button" data-reload-content>Try again</button></section>`;
+    elements.revisionCardGrid.querySelector("[data-reload-content]").addEventListener("click", () => location.reload());
+    document.querySelector("#component-content-status").textContent = "A connection is needed to load revision content.";
+    return;
+  }
 
   if (activeLearningMode === "teacher") {
     renderTeacherMode();
@@ -5294,7 +5559,7 @@ function renderRevisionPage() {
   }
 
   const selectedFreeDeck = getSelectedFreeRevisionTopicId();
-  if (!canAccessRevisionTopic(topic.id) && selectedFreeDeck) {
+  if (!canAccessRevisionTopic(topic.id) && selectedFreeDeck && getComponentTopics().some((item) => item.id === selectedFreeDeck) && !getComponentTopics().some((item) => item.id === activeRevisionTopicId)) {
     activeRevisionTopicId = selectedFreeDeck;
     topic = getActiveRevisionTopic();
   }
@@ -5313,6 +5578,15 @@ function renderRevisionPage() {
   renderRevisionMasteryMap();
   renderNeatQuestions();
   renderRevisionTopicList();
+
+  if (activeAdaptiveSession?.completedAt && revisionReviewMode?.mode === "adaptive") {
+    const total = activeAdaptiveSession.items.length;
+    elements.revisionProgressPercent.textContent = "100%";
+    elements.revisionProgressLabel.textContent = `${total}/${total} reviewed`;
+    elements.revisionProgressRing.style.strokeDashoffset = "0";
+    elements.revisionCardGrid.innerHTML = `<section class="deck-summary-panel"><p class="eyebrow">Session complete</p><h3>${total} retrieval activities reviewed</h3><p>Your confidence ratings schedule the next review. They are self-reported confidence, not exam marks or a predicted grade.</p><p>Return to Today for your next manageable session.</p><button type="button" data-app-section="home">Back to Today</button></section>`;
+    return;
+  }
 
   if (!access.canAccess) {
     elements.revisionProgressPercent.textContent = "0%";
@@ -5344,7 +5618,7 @@ function renderRevisionPage() {
   elements.revisionProgressLabel.textContent =
     completedCount === deckTotal && deckTotal
       ? "Complete"
-      : `${completedCount}/${deckTotal} done${sessionCardIds ? " · weak review" : ""}`;
+      : `${completedCount}/${deckTotal} done`;
   elements.revisionProgressRing.style.strokeDashoffset = String(283 - (283 * progress) / 100);
 
   if (completedCount === deckTotal && deckTotal) {
@@ -5358,31 +5632,19 @@ function renderRevisionPage() {
 
   clearRevisionAutoReset();
 
-  elements.revisionCardGrid.innerHTML = remainingOrder
+  elements.revisionCardGrid.innerHTML = remainingOrder.slice(0, 1)
     .map((cardIndex) => {
       const card = topicCards[cardIndex];
       const cardKey = getRevisionCardKey(topic, card);
       const isFlipped = flippedRevisionCards.has(cardKey);
-      return `<article class="revision-card${isFlipped ? " flipped" : ""}" data-card-id="${escapeHtml(cardKey)}" role="button" tabindex="0" aria-pressed="${String(isFlipped)}">
-        <span class="revision-card-inner">
-          <span class="revision-card-face revision-card-front">
-            <span class="revision-card-category">${escapeHtml(card.category)}</span>
-            <strong>${escapeHtml(card.front)}</strong>
-            <span class="revision-card-cue">Reveal answer</span>
-          </span>
-          <span class="revision-card-face revision-card-back">
-            <span class="revision-card-category">Answer</span>
-            <span class="revision-card-answer">${escapeHtml(card.back)}</span>
-            <span class="revision-card-back-actions">
-              <span class="revision-card-cue">Return to question</span>
-              <span class="confidence-controls" aria-label="Rate your confidence for this card">
-                <button class="confidence-button needs-practice" type="button" data-card-confidence="again" data-card-id="${escapeHtml(cardKey)}" tabindex="${isFlipped ? "0" : "-1"}">Again</button>
-                <button class="confidence-button good" type="button" data-card-confidence="good" data-card-id="${escapeHtml(cardKey)}" tabindex="${isFlipped ? "0" : "-1"}">Good</button>
-                <button class="confidence-button easy" type="button" data-card-confidence="easy" data-card-id="${escapeHtml(cardKey)}" tabindex="${isFlipped ? "0" : "-1"}">Easy</button>
-              </span>
-            </span>
-          </span>
-        </span>
+      return `<article class="focused-retrieval-card" aria-label="Revision activity">
+        <div class="retrieval-meta"><span>${escapeHtml(card.category)}</span><span>${activeAdaptiveSession && !activeAdaptiveSession.completedAt ? `${activeAdaptiveSession.completedConceptIds.length + 1} of ${activeAdaptiveSession.items.length} in session` : `${completedCount + 1} of ${deckTotal}`}</span></div>
+        <h3>${escapeHtml(card.front)}</h3>
+        ${isFlipped ? `<section class="retrieval-answer"><h4>Reasoning guide</h4><p>${escapeHtml(card.back)}</p></section><div class="confidence-controls" role="group" aria-label="How well did you recall this before revealing?">
+          <button type="button" data-card-confidence="again" data-card-id="${escapeHtml(cardKey)}">Again</button>
+          <button type="button" data-card-confidence="good" data-card-id="${escapeHtml(cardKey)}">Good</button>
+          <button type="button" data-card-confidence="easy" data-card-id="${escapeHtml(cardKey)}">Easy</button>
+        </div>` : `<button class="primary-button" type="button" data-card-id="${escapeHtml(cardKey)}">Reveal answer</button>`}
       </article>`;
     })
     .join("");
@@ -5441,7 +5703,7 @@ function handleMistakeJournalClick(event) {
 }
 
 function renderRevisionTopicList() {
-  elements.revisionTopicList.innerHTML = REVISION_TOPICS.map((revisionTopic, index) => {
+  elements.revisionTopicList.innerHTML = getComponentTopics().map((revisionTopic, index) => {
     const activeClass = revisionTopic.id === activeRevisionTopicId ? " active" : "";
     const earnedClass = earnedRevisionBadges[revisionTopic.id] ? " earned" : "";
     const access = getRevisionTopicAccessState(revisionTopic.id);
@@ -5466,10 +5728,11 @@ function renderRevisionTopicList() {
 }
 
 function renderRevisionAccessPanel(topic, access) {
+  if (topic.contentAvailable === false) return `<section class="revision-paywall-panel"><p class="eyebrow">Academic review</p><h3>This topic is being reviewed</h3><p>Component 2 material is prepared, but has not yet passed its publication review. A paid plan does not bypass this review.</p><button type="button" data-component="h446-01">Browse Component 1</button></section>`;
   const title = access.canClaim ? "Choose your free revision deck" : "This deck is part of Pro";
   const copy = access.canClaim
-    ? "Free accounts can unlock one complete OCR topic deck with flashcards, instant marking and streak tracking. Pick carefully: Pro unlocks every deck."
-    : "Your free OCR deck is already selected. Upgrade to Pro for the full Computer Science library, Quick Practice across every topic and complete progress tracking.";
+    ? "Free accounts can unlock one complete OCR topic deck with flashcards, instant marking and streak tracking. Pick carefully: Pro unlocks every released deck."
+    : "Your free OCR deck is already selected. Upgrade to Pro for all released Computer Science packs, Quick Practice across every topic and complete progress tracking.";
   const button = access.canClaim
     ? `<button type="button" data-claim-free-topic="${escapeHtml(topic.id)}">Use ${escapeHtml(topic.code)} as my free deck</button>`
     : `<button type="button" data-upgrade-revision="${escapeHtml(topic.id)}">Unlock with Pro</button>`;
@@ -5660,10 +5923,11 @@ function renderStudentDashboard(topic) {
     <section class="today-session" aria-labelledby="today-session-title">
       <div class="today-session-copy">
         <p class="eyebrow">Recommended session</p>
-        <h3 id="today-session-title">15 minutes. ${session.items.length} focused retrieval activities.</h3>
+        <h3 id="today-session-title">${session.items.length ? `${session.resuming ? "Pick up where you left off" : "Make time for a little progress"}` : "Choose your first topic"}</h3>
+        <p class="today-session-size">${session.items.length ? `About 15 minutes · ${session.items.length} retrieval activities` : "Your free deck includes retrieval, feedback and practice."}</p>
         <p>${recommended ? escapeHtml(recommended.reason) : "Choose your free OCR deck to create a revision plan."}</p>
         <div class="today-session-actions">
-          <button type="button" data-session-duration="15">Start revision</button>
+          <button type="button" data-session-duration="15">${session.resuming ? "Resume revision" : session.items.length ? "Start revision" : "Choose a deck"}</button>
           <details class="session-duration-menu">
             <summary>Change length</summary>
             <div>
@@ -5673,15 +5937,14 @@ function renderStudentDashboard(topic) {
           </details>
         </div>
       </div>
-      <ol class="today-session-list" aria-label="Session preview">
+      <details class="today-preview"><summary>Preview this session</summary><ol class="today-session-list" aria-label="Session preview">
         ${sessionPreview.length ? sessionPreview.map((item) => `<li>
           <span>${escapeHtml(item.code)} · ${escapeHtml(item.category)}</span>
           <strong>${escapeHtml(item.prompt)}</strong>
-          <small>${escapeHtml(item.reason)}</small>
         </li>`).join("") : `<li><strong>Choose a topic to begin</strong><small>Your first completed activity creates the learning baseline.</small></li>`}
-      </ol>
+      </ol></details>
     </section>
-    <div class="student-home-sections">
+    <details class="today-tools"><summary>More study tools${openMistakes.length ? ` · ${openMistakes.length} mistake${openMistakes.length === 1 ? "" : "s"} to revisit` : ""}</summary><div class="student-home-sections">
       <section>
         <div class="section-title"><span>Due for review</span><span>${dueItems.length}</span></div>
         ${dueItems.length ? `<p><strong>${escapeHtml(dueItems[0].code)} ${escapeHtml(dueItems[0].topicTitle)}</strong><br>${dueItems.length} concept${dueItems.length === 1 ? " is" : "s are"} ready for retrieval.</p>` : `<p>Nothing is overdue. New activity will be scheduled as you revise.</p>`}
@@ -5692,8 +5955,8 @@ function renderStudentDashboard(topic) {
         <p><strong>${recentQuiz ? `${escapeHtml(recentQuiz.topic.code)} Quick Practice` : recentNote ? escapeHtml(recentNote.title || createTitle(recentNote.body)) : "Start your first activity"}</strong><br>${today.cards} retrieval activities completed today.</p>
         <button type="button" data-student-action="${recentQuiz ? "quick" : recentNote ? "note" : "cards"}">${recentQuiz ? "Continue practice" : recentNote ? "Open note" : "Choose a topic"}</button>
       </section>
-      <section>
-        <div class="section-title"><span>Assignments</span><span>${activeAssignments.length}</span></div>
+      <section ${activeAssignments.length ? "" : "hidden"}>
+        <div class="section-title"><span>Legacy class assignments</span><span>${activeAssignments.length}</span></div>
         ${activeAssignments.length ? `<p><strong>${escapeHtml(activeAssignments[0].title)}</strong><br>${escapeHtml(activeAssignments[0].instructions || "Teacher-set revision")}</p>
           <div class="assignment-home-actions">
             <button type="button" data-assignment-start="${escapeHtml(activeAssignments[0].id)}">${activeAssignments[0].userStatus === "started" ? "Continue assignment" : "Start assignment"}</button>
@@ -5710,14 +5973,14 @@ function renderStudentDashboard(topic) {
         <p>${examCountdown ? `<strong>${escapeHtml(examCountdown.label)}</strong><br>${escapeHtml(examCountdown.message)}` : "Add exam dates to shape the balance of retrieval and exam practice."}</p>
         <button type="button" data-student-action="exam-settings">${examCountdown ? "Review exam plan" : "Add exam dates"}</button>
       </section>
-    </div>`;
+    </div></details>`;
 }
 
 function getNearestExamCountdown() {
   const examDates = parseClientJson(accountProfile?.studentProfile?.exam_dates, {});
   const options = [
-    { key: "component1", label: "Component 01" },
-    { key: "component2", label: "Component 02" },
+    { key: "paper1", label: "Component 01" },
+    { key: "paper2", label: "Component 02" },
   ].map((item) => ({ ...item, date: examDates[item.key] ? new Date(`${examDates[item.key]}T12:00:00`) : null }))
     .filter((item) => item.date && !Number.isNaN(item.date.getTime()) && item.date.getTime() >= Date.now() - 24 * 60 * 60 * 1000)
     .sort((a, b) => a.date - b.date);
@@ -5727,9 +5990,7 @@ function getNearestExamCountdown() {
   return {
     ...nearest,
     days,
-    message: days <= 21
-      ? "Exam practice now carries more weight in your recommended sessions."
-      : "Your plan will gradually increase mixed and applied practice as the exam approaches.",
+    message: "Your chosen date is a planning reminder. Combine spaced retrieval with written and applied practice.",
   };
 }
 
@@ -5919,10 +6180,11 @@ function renderNeatQuestions() {
         ? Math.round((completedCards / topicCardCount) * 100)
         : 0;
     const progressLabel = getNeatQuizProgressLabel(quiz.topic.id);
-    const sourceLabel = "Instant feedback";
+    const sourceLabel = "flashcard-based checks";
     const activeLabel = isActive ? `<span class="question-current">Current topic</span>` : "";
     const runningLabel = isRunning ? `<span class="question-variant">In progress</span>` : "";
-    const lockLabel = locked
+    const inReview = quiz.topic.contentAvailable === false;
+    const lockLabel = inReview ? `<span class="question-variant">In review</span>` : locked
       ? `<span class="question-variant pro">Pro library</span>`
       : access.canClaim
         ? `<span class="question-variant free">Free pick</span>`
@@ -5947,7 +6209,7 @@ function renderNeatQuestions() {
       </div>
       <div class="neat-question-card-copy">
         <strong>${escapeHtml(quiz.topic.title)}</strong>
-        <span>${topicCardCount} questions · ${escapeHtml(sourceLabel)}</span>
+        <span>${quiz.questionCount} ${escapeHtml(sourceLabel)} · ${topicCardCount} cards</span>
       </div>
       ${lockedNote}
       <div class="topic-card-meter" aria-label="${topicPercent}% flashcard progress">
@@ -5958,8 +6220,8 @@ function renderNeatQuestions() {
         <span>${escapeHtml(progressLabel)}</span>
       </div>
       <div class="topic-card-actions">
-        <button type="button" data-topic-id="${escapeHtml(quiz.topic.id)}">${openLabel}</button>
-        <button type="button" data-start-quiz="${escapeHtml(quiz.topic.id)}">${actionLabel}</button>
+        <button type="button" data-topic-id="${escapeHtml(quiz.topic.id)}" ${inReview ? "disabled" : ""}>${inReview ? "Awaiting review" : openLabel}</button>
+        <button type="button" data-start-quiz="${escapeHtml(quiz.topic.id)}" ${inReview ? "disabled" : ""}>${inReview ? "Not released" : actionLabel}</button>
       </div>
     </article>`;
   }).join("");
@@ -5968,11 +6230,11 @@ function renderNeatQuestions() {
 }
 
 function getNeatQuizCatalog() {
-  return REVISION_TOPICS.map((topic) => {
+  return getComponentTopics().map((topic) => {
     const sources = NEAT_QUESTIONS.filter((question) => question.code === topic.code);
     return {
       topic,
-      questionCount: getRevisionTopicCardCount(topic),
+      questionCount: topic.quizCount ?? getRevisionTopicCardCount(topic),
       sourceCount: sources.length,
       sources,
     };
@@ -5990,18 +6252,20 @@ function getNeatQuizProgressLabel(topicId) {
 }
 
 function renderNeatQuizPanel() {
+  elements.quickPracticeSection.classList.toggle("quiz-active", Boolean(neatQuizState.questions.length && !neatQuizState.completed));
   const topic = getQuizTopicById(neatQuizState.quizId);
 
   if (!topic || !neatQuizState.questions.length) {
     const activeTopic = getActiveRevisionTopic();
-    const activeQuestionCount = getRevisionTopicCardCount(activeTopic);
+    const activeQuestionCount = activeTopic?.quizCount ?? getRevisionTopicCardCount(activeTopic);
     const access = getRevisionTopicAccessState(activeTopic?.id);
-    const actionLabel = access.canClaim ? "Choose free deck" : access.locked ? "Unlock Pro" : "Start quick practice";
+    const resumable = activeTopic && restoreQuizSession(activeTopic, buildNativeQuizQuestions(activeTopic));
+    const actionLabel = access.canClaim ? "Choose free deck" : access.locked ? "Unlock Pro" : resumable ? "Continue quick practice" : "Start quick practice";
     const description = access.canAccess
       ? "Answer one question at a time with instant marking, corrections and streak tracking."
       : access.canClaim
         ? "Choose this as your one free deck to unlock flashcards and Quick Practice."
-        : "Upgrade to Pro to practise this deck and the full OCR Computer Science library.";
+        : "Upgrade to Pro to practise this deck and all released OCR Computer Science packs.";
     elements.neatQuizPanel.innerHTML = `<div class="neat-quiz-empty">
       <div>
         <p class="eyebrow">Quick Practice</p>
@@ -6079,8 +6343,8 @@ function renderNeatQuizFeedback(question) {
   const wasCorrect = neatQuizState.selectedIndex === question.correctIndex;
   return `<div class="neat-quiz-feedback ${wasCorrect ? "correct" : "incorrect"}">
     <strong>${wasCorrect ? "Correct." : "Not quite."}</strong>
-    <p>${wasCorrect ? "Nice work. Your streak continues." : `Correct answer: ${escapeHtml(formatQuizOptionText(question.answer))}`}</p>
-    ${wasCorrect ? "" : `<small>${escapeHtml(question.explanation)}</small>`}
+    <p>${escapeHtml(question.explanation)}</p>
+    ${wasCorrect ? "" : `<small>Read the explanation, then try recalling it again in Revise.</small>`}
   </div>`;
 }
 
@@ -6099,7 +6363,7 @@ function renderNeatQuizComplete(topic) {
     </div>
     <div class="neat-quiz-controls">
       <button type="button" data-quiz-restart>Try again</button>
-      <button type="button" data-start-current-quiz>Current topic quiz</button>
+      ${neatQuizState.missedIds.length ? `<button type="button" data-quiz-repair>Review ${neatQuizState.missedIds.length} missed concepts</button>` : `<button type="button" data-quiz-today>Back to Today</button>`}
     </div>
   </article>`;
 }
@@ -6122,7 +6386,7 @@ async function handleNeatQuestionsClick(event) {
     neatQuizState = createEmptyNeatQuizState();
     clearRevisionAutoReset();
     startRevisionSession(activeRevisionTopicId);
-    renderRevisionPage();
+    setAppSection("revise");
     document.querySelector(".revision-stage")?.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
   }
@@ -6134,13 +6398,24 @@ async function handleNeatQuestionsClick(event) {
 }
 
 async function handleNeatQuizPanelClick(event) {
+  if (event.target.closest("[data-quiz-today]")) { setAppSection("home"); return; }
+  if (event.target.closest("[data-quiz-repair]")) {
+    const cardIds = [...new Set(neatQuizState.missedIds)].map((id) => `${neatQuizState.quizId}:${id}`);
+    cardIds.forEach((id) => { completedRevisionCards.delete(id); flippedRevisionCards.delete(id); });
+    activeRevisionTopicId = neatQuizState.quizId;
+    activeAdaptiveSession = null;
+    startRevisionSession(activeRevisionTopicId, "mistake", cardIds);
+    revisionReviewMode = { topicId: activeRevisionTopicId, cardIds, mode: "mistake" };
+    setAppSection("revise");
+    return;
+  }
   if (event.target.closest("[data-start-current-quiz]")) {
     await startActiveTopicQuiz();
     return;
   }
 
   if (event.target.closest("[data-quiz-restart]")) {
-    await startNeatQuiz(neatQuizState.quizId || getActiveRevisionTopic()?.id);
+    await startNeatQuiz(neatQuizState.quizId || getActiveRevisionTopic()?.id, { restart: true });
     return;
   }
 
@@ -6159,7 +6434,8 @@ async function startActiveTopicQuiz() {
   await startNeatQuiz(getActiveRevisionTopic()?.id);
 }
 
-async function loadExamPracticeQuestion() {
+async function loadExamPracticeQuestion({ next = false } = {}) {
+  const requestId = ++practiceRequestId;
   if (isGuestMode || !currentUser) {
     elements.examPracticePanel.innerHTML = `<div class="exam-empty-state exam-auth-state"><strong>Save written-answer progress to your account</strong><p>Create a free account to submit an original exam question from your chosen OCR deck.</p><button type="button" data-exam-auth>Create account</button></div>`;
     return;
@@ -6169,22 +6445,34 @@ async function loadExamPracticeQuestion() {
   elements.examPracticePanel.setAttribute("aria-busy", "true");
   try {
     const response = await api(`/api/exam/questions?topicId=${encodeURIComponent(activeRevisionTopicId)}`);
-    const question = response.questions[0];
+    if (requestId !== practiceRequestId || !currentUser) return;
+    const historyKey = `neat-written-index:${currentUser.id}:${activeRevisionTopicId}`;
+    const previousIndex = Number(localStorage.getItem(historyKey) ?? -1);
+    const resumeIndex = response.questions.findIndex((question) => question.id === localStorage.getItem(`neat-written-current:${currentUser.id}:${activeRevisionTopicId}`));
+    const nextIndex = !next && resumeIndex >= 0 ? resumeIndex : (previousIndex + 1) % Math.max(1, response.questions.length);
+    const question = response.questions[nextIndex];
     if (!question) {
       const topic = getQuizTopicById(activeRevisionTopicId) || getActiveRevisionTopic();
-      elements.examPracticePanel.innerHTML = `<div class="exam-empty-state exam-locked-state"><span class="pro-badge">Pro</span><strong>${escapeHtml(topic ? `${topic.code} ${topic.title}` : "This topic")} is outside your free deck</strong><p>Choose an accessible topic or unlock the complete original exam-practice bank with Pro.</p><button type="button" data-exam-upgrade>View Pro</button></div>`;
+      elements.examPracticePanel.innerHTML = topic?.contentAvailable === false
+        ? renderRevisionAccessPanel(topic, getRevisionTopicAccessState(topic.id))
+        : `<div class="exam-empty-state exam-locked-state"><strong>No written question is available for this selection</strong><p>Choose an accessible topic from the selector. Free includes written practice for your chosen deck; Pro includes all released packs.</p><button type="button" data-exam-upgrade>Compare plans</button></div>`;
       examPracticeState = null;
       return;
     }
-    examPracticeState = { question, startedAt: performance.now(), answer: "", originalAttemptId: null, result: null };
+    const savedDraft = localStorage.getItem(`neat-exam-draft:${currentUser.id}:${question.id}`) || "";
+    localStorage.setItem(historyKey, String(nextIndex));
+    localStorage.setItem(`neat-written-current:${currentUser.id}:${activeRevisionTopicId}`, question.id);
+    examPracticeState = { question, startedAt: performance.now(), answer: savedDraft, originalAttemptId: null, result: null };
     renderExamPracticeQuestion();
     trackEvent("exam_question_started", { questionId: question.id, topicId: question.topicId });
   } catch (error) {
     elements.examPracticePanel.innerHTML = `<div class="exam-empty-state error-state"><strong>Exam Practice could not load</strong><p>${escapeHtml(error.message)}</p><button type="button" data-exam-retry>Try again</button></div>`;
   } finally {
-    elements.examPracticePanel.removeAttribute("aria-busy");
-    elements.examLoadQuestionButton.disabled = false;
-    elements.examLoadQuestionButton.textContent = "Another question";
+    if (requestId === practiceRequestId) {
+      elements.examPracticePanel.removeAttribute("aria-busy");
+      elements.examLoadQuestionButton.disabled = false;
+      elements.examLoadQuestionButton.textContent = "Another question";
+    }
   }
 }
 
@@ -6194,7 +6482,7 @@ function renderExamPracticeQuestion() {
   const question = state.question;
   if (state.result) {
     const { result, notice } = state.result;
-    elements.examPracticePanel.innerHTML = `<article class="exam-feedback-card"><div class="exam-feedback-score"><span>Suggested mark</span><strong>${result.proposedMark}<small> / ${result.maximumMark}</small></strong><em>${escapeHtml(result.confidence === "low" ? "Teacher review recommended" : "Rubric match")}</em></div><div class="exam-feedback-body"><p class="eyebrow">${escapeHtml(question.topicCode)} · ${escapeHtml(question.commandWord)}</p><h4>${escapeHtml(result.feedback)}</h4>${result.awarded.length ? `<section><strong>Credit matched</strong><ul>${result.awarded.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul></section>` : ""}${result.missing.length ? `<section class="exam-missing-points"><strong>Build these points in</strong><ul>${result.missing.map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul></section>` : ""}<section class="exam-reasoning"><strong>Reasoning guide</strong><p>${escapeHtml(result.modelReasoning)}</p></section><p class="exam-result-notice">${escapeHtml(notice)}</p><div class="exam-feedback-actions">${result.proposedMark < result.maximumMark ? `<button class="primary-button" type="button" data-exam-improve>Improve my answer</button>` : ""}<button type="button" data-exam-next>Try another</button></div></div></article>`;
+    elements.examPracticePanel.innerHTML = `<article class="guided-answer-review"><p class="eyebrow">Guided answer review</p><h3>Check the reasoning, then improve it</h3><p>${escapeHtml(result.feedback)}</p><div class="guided-review-columns"><section><h4>Your answer</h4><p class="preserve-lines">${escapeHtml(state.answer)}</p></section><section><h4>Review checklist</h4><ul>${(result.checklist || []).map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul></section></div><section class="exam-reasoning"><h4>Worked reasoning</h4><p>${escapeHtml(result.modelReasoning)}</p></section><p class="exam-result-notice">${escapeHtml(notice)}</p><div class="exam-feedback-actions"><button class="primary-button" type="button" data-exam-improve>Improve my answer</button><button type="button" data-exam-next>Try another</button></div></article>`;
     return;
   }
 
@@ -6257,7 +6545,8 @@ function handleExamPracticeClick(event) {
     renderCsLab();
     return;
   }
-  if (event.target.closest("[data-mock-retry], [data-mock-new]")) return loadMiniMock();
+  if (event.target.closest("[data-mock-new]")) return loadMiniMock({ restart: true });
+  if (event.target.closest("[data-mock-retry]")) return loadMiniMock();
   const navigator = event.target.closest("[data-mock-question]");
   if (navigator && miniMockState) {
     miniMockState.currentIndex = Number(navigator.dataset.mockQuestion);
@@ -6289,7 +6578,8 @@ function handleExamPracticeClick(event) {
     setAppSection("revise");
     return;
   }
-  if (event.target.closest("[data-exam-retry], [data-exam-next]")) return loadExamPracticeQuestion();
+  if (event.target.closest("[data-exam-next]")) return loadExamPracticeQuestion({ next: true });
+  if (event.target.closest("[data-exam-retry]")) return loadExamPracticeQuestion();
   if (event.target.closest("[data-exam-improve]") && examPracticeState) {
     examPracticeState.result = null;
     examPracticeState.startedAt = performance.now();
@@ -6299,21 +6589,54 @@ function handleExamPracticeClick(event) {
   }
 }
 
-async function loadMiniMock() {
+function persistMiniMock() {
+  if (!currentUser || !miniMockState) return;
+  const { questions, flags, submitting, ...state } = miniMockState;
+  localStorage.setItem(`neat-mock-session:${currentUser.id}:${activeComponentId}`, JSON.stringify({
+    ...state, questionIds: questions.map((question) => question.id),
+    contentSignature: hashString(JSON.stringify(questions)), flags: [...flags],
+  }));
+}
+
+function restoreMiniMock(available) {
+  const saved = loadLocalObject(`neat-mock-session:${currentUser.id}:${activeComponentId}`);
+  if (!Array.isArray(saved.questionIds) || !saved.questionIds.length || !Number.isFinite(saved.startedAt)
+      || Date.now() - saved.startedAt > 7 * 86400000 || !Number.isInteger(saved.currentIndex)
+      || saved.currentIndex < 0 || saved.currentIndex >= saved.questionIds.length) return null;
+  const questions = saved.questionIds.map((id) => available.find((question) => question.id === id));
+  if (questions.some((question) => !question) || saved.contentSignature !== hashString(JSON.stringify(questions))) return null;
+  return { ...saved, questions, flags: new Set(saved.flags || []), submitting: false };
+}
+
+async function loadMiniMock({ restart = false } = {}) {
   clearInterval(miniMockTimer);
+  const requestId = ++practiceRequestId;
   if (isGuestMode || !currentUser) {
-    elements.examPracticePanel.innerHTML = `<div class="exam-empty-state exam-auth-state"><strong>Mini mocks save formal learning evidence</strong><p>Log in to build a timed paper from your available OCR question bank.</p><button type="button" data-exam-auth>Create account</button></div>`;
+    elements.examPracticePanel.innerHTML = `<div class="exam-empty-state exam-auth-state"><strong>Practise a short timed set</strong><p>Log in to use original written questions and review your reasoning afterwards. This is not a full OCR paper or an automatically marked assessment.</p><button type="button" data-exam-auth>Create account</button></div>`;
     return;
   }
   elements.examPracticePanel.innerHTML = `<div class="exam-empty-state"><strong>Building your paper...</strong><p>Selecting a balanced set of original Neat Notes questions.</p></div>`;
   try {
     const response = await api("/api/exam/questions");
+    if (requestId !== practiceRequestId || !currentUser) return;
+    response.questions = response.questions.filter((question) => getComponentTopics().some((topic) => topic.id === question.topicId));
     if (response.questions.length < 3) {
       elements.examPracticePanel.innerHTML = `<div class="exam-empty-state exam-locked-state"><span class="pro-badge">Pro</span><strong>Mixed-topic mini mocks use the full question bank</strong><p>Your free deck still includes the complete single-question feedback and improvement loop. Pro unlocks enough topics to build a balanced paper.</p><button type="button" data-exam-upgrade>View Pro</button></div>`;
       miniMockState = null;
       return;
     }
-    const questions = shuffleArray([...response.questions]).slice(0, 5);
+    const resumed = !restart && restoreMiniMock(response.questions);
+    if (resumed) {
+      miniMockState = resumed;
+      renderMiniMock();
+      if (!resumed.submitted) miniMockTimer = window.setInterval(updateMiniMockTimer, 1000);
+      return;
+    }
+    const previouslyUsed = loadLocalArray(`neat-mock-previous:${currentUser.id}:${activeComponentId}`);
+    const fresh = shuffleArray(response.questions.filter((question) => !previouslyUsed.includes(question.id)));
+    const repeated = shuffleArray(response.questions.filter((question) => previouslyUsed.includes(question.id)));
+    const questions = [...fresh, ...repeated].slice(0, 5);
+    saveLocalArray(`neat-mock-previous:${currentUser.id}:${activeComponentId}`, questions.map((question) => question.id));
     miniMockState = {
       id: createLocalId("mock"), questions, currentIndex: 0, answers: {}, confidence: {}, flags: new Set(),
       startedAt: Date.now(), durationSeconds: questions.reduce((sum, item) => sum + item.expectedMinutes * 60, 0),
@@ -6338,12 +6661,13 @@ function shuffleArray(items) {
 function renderMiniMock() {
   const state = miniMockState;
   if (!state) return;
+  persistMiniMock();
   if (state.submitted) return renderMiniMockResults();
   const question = state.questions[state.currentIndex];
   const answer = state.answers[question.id] || "";
   const confidence = state.confidence[question.id] || "";
   elements.examPracticePanel.innerHTML = `<article class="mini-mock-shell">
-    <header class="mini-mock-head"><div><p class="eyebrow">Original mixed-topic paper</p><h3>Component 01 mini mock</h3></div><div class="mini-mock-clock" aria-label="Time remaining"><span>Time remaining</span><strong id="mini-mock-time">${formatMockTime(getMiniMockSecondsRemaining())}</strong></div></header>
+    <header class="mini-mock-head"><div><p class="eyebrow">Original mixed-topic practice</p><h3>Component ${activeComponentId === "h446-02" ? "2" : "1"} mini mock</h3></div><div class="mini-mock-clock" aria-label="Time remaining"><span>Time remaining</span><strong id="mini-mock-time">${formatMockTime(getMiniMockSecondsRemaining())}</strong></div></header>
     <nav class="mini-mock-navigator" aria-label="Question navigator">${state.questions.map((item, index) => `<button class="${index === state.currentIndex ? "active" : ""} ${state.answers[item.id]?.trim() ? "answered" : ""} ${state.flags.has(item.id) ? "flagged" : ""}" type="button" data-mock-question="${index}" aria-label="Question ${index + 1}${state.answers[item.id]?.trim() ? ", answered" : ", unanswered"}${state.flags.has(item.id) ? ", flagged" : ""}">${index + 1}</button>`).join("")}</nav>
     <section class="mini-mock-question"><div class="exam-question-meta"><span>Question ${state.currentIndex + 1} of ${state.questions.length}</span><span>${question.topicCode}</span><span>${question.marks} marks</span></div><p class="exam-command-label">${escapeHtml(question.commandWord)}</p><h3>${escapeHtml(question.prompt)}</h3><label for="mini-mock-answer">Your answer</label><textarea id="mini-mock-answer" data-mock-answer data-question-id="${escapeHtml(question.id)}" rows="8" maxlength="4000">${escapeHtml(answer)}</textarea><label class="mini-mock-confidence" for="mini-mock-confidence">Confidence<select id="mini-mock-confidence" data-mock-confidence data-question-id="${escapeHtml(question.id)}"><option value="" ${confidence ? "" : "selected"}>Prefer not to say</option><option value="low" ${confidence === "low" ? "selected" : ""}>Low</option><option value="medium" ${confidence === "medium" ? "selected" : ""}>Medium</option><option value="high" ${confidence === "high" ? "selected" : ""}>High</option></select></label></section>
     <footer class="mini-mock-actions"><button type="button" data-mock-flag>${state.flags.has(question.id) ? "Remove flag" : "Flag question"}</button><div><button type="button" data-mock-previous ${state.currentIndex === 0 ? "disabled" : ""}>Previous</button><button type="button" data-mock-next ${state.currentIndex === state.questions.length - 1 ? "disabled" : ""}>Next</button><button class="primary-button" type="button" data-mock-submit>Submit paper</button></div></footer>
@@ -6357,9 +6681,11 @@ function handleMiniMockInput(event) {
   if (answer) miniMockState.answers[answer.dataset.questionId] = answer.value;
   const confidence = event.target.closest("[data-mock-confidence]");
   if (confidence) miniMockState.confidence[confidence.dataset.questionId] = confidence.value;
+  persistMiniMock();
 }
 
 function updateMiniMockTimer() {
+  if (activeAppSection !== "practice" || activePracticeMode !== "mock") return;
   const time = document.querySelector("#mini-mock-time");
   if (time) time.textContent = formatMockTime(getMiniMockSecondsRemaining());
   if (getMiniMockSecondsRemaining() <= 0 && miniMockState && !miniMockState.submitted) submitMiniMock(true);
@@ -6375,55 +6701,61 @@ function formatMockTime(seconds) {
 }
 
 async function submitMiniMock(automatic = false) {
-  if (!miniMockState || miniMockState.submitted) return;
-  const unanswered = miniMockState.questions.filter((item) => !miniMockState.answers[item.id]?.trim()).length;
+  if (!miniMockState || miniMockState.submitted || miniMockState.submitting) return;
+  const state = miniMockState;
+  const unanswered = state.questions.filter((item) => !state.answers[item.id]?.trim()).length;
   if (!automatic && !window.confirm(`Submit this paper? ${unanswered ? `${unanswered} question${unanswered === 1 ? " is" : "s are"} unanswered.` : "Every question has an answer."}`)) return;
   clearInterval(miniMockTimer);
+  state.submitting = true;
+  elements.examPracticePanel.querySelectorAll("button, textarea, select").forEach((control) => { control.disabled = true; });
   const status = elements.examPracticePanel.querySelector("[data-mock-status]");
   if (status) status.textContent = "Submitting answers and building your feedback...";
   const results = [];
-  for (const question of miniMockState.questions) {
-    const answer = miniMockState.answers[question.id]?.trim();
+  for (const question of state.questions) {
+    const answer = state.answers[question.id]?.trim();
     if (!answer) {
       results.push({ question, skipped: true, result: { proposedMark: 0, maximumMark: question.marks, missing: [], awarded: [] } });
       continue;
     }
     try {
-      const response = await api("/api/exam/attempts", { method: "POST", body: { questionId: question.id, answer, confidence: miniMockState.confidence[question.id], responseTimeMs: null } });
+      const response = await api("/api/exam/attempts", { method: "POST", body: { questionId: question.id, answer, confidence: state.confidence[question.id], responseTimeMs: null } });
       results.push({ question, ...response });
     } catch (error) {
       results.push({ question, error: error.message, result: { proposedMark: 0, maximumMark: question.marks, missing: [], awarded: [] } });
     }
   }
-  miniMockState.results = results;
-  miniMockState.submitted = true;
+  state.results = results;
+  state.submitting = false;
+  state.submitted = true;
+  if (state !== miniMockState) return;
+  persistMiniMock();
+  if (activeAppSection !== "practice" || activePracticeMode !== "mock") return;
   renderMiniMockResults();
   trackEvent("mini_mock_completed", { answered: miniMockState.questions.length - unanswered, total: miniMockState.questions.length });
 }
 
 function renderMiniMockResults() {
   const results = miniMockState.results;
-  const scored = results.reduce((sum, item) => sum + item.result.proposedMark, 0);
-  const available = results.reduce((sum, item) => sum + item.result.maximumMark, 0);
-  const percent = available ? Math.round((scored / available) * 100) : 0;
-  const weakest = [...results].sort((a, b) => (a.result.proposedMark / a.result.maximumMark) - (b.result.proposedMark / b.result.maximumMark))[0];
-  elements.examPracticePanel.innerHTML = `<article class="mini-mock-results"><header><div><p class="eyebrow">Mini mock complete</p><h3>${scored} / ${available} suggested marks</h3><p>${percent}% against the Neat Notes rubrics. This is not a predicted grade.</p></div><strong>${percent}%</strong></header><div class="mini-mock-breakdown">${results.map((item, index) => `<article><span>Q${index + 1} · ${escapeHtml(item.question.topicCode)}</span><strong>${item.result.proposedMark} / ${item.result.maximumMark}</strong><p>${item.skipped ? "Unanswered" : item.error ? "Submission error" : item.result.proposedMark === item.result.maximumMark ? "Rubric complete" : "Review missing points"}</p></article>`).join("")}</div><section class="mini-mock-next-step"><div><span>Recommended next</span><strong>Review ${escapeHtml(weakest.question.topicCode)} ${escapeHtml(weakest.question.topicTitle)}</strong><p>Your lowest rubric coverage came from this question. It has been added to the evidence and mistake-repair loop where applicable.</p></div><button class="primary-button" type="button" data-mock-review-topic data-topic-id="${escapeHtml(weakest.question.topicId)}">Revise this topic</button></section><div class="exam-feedback-actions"><button type="button" data-mock-new>Build another mini mock</button></div></article>`;
+  elements.examPracticePanel.innerHTML = `<article class="mini-mock-results"><header><div><p class="eyebrow">Timed practice complete</p><h3>Review your reasoning</h3><p>This short set is not a full OCR paper. Written responses have not been automatically marked and do not create validated mastery evidence.</p></div></header><div class="guided-mock-results">${results.map((item, index) => `<details><summary>Question ${index + 1} · ${escapeHtml(item.question.topicCode)} · ${item.skipped ? "Unanswered" : item.error ? "Not saved" : "Saved for review"}</summary><p>${escapeHtml(item.question.prompt)}</p><h4>Your answer</h4><p class="preserve-lines">${escapeHtml(miniMockState.answers?.[item.question.id] || "No answer saved")}</p>${item.error ? `<p role="alert">${escapeHtml(item.error)}</p>` : `<ul>${(item.result.checklist || []).map((point) => `<li>${escapeHtml(point)}</li>`).join("")}</ul><p>${escapeHtml(item.result.modelReasoning || "Return to this question for its reasoning guide.")}</p>`}</details>`).join("")}</div><button type="button" data-mock-new>Build another practice set</button></article>`;
 }
 
 async function loadCsLabs(showPicker = false) {
   clearInterval(miniMockTimer);
+  const requestId = ++practiceRequestId;
   if (isGuestMode || !currentUser) {
     elements.examPracticePanel.innerHTML = `<div class="exam-empty-state exam-auth-state"><strong>Interactive practice builds mastery evidence</strong><p>Create an account to use a Computer Science lab from your chosen free deck.</p><button type="button" data-exam-auth>Create account</button></div>`;
     return;
   }
   try {
     const response = await api("/api/labs");
+    if (requestId !== practiceRequestId || !currentUser) return;
+    response.labs = response.labs.filter((lab) => getComponentTopics().some((topic) => topic.id === lab.topicId));
     if (!response.labs.length) {
       elements.examPracticePanel.innerHTML = `<div class="exam-empty-state"><strong>No lab is published for your chosen free topic yet</strong><p>Quick Practice and Exam Practice remain available. Pro unlocks ${response.lockedCount} interactive labs across CPU tracing, Boolean logic, algorithms, data structures, SQL, normalisation, pseudocode and networks.</p><button type="button" data-exam-upgrade>View Pro</button></div>`;
       csLabState = null;
       return;
     }
-    csLabState = { labs: response.labs, current: csLabState?.current || response.labs[0], result: null, startedAt: performance.now() };
+    csLabState = { labs: response.labs, current: response.labs.find((lab) => lab.id === csLabState?.current?.id) || response.labs.find((lab) => lab.topicId === activeRevisionTopicId) || response.labs[0], result: null, startedAt: performance.now() };
     if (showPicker || response.labs.length > 1 && !csLabState.current) renderCsLabPicker();
     else renderCsLab();
   } catch (error) {
@@ -6472,7 +6804,7 @@ async function submitCsLab(event) {
   }
 }
 
-async function startNeatQuiz(topicId) {
+async function startNeatQuiz(topicId, options = {}) {
   const topic = getQuizTopicById(topicId) || getActiveRevisionTopic();
   if (!topic) return;
   if (!canAccessRevisionTopic(topic.id)) {
@@ -6491,13 +6823,19 @@ async function startNeatQuiz(topicId) {
   }
 
   activeRevisionTopicId = topic.id;
-  const questions = buildNativeQuizQuestions(topic);
+  const length = Number(document.querySelector("#practice-length")?.value) || 10;
+  const bank = buildNativeQuizQuestions(topic);
+  const saved = !options.restart && restoreQuizSession(topic, bank);
+  if (saved) { neatQuizState = saved; renderRevisionPage(); return; }
+  const offset = ((neatQuizProgress[topic.id]?.attempts || 0) * length) % (bank.length || 1);
+  const questions = [...bank.slice(offset), ...bank.slice(0, offset)].slice(0, length);
   neatQuizState = {
     ...createEmptyNeatQuizState(),
     quizId: topic.id,
     questions,
-    bestStreak: neatQuizProgress[topic.id]?.bestStreak || 0,
+    bestStreak: 0,
   };
+  persistQuizSession();
   trackEvent("quick_practice_started", { topicId: topic.id, questionCount: questions.length });
   renderRevisionPage();
 }
@@ -6506,7 +6844,7 @@ function answerNeatQuizQuestion(optionIndex) {
   if (neatQuizState.answered || neatQuizState.completed) return;
 
   const question = neatQuizState.questions[neatQuizState.currentIndex];
-  if (!question || !Number.isInteger(optionIndex)) return;
+  if (!question || !Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= question.options.length) return;
 
   const wasCorrect = optionIndex === question.correctIndex;
   neatQuizState.selectedIndex = optionIndex;
@@ -6514,6 +6852,8 @@ function answerNeatQuizQuestion(optionIndex) {
   neatQuizState.score += wasCorrect ? 1 : 0;
   neatQuizState.streak = wasCorrect ? neatQuizState.streak + 1 : 0;
   neatQuizState.bestStreak = Math.max(neatQuizState.bestStreak, neatQuizState.streak);
+  if (!wasCorrect) neatQuizState.missedIds.push(question.id);
+  persistQuizSession();
   recordCardAttempt(`${neatQuizState.quizId}:${question.id}`, neatQuizState.quizId, wasCorrect ? "confident" : "needs_practice", {
     quizCorrect: wasCorrect,
     source: "quick_practice",
@@ -6521,6 +6861,7 @@ function answerNeatQuizQuestion(optionIndex) {
   persistNeatQuizBestStreak(neatQuizState.quizId, neatQuizState.bestStreak);
   trackEvent("quick_practice_answered", { topicId: neatQuizState.quizId, correct: wasCorrect });
   renderNeatQuestions();
+  elements.neatQuizPanel.querySelector("[data-quiz-next]")?.focus({ preventScroll: true });
 }
 
 function advanceNeatQuiz() {
@@ -6534,7 +6875,9 @@ function advanceNeatQuiz() {
   neatQuizState.currentIndex += 1;
   neatQuizState.selectedIndex = null;
   neatQuizState.answered = false;
+  persistQuizSession();
   renderNeatQuestions();
+  elements.neatQuizPanel.querySelector("[data-quiz-option]")?.focus({ preventScroll: true });
 }
 
 function completeNeatQuiz() {
@@ -6547,7 +6890,7 @@ function completeNeatQuiz() {
     ...neatQuizProgress,
     [topicId]: {
       attempts: (Number(previous.attempts) || 0) + 1,
-      bestScore: Math.max(Number(previous.bestScore) || 0, neatQuizState.score),
+      bestScore: previous.totalQuestions === total ? Math.max(Number(previous.bestScore) || 0, neatQuizState.score) : neatQuizState.score,
       bestStreak: Math.max(Number(previous.bestStreak) || 0, neatQuizState.bestStreak),
       lastScore: neatQuizState.score,
       totalQuestions: total,
@@ -6556,6 +6899,7 @@ function completeNeatQuiz() {
   };
   saveNeatQuizProgress();
   neatQuizState.completed = true;
+  persistQuizSession();
   recordActivityEvent({ type: "quiz_completed", topicId });
   trackEvent("quick_practice_completed", { topicId, score: neatQuizState.score, total });
   renderNeatQuestions();
@@ -6586,8 +6930,8 @@ function buildNativeQuizQuestions(topic) {
     }))
   );
 
-  return getTopicCards(topic).map((card) => {
-    const distractors = getQuizDistractors(card, topic, allCards);
+  return getTopicCards(topic).filter((card) => topic.componentId !== "h446-02" || card.distractors?.length === 3).map((card) => {
+    const distractors = card.distractors?.length === 3 ? card.distractors : getQuizDistractors(card, topic, allCards);
     const options = seededSort([card.back, ...distractors], `${topic.id}:${card.id}:options`);
     return {
       id: card.id,
@@ -6766,6 +7110,7 @@ function hydrateRevisionTopicFromDeck(deck) {
     category: card.category || "Revision",
     front: card.front || "",
     back: card.back || "",
+    distractors: card.distractors || [],
   }));
 }
 
@@ -6824,6 +7169,7 @@ async function selectRevisionTopic(event) {
   }
 
   activeRevisionTopicId = topicId;
+  activeAdaptiveSession = null;
   neatQuizState = createEmptyNeatQuizState();
   clearRevisionAutoReset();
   startRevisionSession(activeRevisionTopicId);
@@ -6831,6 +7177,8 @@ async function selectRevisionTopic(event) {
 }
 
 async function flipRevisionCard(event) {
+  const navigation = event.target.closest("[data-app-section]");
+  if (navigation) { setAppSection(navigation.dataset.appSection); return; }
   const claimButton = event.target.closest("[data-claim-free-topic]");
   if (claimButton) {
     const claimed = await claimFreeRevisionTopic(claimButton.dataset.claimFreeTopic);
@@ -6868,7 +7216,7 @@ async function flipRevisionCard(event) {
     return;
   }
 
-  const card = event.target.closest("[data-card-id]");
+  const card = event.target.closest("button[data-card-id]");
   if (!card) return;
 
   const cardId = card.dataset.cardId;
@@ -6879,9 +7227,11 @@ async function flipRevisionCard(event) {
     trackEvent("flashcard_flipped", { cardId, topicId: getRevisionTopicFromCardId(cardId)?.id });
   }
   renderRevisionPage();
+  elements.revisionCardGrid.querySelector("[data-card-confidence], button[data-card-id]")?.focus({ preventScroll: true });
 }
 
 function handleRevisionCardKeydown(event) {
+  if (event.target.closest("button")) return;
   if (event.target.closest("[data-card-done], [data-card-confidence]")) return;
   if (event.key !== "Enter" && event.key !== " ") return;
 
@@ -6907,7 +7257,8 @@ function rateRevisionCard(cardId, confidence) {
     confident: "confident",
   };
   const storedConfidence = confidenceMap[confidence];
-  if (!cardId || !storedConfidence) return;
+  if (!cardId || !storedConfidence || !flippedRevisionCards.has(cardId)) return;
+  if (activeAdaptiveSession && !activeAdaptiveSession.completedAt && window.NEAT_REVISION_SESSION.next(activeAdaptiveSession)?.cardId !== cardId) return;
 
   const topic = getRevisionTopicFromCardId(cardId);
   recordCardAttempt(cardId, topic?.id, storedConfidence, { difficulty: confidence });
@@ -6927,13 +7278,12 @@ function markRevisionCardDone(cardId, options = {}) {
     awardRevisionBadge(topic);
   }
   if (activeAdaptiveSession && activeAdaptiveSession.items.some((item) => item.cardId === cardId)) {
-    activeAdaptiveSession.completedConceptIds = [...new Set([...activeAdaptiveSession.completedConceptIds, cardId])];
-    const currentTopicRemaining = activeAdaptiveSession.items.some(
-      (item) => item.topicId === topic?.id && !completedRevisionCards.has(item.cardId),
-    );
-    if (!currentTopicRemaining) openNextAdaptiveSessionTopic();
+    activeAdaptiveSession = window.NEAT_REVISION_SESSION.complete(activeAdaptiveSession, cardId);
+    persistAdaptiveSession();
+    openNextAdaptiveSessionTopic();
   }
   renderRevisionPage();
+  elements.revisionCardGrid.querySelector("button")?.focus({ preventScroll: true });
 }
 
 function resetActiveRevisionCards() {
@@ -7291,7 +7641,7 @@ function renderSummaryContent(note) {
   const signals = [
     `${lines.length} learning point${lines.length === 1 ? "" : "s"}`,
     cardCount ? `${cardCount} instant card${cardCount === 1 ? "" : "s"} ready` : "Add bullets for cards",
-    `${pack.quality.score}% note quality`,
+    `${pack.quality.score}% structural checklist coverage (not factual accuracy)`,
   ];
 
   return `<p>${escapeHtml(summary)}</p>
@@ -7345,7 +7695,8 @@ function renderNoteIntelligencePanel(note) {
           : "Add more OCR-linked examples.";
 
   elements.noteIntelligencePanel.innerHTML = `
-    <div class="section-title"><span>Note intelligence</span><span>${escapeHtml(pack.quality.label)}</span></div>
+    <div class="section-title"><span>Note structure</span><span>${escapeHtml(pack.quality.label)}</span></div>
+    <p>This checklist checks structure, not factual accuracy or exam readiness.</p>
     <div class="note-quality-score ${qualityClass}">
       <strong>${pack.quality.score}%</strong>
       <div>
@@ -7485,26 +7836,19 @@ function showInstantCards() {
     <div class="instant-card-lab">
       <div class="instant-card-lab-head">
         <div>
-          <strong>Revision sprint from this note</strong>
-          <p>Generated locally from your headings, lists, definitions, and tasks. Click a card to reveal the answer.</p>
+          <strong>Review your draft cards</strong>
+          <p>Edit each question and answer before saving. Extraction from your notes does not verify the facts.</p>
         </div>
         <button type="button" data-insert-generated-cards>Save draft cards</button>
       </div>
       <div class="instant-card-grid">
         ${generatedNoteCards
           .map(
-            (card, index) => `<button class="generated-flashcard" type="button" data-generated-card="${index}" aria-pressed="false">
-              <span class="generated-face generated-front">
-                <small>${escapeHtml(card.category)}</small>
-                <strong>${escapeHtml(card.front)}</strong>
-                <em>Reveal answer</em>
-              </span>
-              <span class="generated-face generated-back">
-                <small>Answer</small>
-                <strong>${escapeHtml(card.back)}</strong>
-                <em>Hide answer</em>
-              </span>
-            </button>`,
+            (card, index) => `<article class="draft-card-editor" data-draft-card="${index}">
+              <label><input type="checkbox" data-draft-include checked> Include card ${index + 1}</label>
+              <label for="draft-question-${index}">Question</label><input id="draft-question-${index}" data-draft-question maxlength="240" value="${escapeHtml(card.front)}">
+              <label for="draft-answer-${index}">Answer</label><textarea id="draft-answer-${index}" data-draft-answer rows="3" maxlength="1500">${escapeHtml(card.back)}</textarea>
+            </article>`,
           )
           .join("")}
       </div>
@@ -7538,10 +7882,18 @@ function insertGeneratedCardsIntoNote() {
   const note = getSelectedNote();
   if (!note || !generatedNoteCards.length) return;
 
-  const cardDraft = generatedNoteCards
+  const reviewed = [...elements.insightsPanel.querySelectorAll("[data-draft-card]")].filter((item) => item.querySelector("[data-draft-include]").checked).map((item) => ({ front: item.querySelector("[data-draft-question]").value.trim(), back: item.querySelector("[data-draft-answer]").value.trim() })).filter((item) => item.front && item.back);
+  const seen = new Set();
+  const cardDraft = reviewed.filter((card) => {
+    const key = card.front.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  })
     .map((card, index) => `${index + 1}. Q: ${card.front}\n   A: ${card.back}`)
     .join("\n");
   const addition = `\n\n## Instant revision cards\n${cardDraft}`;
+  if (!cardDraft) return;
 
   elements.noteBody.value = `${note.body.trimEnd()}${addition}`;
   updateActiveNote();
@@ -7905,6 +8257,7 @@ function getSelectedFreeRevisionTopicId() {
 
 function getRevisionTopicAccessState(topicId) {
   const topic = getQuizTopicById(topicId);
+  if (topic?.contentAvailable === false) return { canAccess: false, canClaim: false, locked: true, selectedFreeDeck: false, label: "In review", reason: "Academic review is required before this topic is released." };
   if (!topic) {
     return {
       canAccess: false,
@@ -7924,7 +8277,7 @@ function getRevisionTopicAccessState(topicId) {
       selectedFreeDeck: false,
       label: "Included",
       reason: hasLoadedRevisionCards(topic)
-        ? "Your plan includes the full OCR revision library."
+        ? "Your plan includes all released OCR revision packs."
         : "This deck needs to be refreshed before it can be opened.",
     };
   }
@@ -7997,7 +8350,7 @@ async function claimFreeRevisionTopic(topicId) {
 
   if (isGuestMode || !currentUser) {
     saveFreeRevisionTopicId(topic.id);
-    elements.upgradeMessage.textContent = `${topic.code} ${topic.title} is now your free revision deck. Pro unlocks the full OCR library.`;
+    elements.upgradeMessage.textContent = `${topic.code} ${topic.title} is now your free revision deck. Pro unlocks all released OCR packs.`;
     elements.upgradeMessage.className = "topbar-plan-message success";
     return true;
   }
@@ -8027,7 +8380,7 @@ async function claimFreeRevisionTopic(topicId) {
 
 function promptRevisionUpgrade(topic = null) {
   const topicName = topic ? `${topic.code} ${topic.title}` : "this deck";
-  elements.upgradeMessage.textContent = `Upgrade to Pro to unlock ${topicName}, Quick Practice, badges and the full OCR revision library.`;
+  elements.upgradeMessage.textContent = `Upgrade to Pro to unlock ${topicName}, Quick Practice, badges and all released OCR revision packs.`;
   elements.upgradeMessage.className = "topbar-plan-message error";
   openPlansModal();
 }

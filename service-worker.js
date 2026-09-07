@@ -1,12 +1,14 @@
-const CACHE_NAME = "neat-notes-shell-20260827-profile-r2";
+const CACHE_NAME = "neat-notes-shell-20260907-student-r1";
 const APP_SHELL = [
   "/",
-  "/styles-relaunch.css?v=20260827-profile-r2",
+  "/styles-relaunch.css?v=20260907-student-r1",
+  "/student-layout.css?v=20260907-student-r1",
   "/theme-init.js?v=20260824-relaunch",
   "/learning-model.js?v=20260824-relaunch",
-  "/revision-generator.js?v=20260705-production",
+  "/revision-generator.js?v=20260907-student-r1",
+  "/revision-session.js?v=20260907-student-r1",
   "/neat-questions.js?v=20260824-relaunch",
-  "/app-relaunch.js?v=20260827-profile-r2",
+  "/app-relaunch.js?v=20260907-student-r1",
   "/favicon.svg"
 ];
 
@@ -34,8 +36,12 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("/", copy));
+          // Only the public app shell belongs under /. Never cache account,
+          // verification, shared-note or topic HTML as a navigation fallback.
+          if (url.pathname === "/" && !url.search && response.ok && !response.redirected) {
+            const copy = response.clone();
+            event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put("/", copy)));
+          }
           return response;
         })
         .catch(() => caches.match("/")),
@@ -43,11 +49,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (["script", "style"].includes(request.destination)) {
+  if (APP_SHELL.includes(url.pathname + url.search)) {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
+          if (response.ok) event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone())));
           return response;
         })
         .catch(() => caches.match(request)),
@@ -55,10 +61,5 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-      if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(request, response.clone()));
-      return response;
-    })),
-  );
+  // Other resources remain network-only, including personalised content.
 });

@@ -63,7 +63,7 @@
       const key = `${cleanFront.toLowerCase()}::${cleanBack.toLowerCase()}`;
       if (!cleanFront || !cleanBack || cleanBack.length < 4 || seen.has(key)) return;
       seen.add(key);
-      cards.push({ category, front: cleanFront, back: cleanBack });
+      cards.push({ category, front: cleanFront, back: cleanBack, reviewRequired: true });
     };
 
     lines.forEach((raw, index) => {
@@ -73,8 +73,6 @@
       const heading = line.match(/^#{1,3}\s+(.+)$/);
       if (heading) {
         section = cleanText(heading[1]);
-        const next = collectFollowingPoints(lines, index + 1, 2).join(" ");
-        if (next) addCard("Topic", `What are the main ideas in ${section}?`, next);
         return;
       }
 
@@ -87,37 +85,33 @@
 
       const task = line.match(/^- \[[ xX]\]\s+(.+)$/);
       if (task) {
-        addCard("Revision task", `What should you do for ${section}?`, task[1]);
         return;
       }
 
       if (/^([-*•]|\d+\.)\s+/.test(line)) {
-        addCard("Key point", `What should you remember about ${section}?`, cleaned);
+        const fact = cleaned.match(/^(?:The\s+)?([A-Za-z][A-Za-z0-9 ()-]{1,55}?)\s+(is|are|stores|holds|performs|controls|executes|uses)\s+(.+)$/i);
+        if (fact) {
+          const subject = fact[1].trim();
+          const verb = fact[2].toLowerCase();
+          const prompt = verb === "is" || verb === "are" ? `What ${verb} ${subject}?` : `What does ${subject} ${verb.replace(/s$/, "")}?`;
+          addCard("Draft recall", prompt, cleaned);
+        }
       }
     });
-
-    if (cards.length < 5) {
-      getPlainLines(note).slice(0, 8).forEach((line) => {
-        addCard("Recall", "Recall a useful point from this note.", line);
-      });
-    }
 
     return cards.slice(0, 12);
   }
 
   function generateQuiz(note = "") {
-    return generateFlashcards(note).slice(0, 8).map((card, index, cards) => {
-      const distractors = cards
-        .filter((candidate) => candidate.back !== card.back)
-        .map((candidate) => candidate.back)
-        .slice(0, 3);
+    return generateFlashcards(note).slice(0, 8).map((card, index) => {
       return {
         id: `generated-${index + 1}`,
-        type: index % 3 === 2 ? "short-answer" : "multiple-choice",
+        type: "short-answer",
         prompt: card.front,
         answer: card.back,
         explanation: `Generated from your note content under ${card.category}.`,
-        options: seededOptions(card.back, distractors),
+        options: [],
+        reviewRequired: true,
       };
     });
   }
@@ -183,7 +177,7 @@
     score += Math.min(18, tasks.length * 10);
     score = Math.min(100, score);
 
-    const label = score >= 70 ? "Revision-ready" : score >= 38 ? "Developing" : "Too brief";
+    const label = score >= 70 ? "Well structured" : score >= 38 ? "Developing structure" : "Limited structure";
     return {
       score,
       label,
@@ -223,14 +217,6 @@
       if (cleaned) points.push(cleaned);
     }
     return points;
-  }
-
-  function seededOptions(answer, distractors) {
-    const options = unique([answer, ...distractors]).slice(0, 4);
-    while (options.length < 4) {
-      options.push(["It depends on the question context.", "A common misconception.", "Review the note for detail."][options.length - 1]);
-    }
-    return options;
   }
 
   function cleanMarkdownLine(line = "") {

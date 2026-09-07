@@ -1,0 +1,11 @@
+"use strict";
+const fs = require("node:fs");
+const path = require("node:path");
+const { loadTopics } = require("../backend/services/contentRepository");
+const { QUESTION_BANK } = require("../exam-content");
+const { LABS } = require("../cs-labs");
+const { SPECIFICATION, buildCoverage } = require("../curriculum-coverage");
+const rows = buildCoverage(loadTopics(), QUESTION_BANK, LABS);
+const lines = ["# H446 objective coverage", "", `Generated from structured content against OCR specification ${SPECIFICATION.version} (${SPECIFICATION.checkedAt}).`, "", `[Official specification](${SPECIFICATION.url})`, "", "This is an editorial mapping, not a completeness or academic-quality certificate. C1 remains published legacy material whose objective mapping is pending. C2 is draft material pending human academic review. A mapped card does not establish depth across every sub-bullet of an objective. Numbers in 1.5.2 square brackets are local references to unlettered specification bullets, not OCR IDs. MCQs reuse flashcard concepts and are NOT additional authored exam questions. NEA remains integrity guidance, not a bank of assessed project solutions.", "", "| Objective | Focus | Status | Cards | Derived MCQs | Written prompts | Applied tasks |", "| --- | --- | --- | ---: | ---: | ---: | ---: |", ...rows.map((row) => `| ${row.id} | ${row.title} | ${row.status} | ${row.flashcards} | ${row.derivedMcqs} | ${row.writtenQuestions} | ${row.appliedTasks} |`), "", "Regenerate with `node scripts/report-coverage.js`. Review records belong in `content-review.json`; approvals must match the exact content version. Original resource files remain local and are not served.", ""];
+fs.writeFileSync(path.join(__dirname, "../docs/H446_COVERAGE.md"), lines.join("\n"));
+console.log(`Wrote objective coverage: ${rows.length} rows.`);

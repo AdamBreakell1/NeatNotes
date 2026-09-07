@@ -1,0 +1,135 @@
+/* Focused student surfaces; existing brand tokens remain the design authority. */
+body { letter-spacing: 0; }
+[hidden] { display: none !important; }
+button, input, textarea, select, summary { scroll-margin-block: 110px; }
+:is(button, a, input, textarea, select, summary):focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.curriculum-context { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(200px, 1fr); gap: 14px 24px; padding: 24px 32px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.component-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.component-switch button { min-height: 66px; padding: 10px 14px; display: grid; gap: 2px; text-align: left; background: var(--surface-subtle); color: var(--text-secondary); border: 1px solid var(--border); border-radius: 6px; box-shadow: none; }
+.component-switch button span { font-size: 12px; font-weight: 500; }
+.component-switch button strong { font-size: 14px; font-weight: 650; line-height: 1.4; overflow-wrap: anywhere; }
+.component-switch button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent); box-shadow: inset 0 -2px var(--accent); }
+.component-topic-picker { align-self: center; display: grid; gap: 4px; color: var(--text-secondary); font-size: 12px; }
+.component-topic-picker select { width: 100%; min-width: 0; min-height: 42px; font-size: 14px; }
+.content-review-notice { grid-column: 1 / -1; margin: 0; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
+.revision-hero { padding-block: 28px 20px; }
+.revision-hero h2 { font-size: 30px; line-height: 1.2; letter-spacing: 0; }
+.revision-hero-copy > p { max-width: 65ch; }
+.revision-view[data-student-view="home"] .revision-hero-actions { display: none; }
+.revision-summary-card { box-shadow: none; min-height: 100px; }
+.revision-stage { width: min(980px, calc(100% - 48px)); margin-inline: auto; }
+.revision-stage-head { gap: 20px; align-items: start; }
+.revision-stage-head h3 { font-size: 22px; line-height: 1.3; }
+.revision-stage-head p:not(.eyebrow) { max-width: 65ch; font-size: 14px; }
+.revision-actions { flex-wrap: wrap; justify-content: flex-end; }
+.revision-actions button { min-height: 36px; padding: 7px 10px; font-size: 12px; box-shadow: none; }
+.revision-card-grid { display: block; padding: 0; min-width: 0; }
+.focused-retrieval-card { padding: 30px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); animation: retrieval-enter 180ms ease-out; min-width: 0; }
+.retrieval-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; color: var(--text-secondary); font-size: 12px; }
+.focused-retrieval-card h3 { margin: 30px 0; font-size: 25px; font-weight: 650; line-height: 1.45; max-width: 48ch; overflow-wrap: anywhere; }
+.focused-retrieval-card > button { min-height: 44px; padding: 10px 20px; }
+.retrieval-answer { border-top: 1px solid var(--border); padding-block: 20px; }
+.retrieval-answer h4 { margin: 0 0 8px; font-size: 13px; color: var(--text-secondary); }
+.retrieval-answer p { margin: 0; font-size: 17px; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; }
+.focused-retrieval-card .confidence-controls { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.focused-retrieval-card .confidence-controls button { min-height: 44px; padding: 10px; color: var(--text); background: var(--surface-subtle); border: 1px solid var(--border-strong); }
+.focused-retrieval-card .confidence-controls button:hover { border-color: var(--accent); background: var(--accent-soft); }
+.neat-questions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 255px), 1fr)); overflow: visible; gap: 16px; }
+.neat-questions-section.quiz-active .neat-questions-grid, .neat-questions-section.quiz-active .topic-packs-head { display: none; }
+.neat-questions-section.quiz-active .neat-questions-brand > div > p, .neat-questions-section.quiz-active .neat-questions-actions { display: none; }
+.neat-questions-actions label { display: grid; gap: 4px; font-size: 12px; }
+.neat-quiz-panel, .exam-practice-panel { max-width: 900px; margin-inline: auto; }
+.neat-quiz-option:disabled { opacity: 1; color: var(--text); cursor: default; }
+.guided-answer-review { padding: 28px; border: 1px solid var(--border); background: var(--surface); border-radius: 6px; }
+.guided-answer-review h3 { font-size: 23px; }
+.guided-review-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px; margin-block: 24px; }
+.guided-review-columns section { min-width: 0; }
+.guided-review-columns p, .guided-review-columns li { line-height: 1.7; overflow-wrap: anywhere; }
+.preserve-lines { white-space: pre-wrap; }
+.guided-mock-results details { padding: 16px 0; border-block-end: 1px solid var(--border); }
+.guided-mock-results summary { cursor: pointer; font-weight: 600; }
+.mastery-map-head p { max-width: 70ch; margin: 10px 0; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
+.student-pricing-grid, .landing-plan-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pricing-contract-note { margin: 20px 28px; font-size: 13px; line-height: 1.6; color: var(--text-secondary); }
+.student-pricing-grid .pricing-card { box-shadow: none; }
+.student-pricing-grid .pricing-card-plus { border: 2px solid var(--accent); }
+.student-home-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.revision-view[data-student-view="home"] .curriculum-context { grid-template-columns: minmax(0, 1fr); }
+.revision-view[data-student-view="home"] .component-topic-picker { display: none; }
+.revision-view[data-student-view="home"] .component-switch { max-width: 680px; }
+.revision-view[data-student-view="home"] .revision-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 0.6fr); gap: 24px; padding-block: 24px; }
+.revision-view[data-student-view="home"] .revision-access-note, .revision-view[data-student-view="home"] .revision-summary-card.recommended { display: none; }
+.revision-view[data-student-view="home"] .revision-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; }
+.revision-view[data-student-view="home"] .revision-summary-card { padding: 12px; min-height: 0; }
+.revision-view[data-student-view="home"] .revision-summary-card strong { font-size: 22px; margin-block: 4px; }
+.revision-view[data-student-view="home"] .revision-summary-card p { font-size: 12px; margin: 0; }
+.student-dashboard-panel { padding-block: 28px; }
+.today-session { grid-template-columns: minmax(0, 1fr); gap: 24px; max-width: 840px; margin-inline: auto; }
+.today-session-copy h3 { font-size: 26px; line-height: 1.3; }
+.today-session-copy .today-session-size { font-size: 14px; margin-top: 8px; }
+.today-preview, .today-tools { border-top: 1px solid var(--border); }
+.today-preview summary, .today-tools > summary { padding: 16px 0; font-size: 14px; font-weight: 600; cursor: pointer; color: var(--text-secondary); }
+.today-tools { max-width: 840px; margin: 8px auto 0; }
+.today-tools .student-home-sections { margin-top: 0; }
+.draft-card-editor { display: grid; gap: 8px; padding: 16px; border: 1px solid var(--border); background: var(--surface); border-radius: 6px; }
+.draft-card-editor label { font-size: 12px; color: var(--text-secondary); }
+.draft-card-editor input:not([type="checkbox"]), .draft-card-editor textarea { width: 100%; min-width: 0; font-size: 14px; }
+.global-account-menu { display: none; position: relative; }
+.global-account-menu summary { min-height: 40px; padding: 9px 12px; border: 1px solid var(--border-strong); border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 13px; }
+.global-account-menu nav { position: absolute; right: 0; top: calc(100% + 8px); z-index: 120; width: min(260px, calc(100vw - 24px)); display: grid; gap: 4px; padding: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: var(--shadow-dialog); }
+.global-account-menu nav button { text-align: left; min-height: 44px; box-shadow: none; background: transparent; color: var(--text); }
+.global-account-menu nav button:hover { background: var(--accent-soft); }
+.app-topbar { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.topbar-clock { flex-shrink: 0; white-space: nowrap; }
+.topbar-date { white-space: nowrap; }
+.topbar-context .account-status { display: none; }
+.global-account-menu { display: block; }
+.global-account-menu summary { display: flex; align-items: center; gap: 8px; max-width: 180px; }
+.global-account-menu summary > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.global-account-menu .profile-avatar { width: 26px; height: 26px; font-size: 10px; flex-shrink: 0; }
+.topbar-utilities > #open-plans-button, .topbar-utilities > #settings-button, .topbar-utilities > [data-app-section="contact"], .topbar-utilities > #signed-in-account-actions, .topbar-utilities .secondary-account-button { display: none; }
+.topbar-utilities .primary-account-button { white-space: nowrap; }
+.spaces-panel > summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; padding-block: 6px; }
+@keyframes retrieval-enter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@media (max-width: 900px) {
+  .revision-view[data-student-view="home"] .revision-hero { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .curriculum-context { padding: 20px; grid-template-columns: minmax(0, 1fr); }
+  .guided-review-columns { grid-template-columns: minmax(0, 1fr); }
+  .global-account-menu { display: block; }
+  .topbar-utilities > #open-plans-button, .topbar-utilities > #settings-button, .topbar-utilities > [data-app-section="contact"], .topbar-utilities > .theme-toggle { display: none; }
+}
+@media (max-width: 520px) {
+  .revision-view[data-student-view="home"] .revision-hero { padding: 20px 14px 16px; }
+  .revision-view[data-student-view="home"] .revision-hero-copy > .eyebrow { display: none; }
+  .revision-view[data-student-view="home"] .revision-hero-copy h2 { font-size: 24px; }
+  .revision-view[data-student-view="home"] .revision-hero-copy > p:not(.eyebrow) { margin-block: 8px 0; font-size: 14px; }
+  .student-dashboard-panel { padding: 20px 14px; }
+  .today-session-copy h3 { font-size: 22px; }
+  .app-topbar, .revision-mode .app-topbar, .contact-mode .app-topbar { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 56px; grid-template-areas: "brand utilities"; gap: 0 8px; }
+  .topbar-utilities > #theme-toggle { display: none; }
+  .topbar-product { gap: 7px; }
+  .topbar-product strong { font-size: 14px; white-space: nowrap; }
+  .global-account-menu summary { max-width: 128px; padding-inline: 8px; }
+  .revision-stage { width: calc(100% - 28px); }
+  .editor-actionbar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .editor-actionbar > .revision-action-primary { grid-column: 1 / -1; width: 100%; }
+  html { scroll-padding-bottom: 90px; }
+  .topbar-utilities .account-actions { display: none !important; }
+  .topbar-utilities .global-account-menu { display: block; }
+  .curriculum-context { padding: 16px 14px; gap: 12px; }
+  .component-switch button { padding: 10px; min-height: 74px; }
+  .component-switch button strong { font-size: 13px; }
+  .revision-hero h2 { font-size: 25px; }
+  .focused-retrieval-card { padding: 20px 16px; }
+  .focused-retrieval-card h3 { font-size: 21px; margin-block: 24px; }
+  .retrieval-answer p { font-size: 16px; }
+  .student-pricing-grid, .landing-plan-row, .student-home-sections { grid-template-columns: minmax(0, 1fr); }
+  .revision-stage-head { flex-direction: column; }
+  .revision-actions { justify-content: flex-start; }
+  .guided-answer-review { padding: 18px 14px; }
+  .revision-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .revision-summary-grid .recommended { grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .focused-retrieval-card { animation: none; }
+}

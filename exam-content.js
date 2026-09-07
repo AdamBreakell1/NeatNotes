@@ -1,4 +1,5 @@
 "use strict";
+const { COMPONENT_TWO_QUESTIONS } = require("./component-two-practice");
 
 const PRIMARY_CONCEPTS = {
   "cs-1-1-1": "mar", "cs-1-1-2": "risc", "cs-1-1-3": "solid-state",
@@ -9,6 +10,7 @@ const PRIMARY_CONCEPTS = {
 };
 
 const QUESTION_BANK = [
+  ...COMPONENT_TWO_QUESTIONS,
   question("exam-111-mar-mdr", "cs-1-1-1", "1.1.1", "Structure of the processor", 4, "Explain", "Explain how the MAR and MDR are used when the processor reads data from memory.", [
     point("MAR stores the address of the required memory location.", ["mar stores address", "memory address register stores address", "address placed in mar"]),
     point("The address is carried to memory using the address bus.", ["address bus"]),
@@ -135,35 +137,19 @@ function normaliseAnswer(value) {
     .trim();
 }
 
-const MARKING_STOP_WORDS = new Set(["a", "an", "the", "is", "are", "it", "in", "on", "to", "of"]);
-
-function matchesAlternative(normalisedAnswer, alternative) {
-  const normalisedAlternative = normaliseAnswer(alternative);
-  if (normalisedAnswer.includes(normalisedAlternative)) return true;
-  const answerTokens = new Set(normalisedAnswer.split(" "));
-  const requiredTokens = normalisedAlternative.split(" ").filter((token) => !MARKING_STOP_WORDS.has(token));
-  return requiredTokens.length >= 3 && requiredTokens.every((token) => answerTokens.has(token));
-}
-
 function markAnswer(questionItem, answer) {
-  const normalised = normaliseAnswer(answer);
-  const awarded = questionItem.rubric.map((rubricPoint) => ({
-    description: rubricPoint.description,
-    awarded: rubricPoint.alternatives.some((alternative) => matchesAlternative(normalised, alternative)),
-  }));
-  const proposedMark = awarded.filter((item) => item.awarded).length;
+  // No semantic assessment has been validated. The rubric is a review aid, not a score.
+  const checklist = questionItem.rubric.map((point) => point.description);
   return {
-    proposedMark,
+    proposedMark: null,
     maximumMark: questionItem.marks,
-    markingMethod: "deterministic_rubric",
-    confidence: proposedMark === 0 && normalised.split(" ").length >= 18 ? "low" : "moderate",
-    awarded: awarded.filter((item) => item.awarded).map((item) => item.description),
-    missing: awarded.filter((item) => !item.awarded).map((item) => item.description),
-    feedback: proposedMark === questionItem.marks
-      ? "Your answer includes every point in this Neat Notes rubric."
-      : proposedMark
-        ? "You have some creditable points. Use the missing points to improve the same answer."
-        : "The rubric could not confidently match a creditable point. Review the guidance and improve your answer.",
+    markingMethod: "guided_self_assessment",
+    validated: false,
+    confidence: "unassessed",
+    checklist,
+    awarded: [],
+    missing: checklist,
+    feedback: "Compare your reasoning with each point, then improve your answer. No automatic mark has been assigned.",
   };
 }
 
@@ -181,7 +167,7 @@ function validateQuestionBank(questions = QUESTION_BANK) {
     if (!item.topicId || !item.prompt || !item.marks) errors.push(`Incomplete question: ${item.id}`);
     if (!Array.isArray(item.rubric) || item.rubric.length !== item.marks) errors.push(`Rubric/mark mismatch: ${item.id}`);
     if (item.provenance !== "original_neat_notes") errors.push(`Unsupported provenance: ${item.id}`);
-    if (item.reviewStatus !== "published") errors.push(`Unpublished question: ${item.id}`);
+    if (!["published", "review_pending", "academically_reviewed"].includes(item.reviewStatus)) errors.push(`Invalid review status: ${item.id}`);
   });
   return { valid: errors.length === 0, errors, count: questions.length };
 }

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="Neat Notes is an OCR A-Level Computer Science revision workspace for notes, flashcards, quizzes, mastery tracking and teacher class insight."
+      content="Know what to revise next with Neat Notes: OCR A-Level Computer Science retrieval practice, guided feedback, progress and supporting study notes."
     />
     <meta property="og:title" content="Neat Notes | OCR A-Level Computer Science revision" />
     <meta
@@ -18,7 +18,8 @@
     <link rel="icon" href="/favicon.svg?v=20260705-brand" type="image/svg+xml" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <script src="/theme-init.js?v=20260824-relaunch"></script>
-    <link rel="stylesheet" href="/styles-relaunch.css?v=20260827-profile-r2" />
+    <link rel="stylesheet" href="/styles-relaunch.css?v=20260907-student-r1" />
+    <link rel="stylesheet" href="/student-layout.css?v=20260907-student-r1" />
   </head>
   <body>
     <a class="skip-link" href="#app-view">Skip to main content</a>
@@ -44,8 +45,7 @@
         <nav class="landing-primary-links" aria-label="Public site sections">
           <button type="button" data-landing-scroll="product">Product</button>
           <button type="button" data-landing-scroll="students">Students</button>
-          <button type="button" data-landing-scroll="teachers">Teachers</button>
-          <button type="button" data-landing-scroll="schools">Schools</button>
+          <button type="button" data-landing-scroll="teachers">Study approach</button>
           <button type="button" data-landing-scroll="pricing">Pricing</button>
           <button type="button" data-landing-action="contact">Contact</button>
         </nav>
@@ -59,25 +59,22 @@
       <section id="landing-product" class="landing-hero">
         <div>
           <p class="eyebrow">OCR H446 revision workspace</p>
-          <h1>Master OCR A-Level Computer Science.</h1>
+          <h1>Neat Notes</h1>
           <p>
-            Turn lesson notes into active revision, then see what you know, what you are forgetting, and what to
-            practise next.
+            Know what to revise next. Practise OCR A-Level Computer Science, understand your mistakes and return to knowledge that needs another look.
           </p>
           <div class="landing-hero-actions">
             <button class="primary-account-button" type="button" data-landing-action="signup">Start revising free</button>
             <button type="button" data-landing-action="demo">Try a revision session</button>
-            <button type="button" data-landing-action="teacher">For teachers</button>
           </div>
         </div>
         <aside class="landing-demo-card" aria-label="Demo workspace preview">
           <span>Demo workspace</span>
           <strong>1.1.1 Structure of the Processor</strong>
-          <p>Sample note, generated cards, Quick Practice questions, progress signals and a weak-topic recommendation.</p>
+          <p>Try a short retrieval session. Think first, reveal the reasoning and choose what needs another review.</p>
           <div>
-            <span>8 cards next</span>
-            <span>5 quiz checks</span>
-            <span>OCR topic map</span>
+            <span>4 sample cards</span>
+            <span>No account needed</span>
           </div>
         </aside>
       </section>
@@ -85,12 +82,12 @@
       <section id="landing-students" class="landing-workflow" aria-label="Neat Notes workflow">
         <div class="landing-section-head">
           <p class="eyebrow">How it works</p>
-          <h2>Turn ordinary lesson notes into a focused revision plan.</h2>
-          <p>Neat Notes keeps the workflow simple: capture what was taught, generate useful study material, then revise from the next best topic.</p>
+          <h2>A manageable session. A clear next step.</h2>
+          <p>Start with course material immediately. Add your own notes whenever they help.</p>
         </div>
-        <article><span>1</span><strong>Write or paste notes</strong><p>Structure OCR topic notes with headings, definitions, examples and revision tasks.</p></article>
-        <article><span>2</span><strong>Generate revision</strong><p>Create summaries, flashcards, quiz checks, key terms and exam-style prompts from the note.</p></article>
-        <article><span>3</span><strong>Revise smarter</strong><p>Use confidence ratings, streaks and recommendations to decide what to revise next.</p></article>
+        <article><span>1</span><strong>Choose a short session</strong><p>Begin with an OCR topic or a queue of concepts ready for another review.</p></article>
+        <article><span>2</span><strong>Retrieve, then check</strong><p>Answer before revealing. Use explanations and guided written practice to repair your reasoning.</p></article>
+        <article><span>3</span><strong>Return and build evidence</strong><p>Separate what you have completed, what feels familiar and what you can recall later.</p></article>
       </section>
 
       <section id="landing-teachers" class="landing-benefits-grid">
@@ -105,18 +102,18 @@
           </ul>
         </div>
         <div>
-          <p class="eyebrow">Teachers</p>
-          <h2>Classroom insight without spreadsheet gymnastics.</h2>
+          <p class="eyebrow">A clearer next step</p>
+          <h2>Retrieve. Review. Return.</h2>
           <ul>
-            <li>Create classes and invite students with join codes</li>
-            <li>View class mastery, confidence and activity</li>
-            <li>Identify weak topics and intervention priorities</li>
-            <li>Set revision tasks and monitor completion</li>
+            <li>Begin with a manageable revision session</li>
+            <li>Try to recall before revealing an explanation</li>
+            <li>Repair mistakes with focused practice</li>
+            <li>Return to concepts over time</li>
           </ul>
         </div>
       </section>
 
-      <section id="landing-schools" class="landing-schools" aria-label="For schools and colleges">
+      <section id="landing-schools" class="landing-schools" aria-label="Legacy classroom services" hidden>
         <div>
           <p class="eyebrow">For schools</p>
           <h2>Designed for teacher-led OCR Computer Science revision.</h2>
@@ -143,9 +140,7 @@
         <div class="section-title"><span>Pricing preview</span><span>Cancel anytime · Secure billing through Stripe</span></div>
         <div class="landing-plan-row">
           <article><span>Free</span><strong>£0</strong><p>25 notes and one OCR deck of your choice.</p></article>
-          <article class="featured-plan"><span>Pro</span><strong>£3.99/mo</strong><p>Full OCR library, unlimited notes, exports and collaboration.</p></article>
-          <article><span>Teacher</span><strong>£9.99/mo</strong><p>Class tools, join codes, assignments and dashboards.</p></article>
-          <article><span>Institution</span><strong>Custom</strong><p>Managed rollout for schools and departments.</p></article>
+          <article class="featured-plan"><span>Pro</span><strong>£3.99/mo</strong><p>All released decks, mixed revision, unlimited notes and exports. New Component 2 material is in review.</p></article>
         </div>
       </section>
 
@@ -154,16 +149,16 @@
           <article><span>Teacher-built</span><strong>Built by a UK Computer Science teacher</strong></article>
           <article><span>OCR-focused</span><strong>Designed around A-Level Computer Science revision</strong></article>
           <article><span>Data-aware</span><strong>GDPR-conscious workspace and export controls</strong></article>
-          <article><span>Classroom-ready</span><strong>Supports independent study and intervention</strong></article>
+          <article><span>Study-focused</span><strong>Supports independent revision and reflection</strong></article>
         </div>
         <div class="landing-faq">
           <p class="eyebrow">FAQ</p>
           <details open><summary>Is Neat Notes free?</summary><p>Yes. Free accounts can create notes and choose one OCR revision deck to try.</p></details>
-          <details><summary>What does Pro unlock?</summary><p>Pro unlocks the full OCR library, unlimited notes, exports, version history, collaboration and full Quick Practice.</p></details>
-          <details><summary>Can teachers create classes?</summary><p>Yes. Teacher mode supports class creation, join codes and class insight tools.</p></details>
+          <details><summary>What does Pro unlock?</summary><p>Pro unlocks every released OCR topic pack, cross-topic practice and supporting note tools. Component 2 is being prepared for academic review; a subscription does not bypass that review.</p></details>
+          <details><summary>What happens to existing classroom accounts?</summary><p>Existing classroom subscriptions and shared work remain supported. New subscriptions focus on the student Free and Pro plans.</p></details>
           <details><summary>Is it only for OCR A-Level Computer Science?</summary><p>The current product focus is OCR A-Level Computer Science. The structure can expand to other courses as the product grows.</p></details>
           <details><summary>Can I cancel anytime?</summary><p>Paid plans are managed securely through Stripe, including billing changes and cancellation.</p></details>
-          <details><summary>How is student data handled?</summary><p>Student and class data is used to provide the workspace, revision tracking and teacher insight. Schools can request export or deletion support.</p></details>
+          <details><summary>How is student data handled?</summary><p>Your account stores your notes and study progress. Account settings include data export and deletion controls. Existing shared spaces retain their membership permissions; see the privacy information for details.</p></details>
         </div>
       </section>
     </main>
@@ -273,7 +268,7 @@
           </form>
 
           <div id="auth-provider-list" class="auth-provider-list">
-            <a class="google-button" href="/api/auth/google">Continue with Google</a>
+            <a class="google-button" href="/api/auth/google" hidden>Continue with Google</a>
             <!-- Future provider hook: add a Microsoft sign-in button here once OAuth support exists. -->
           </div>
           <p id="auth-message" class="status-message auth-message" role="status" aria-live="polite"></p>
@@ -314,6 +309,18 @@
           <button class="topbar-utility-button" type="button" data-app-section="contact">Contact</button>
           <button class="topbar-utility-button" id="settings-button" type="button">Settings</button>
           <button class="topbar-utility-button teacher-entry-button" type="button" data-app-section="teacher">Teacher</button>
+          <details class="global-account-menu">
+            <summary id="global-menu-label">Account</summary>
+            <nav aria-label="Account and help">
+              <button type="button" data-global-action="settings">Profile &amp; settings</button>
+              <button type="button" data-global-action="plans">Plans &amp; billing</button>
+              <button type="button" data-global-action="contact">Help &amp; contact</button>
+              <button type="button" data-global-action="theme">Change theme</button>
+              <button type="button" data-global-action="login">Log in</button>
+              <button type="button" data-global-action="signup">Create account</button>
+              <button type="button" data-global-action="logout" hidden>Log out</button>
+            </nav>
+          </details>
           <div id="guest-account-actions" class="account-actions">
             <button id="topbar-login-button" class="secondary-account-button" type="button">Log in</button>
             <button id="topbar-signup-button" class="primary-account-button" type="button">Create account</button>
@@ -330,7 +337,7 @@
           </div>
         </div>
         <nav class="topbar-section-switch" aria-label="Student navigation">
-          <button class="active" type="button" data-app-section="home">Home</button>
+          <button class="active" type="button" data-app-section="home">Today</button>
           <button type="button" data-app-section="revise">Revise</button>
           <button type="button" data-app-section="practice">Practice</button>
           <button type="button" data-app-section="progress">Progress</button>
@@ -362,7 +369,8 @@
             <input id="search-input" type="search" placeholder="Search title, tag, or note" />
           </section>
 
-          <section class="panel spaces-panel">
+          <details class="panel spaces-panel">
+            <summary>Shared spaces</summary>
             <div class="section-title">
               <span>Spaces</span>
               <span id="workspace-count">0</span>
@@ -377,7 +385,7 @@
               <button type="submit" title="Create workspace" aria-label="Create workspace">+</button>
             </form>
             <p id="workspace-message" class="status-message"></p>
-          </section>
+          </details>
 
           <section class="folders folder-panel">
             <div class="section-title">
@@ -558,7 +566,7 @@
               </div>
             </section>
 
-            <section id="note-intelligence-panel" class="note-intelligence-panel" aria-label="Note quality and revision readiness"></section>
+            <section id="note-intelligence-panel" class="note-intelligence-panel" aria-label="Note structure and revision drafts"></section>
 
             <div class="preview-wrap">
               <div class="section-title">
@@ -574,6 +582,14 @@
       </section>
 
       <section id="revision-view" class="revision-view" aria-label="Student revision" hidden>
+        <section class="curriculum-context" aria-label="Choose component and topic">
+          <div class="component-switch" role="group" aria-label="OCR H446 component">
+            <button type="button" data-component="h446-01" aria-pressed="true"><span>Component 1</span><strong>Computer systems</strong></button>
+            <button type="button" data-component="h446-02" aria-pressed="false"><span>Component 2</span><strong>Algorithms &amp; programming</strong></button>
+          </div>
+          <label class="component-topic-picker" for="component-topic-select">Current topic<select id="component-topic-select"></select></label>
+          <p id="component-content-status" class="content-review-notice"></p>
+        </section>
         <div class="learning-mode-bar" aria-label="Student and teacher mode" hidden>
           <span>Viewing as:</span>
           <div id="learning-mode-switch" class="learning-mode-switch" role="tablist" aria-label="Learning mode">
@@ -587,13 +603,13 @@
             <p class="eyebrow">OCR A-Level Computer Science</p>
             <h2>Today’s revision</h2>
             <p>
-              Neat Notes chooses due knowledge, recent weaknesses and older topics so you can start without planning a session.
+              A manageable next step, chosen from due topics and recent practice.
             </p>
             <div class="revision-hero-actions">
               <button id="revision-continue-button" class="revision-primary-action" type="button">Start 15-minute revision</button>
               <button id="revision-progress-jump-button" class="revision-secondary-action" type="button">View progress</button>
             </div>
-            <p class="revision-access-note">Built around OCR H446 retrieval, feedback and adaptive review.</p>
+            <p class="revision-access-note">Retrieval, feedback and a reason to return.</p>
           </div>
           <div class="revision-summary-grid" aria-label="Revision summary">
             <article class="revision-summary-card">
@@ -620,7 +636,7 @@
           <div>
             <p class="eyebrow">Practice</p>
             <h2>Apply what you know</h2>
-            <p>Use fast retrieval for fluency or a written response for deeper exam evidence.</p>
+            <p>Check knowledge with quizzes or develop your reasoning through guided written practice.</p>
           </div>
           <div class="practice-mode-tabs" role="tablist" aria-label="Choose practice mode">
             <button class="active" type="button" role="tab" aria-selected="true" data-practice-mode="quick">Quick Practice</button>
@@ -641,6 +657,7 @@
               </div>
             </div>
             <div class="neat-questions-actions">
+              <label for="practice-length">Session length<select id="practice-length"><option value="5">5 questions</option><option value="10" selected>10 questions</option><option value="20">20 questions</option></select></label>
               <span id="neat-questions-count">0 quizzes</span>
               <button id="neat-questions-current-link" type="button">Start quick practice</button>
             </div>
@@ -661,11 +678,11 @@
             <div>
               <p class="eyebrow">Original Neat Notes questions</p>
               <h3 id="exam-practice-title">Exam Answer Coach</h3>
-              <p>Write an answer, receive point-by-point rubric feedback, then improve the same response.</p>
+              <p id="exam-practice-description">Write an answer, compare its reasoning with a rubric, then improve the same response.</p>
             </div>
             <button id="exam-load-question-button" class="primary-button" type="button">Start exam practice</button>
           </header>
-          <p class="exam-marking-notice">Suggested marks use a transparent Neat Notes rubric. They are not OCR examiner or AI marking.</p>
+          <p class="exam-marking-notice">Written answers use guided self-assessment. No automated examiner mark or grade prediction is provided.</p>
           <div id="exam-practice-panel" class="exam-practice-panel" aria-live="polite">
             <div class="exam-empty-state">
               <strong>Practise the topic you are currently revising</strong>
@@ -705,9 +722,9 @@
                 </div>
               </div>
               <div class="revision-course-progress" aria-label="Total Computer Science flashcard completion">
-                <span>Total Computer Science</span>
+                <span>Deck completion</span>
                 <strong id="revision-course-percent">0%</strong>
-                <p id="revision-course-label">0 / 0 cards mastered</p>
+                <p id="revision-course-label">0 / 0 cards completed</p>
                 <div class="revision-course-meter" aria-hidden="true">
                   <span id="revision-course-bar"></span>
                 </div>
@@ -718,7 +735,7 @@
             <div class="revision-mastery-panel">
               <div class="section-title">
                 <span>Progress map</span>
-                <span>OCR Component 1</span>
+                <span id="progress-component-label">OCR Component 1</span>
               </div>
               <div id="revision-mastery-map" class="revision-mastery-map"></div>
               <div id="revision-topic-list" class="revision-topic-list" hidden></div>
@@ -740,14 +757,12 @@
             <p class="eyebrow">Contact</p>
             <h2>Talk to BreakellSystems</h2>
             <p>
-              Neat Notes is built by teachers for classrooms, independent study and modern OCR Computer Science
-              revision. Use this page for product questions, school conversations, subject requests, or feedback that
-              helps shape what improves next.
+              Get help with your account, billing or study tools. Found a question that needs checking? Tell us the topic and we will review it.
             </p>
             <div class="contact-trust-grid" aria-label="BreakellSystems contact commitments">
               <article>
-                <span>Typical response</span>
-                <strong>1-2 working days</strong>
+                <span>Support inbox</span>
+                <strong>Replies by email</strong>
               </article>
               <article>
                 <span>Privacy respected</span>
@@ -782,14 +797,13 @@
               <label for="contact-reason">Reason</label>
               <select id="contact-reason">
                 <option value="Product support">Product support</option>
-                <option value="Schools and colleges">Schools and colleges</option>
-                <option value="Subject pack request">Subject pack request</option>
+                <option value="Account access">Account access</option>
+                <option value="Billing">Billing</option>
+                <option value="Content correction">Content correction</option>
                 <option value="General question">General question</option>
                 <option value="Feature request">Feature request</option>
-                <option value="Enterprise demo">Enterprise demo</option>
                 <option value="Product feedback">Product feedback</option>
-                <option value="Classroom setup">Classroom setup</option>
-                <option value="Pricing or school licence">Pricing or school licence</option>
+                <option value="Legacy shared workspace">Existing shared workspace</option>
                 <option value="Technical support">Technical support</option>
               </select>
 
@@ -821,21 +835,21 @@
               <button type="button" data-contact-route="Product support">Start support enquiry</button>
             </article>
             <article class="contact-card contact-route-card featured-contact-card">
-              <p class="eyebrow">Schools & Colleges</p>
-              <h3>Classroom rollouts</h3>
-              <p>Discuss teacher dashboards, shared class spaces, safeguarding expectations, or licences.</p>
-              <button type="button" data-contact-route="Schools and colleges">Discuss school use</button>
+              <p class="eyebrow">Content review</p>
+              <h3>Report a correction</h3>
+              <p>Tell us the component, topic and question so we can check its reasoning.</p>
+              <button type="button" data-contact-route="Content correction">Report a content issue</button>
             </article>
             <article class="contact-card contact-route-card">
               <p class="eyebrow">Roadmap</p>
-              <h3>Suggest a subject pack</h3>
-              <p>Request additional A-Level subjects, exam boards, or interactive revision formats.</p>
-              <button type="button" data-contact-route="Subject pack request">Suggest a pack</button>
+              <h3>Improve your study tools</h3>
+              <p>Tell us which part of your revision could be easier.</p>
+              <button type="button" data-contact-route="Feature request">Share feedback</button>
             </article>
             <article class="contact-card contact-route-card">
               <p class="eyebrow">Questions</p>
               <h3>General questions</h3>
-              <p>Ask about BreakellSystems, Neat Notes, partnerships, school setup, or account questions.</p>
+              <p>Ask about Neat Notes or get help with an existing shared workspace.</p>
               <button type="button" data-contact-route="General question">Ask a question</button>
             </article>
           </aside>
@@ -848,15 +862,15 @@
           </article>
           <article>
             <span>UK-based</span>
-            <p>Designed around UK education workflows, OCR Computer Science and school deployment conversations.</p>
+            <p>Focused on OCR A-Level Computer Science and independent study.</p>
           </article>
           <article>
-            <span>GDPR-conscious</span>
-            <p>Contact data is used to respond to enquiries and support account, billing or school setup requests.</p>
+            <span>Data care</span>
+            <p>Do not include passwords, payment details or private notes in an enquiry.</p>
           </article>
           <article>
-            <span>Classroom-ready</span>
-            <p>Teacher tools support class setup, revision insight and school partnership enquiries.</p>
+            <span>Content feedback</span>
+            <p>Topic and question references help us investigate a possible correction.</p>
           </article>
         </section>
 
@@ -875,9 +889,9 @@
               <span>Billing</span>
               <strong>Plans and invoices</strong>
             </button>
-            <button type="button" data-contact-route="School setup">
-              <span>School setup</span>
-              <strong>Classes and rollout</strong>
+            <button type="button" data-contact-route="Content correction">
+              <span>Content correction</span>
+              <strong>Question or explanation</strong>
             </button>
             <button type="button" data-contact-route="Bug report">
               <span>Bug report</span>
@@ -887,9 +901,9 @@
               <span>Feature request</span>
               <strong>Improve the product</strong>
             </button>
-            <button type="button" data-contact-route="Enterprise demo">
-              <span>Enterprise demo</span>
-              <strong>School partnerships</strong>
+            <button type="button" data-contact-route="Legacy shared workspace">
+              <span>Existing shared work</span>
+              <strong>Legacy account support</strong>
             </button>
           </div>
         </section>
@@ -913,7 +927,7 @@
             <h3>Where are you in your A-Level?</h3>
             <p>This helps Neat Notes balance new learning with revision. You can change it later.</p>
             <div class="choice-card-grid" role="radiogroup" aria-label="Learner stage">
-              <label><input type="radio" name="learner-type" value="year_12" required /><span><strong>Year 12</strong><small>Building course knowledge</small></span></label>
+              <label><input type="radio" name="learner-type" value="year_12" /><span><strong>Year 12</strong><small>Building course knowledge</small></span></label>
               <label><input type="radio" name="learner-type" value="year_13" /><span><strong>Year 13</strong><small>Consolidating and preparing for exams</small></span></label>
               <label><input type="radio" name="learner-type" value="independent" /><span><strong>Independent learner</strong><small>Studying outside a school timetable</small></span></label>
             </div>
@@ -953,7 +967,7 @@
             <p class="eyebrow">Revision goal</p>
             <h3>What should Neat Notes help with first?</h3>
             <div class="choice-card-grid choice-card-grid-two" role="radiogroup" aria-label="Revision goal">
-              <label><input type="radio" name="revision-goal" value="keep_up" required /><span><strong>Keep up with lessons</strong><small>Review recently taught knowledge</small></span></label>
+              <label><input type="radio" name="revision-goal" value="keep_up" /><span><strong>Keep up with lessons</strong><small>Review recently taught knowledge</small></span></label>
               <label><input type="radio" name="revision-goal" value="weak_topics" /><span><strong>Improve weak topics</strong><small>Diagnose and repair gaps</small></span></label>
               <label><input type="radio" name="revision-goal" value="mocks" /><span><strong>Prepare for mocks</strong><small>Mix retrieval and exam practice</small></span></label>
               <label><input type="radio" name="revision-goal" value="final_exams" /><span><strong>Prepare for final exams</strong><small>Build coverage and exam readiness</small></span></label>
@@ -971,6 +985,7 @@
           <p id="onboarding-message" class="status-message" role="status" aria-live="polite"></p>
           <footer class="onboarding-actions">
             <button id="onboarding-back" type="button">Back</button>
+            <button type="submit" formnovalidate name="finish-action" value="explore">Set up later</button>
             <button id="onboarding-next" class="primary-button" type="button">Continue</button>
           </footer>
         </form>
@@ -983,96 +998,30 @@
         <div class="pricing-head">
           <div>
             <p class="eyebrow">Plans</p>
-            <h2 id="pricing-title">Choose the workspace that matches your study load.</h2>
+            <h2 id="pricing-title">Choose your revision plan.</h2>
             <p>
-              Start free, then unlock collaboration, exports, version history, and classroom management as your notes
-              become part of a wider revision system.
+              Start with one topic. Build a revision habit, then broaden your practice with Pro.
             </p>
           </div>
           <button id="close-plans-button" class="modal-close-button" type="button" aria-label="Close plans">×</button>
         </div>
 
-        <div class="pricing-grid">
+        <div class="pricing-grid student-pricing-grid">
           <article class="pricing-card pricing-card-free">
-            <p class="plan-kicker">Individual start</p>
-            <h3>Free</h3>
-            <p class="plan-price">£0</p>
-            <p class="plan-copy">For trying Neat Notes with a small notebook and one chosen OCR revision deck.</p>
-            <ul>
-              <li>25 notes</li>
-              <li>2 spaces</li>
-              <li>One OCR topic deck of your choice</li>
-              <li>Quick Practice on your free deck</li>
-              <li>Tags and folders</li>
-              <li>Basic note formatting</li>
-              <li>Upgrade prompts when you hit limits</li>
-            </ul>
-            <button class="plan-button subtle" type="button" disabled>Current baseline</button>
+            <p class="plan-kicker">Build a study habit</p><h3>Free</h3><p class="plan-price">£0</p>
+            <p class="plan-copy">Try the whole revision loop within one chosen topic.</p>
+            <ul><li>One available OCR topic deck of your choice</li><li>Flashcards and focused quiz checks</li><li>Scheduling and progress for your deck</li><li>Guided written practice where available</li><li>25 personal notes, tags and folders</li></ul>
+            <button class="plan-button subtle" type="button" data-auth-mode="signup">Create a free account</button>
           </article>
-
           <article class="pricing-card pricing-card-plus">
-            <p class="plan-kicker">Student upgrade</p>
-            <h3>Pro</h3>
-            <p class="plan-price">£3.99<span>/month</span></p>
-            <p class="plan-copy">For students who want the complete OCR library, unlimited notes, and revision-ready exports.</p>
-            <ul>
-              <li>Unlimited notes and spaces</li>
-              <li>Full OCR Computer Science library</li>
-              <li>Quick Practice quizzes</li>
-              <li>Instant note-to-card lab</li>
-              <li>Daily review streaks</li>
-              <li>PDF export</li>
-              <li>Version history</li>
-              <li>Collaboration with peers</li>
-            </ul>
-            <button class="plan-button" type="button" data-plan="pro">Upgrade to Pro</button>
-          </article>
-
-          <article class="pricing-card pricing-card-teacher featured">
-            <div class="plan-badge">Best for classrooms</div>
-            <p class="plan-kicker">Teacher workspace</p>
-            <h3>Teacher</h3>
-            <p class="plan-price">£9.99<span>/month</span></p>
-            <p class="plan-copy">For managing class folders, shared notes, and independent revision activity.</p>
-            <ul>
-              <li>Everything in Pro</li>
-              <li>Classroom spaces</li>
-              <li>Teacher dashboard</li>
-              <li>Class mastery map</li>
-              <li>Class revision packs</li>
-              <li>Shared class folders</li>
-            </ul>
-            <button class="plan-button premium" type="button" data-plan="teacher">Start Teacher plan</button>
-          </article>
-
-          <article class="pricing-card pricing-card-institution">
-            <p class="plan-kicker">Department scale</p>
-            <h3>Institution</h3>
-            <p class="plan-price">Custom</p>
-            <p class="plan-copy">For departments and schools that need managed rollout and governance.</p>
-            <ul>
-              <li>Everything in Teacher</li>
-              <li>Department workspaces</li>
-              <li>Managed onboarding</li>
-              <li>Data protection support</li>
-              <li>School invoice conversations</li>
-            </ul>
-            <button class="plan-button institutional" type="button" data-plan="institution">Register interest</button>
+            <p class="plan-kicker">Broaden your revision</p><h3>Pro</h3><p class="plan-price">£3.99<span>/month</span></p>
+            <p class="plan-copy">Study across the released library with a connected revision plan.</p>
+            <ul><li>Every released topic deck</li><li>Mixed-topic retrieval and practice</li><li>Progress across both components as content is released</li><li>Unlimited personal notes</li><li>Exports, version history and shared notes</li></ul>
+            <button class="plan-button" type="button" data-plan="pro">Choose Pro</button>
           </article>
         </div>
-        <section class="pricing-comparison" aria-label="Plan comparison">
-          <div class="section-title"><span>Feature comparison</span><span>Secure payments by Stripe · Cancel anytime</span></div>
-          <div class="comparison-table" role="table" aria-label="Neat Notes plan comparison">
-            <div role="row"><span role="columnheader">Feature</span><strong>Free</strong><strong>Pro</strong><strong>Teacher</strong><strong>Institution</strong></div>
-            <div role="row"><span>Notes</span><strong>25</strong><strong>Unlimited</strong><strong>Unlimited</strong><strong>Managed</strong></div>
-            <div role="row"><span>OCR decks</span><strong>1 deck</strong><strong>Full library</strong><strong>Full library</strong><strong>Department rollout</strong></div>
-            <div role="row"><span>Flashcards and quizzes</span><strong>Limited</strong><strong>Full</strong><strong>Full + classes</strong><strong>Managed</strong></div>
-            <div role="row"><span>PDF export and version history</span><strong>—</strong><strong>Included</strong><strong>Included</strong><strong>Included</strong></div>
-            <div role="row"><span>Teacher dashboard</span><strong>—</strong><strong>—</strong><strong>Included</strong><strong>Included</strong></div>
-            <div role="row"><span>School support</span><strong>Contact</strong><strong>Contact</strong><strong>Priority</strong><strong>Custom</strong></div>
-          </div>
-          <p>Need a school invoice? Contact us and choose “Billing” or “School setup”.</p>
-        </section>
+        <p class="pricing-contract-note">£3.99 billed monthly. Cancel renewal in billing; paid access continues until the paid period ends. Your own notes and account data remain accessible after downgrade. Component 2 is in academic review, and no plan bypasses that release gate.</p>
+        <p class="pricing-contract-note">Existing classroom customers retain their contracted access. Contact support for help with a legacy plan.</p>
         <div class="billing-footer">
           <p>Already subscribed? Manage invoices, payment methods, and cancellations securely in Stripe.</p>
           <button class="plan-button subtle" type="button" data-billing-portal>Manage billing</button>
@@ -1097,7 +1046,7 @@
             <strong id="badge-course-percent">0%</strong>
           </div>
           <div>
-            <span>Cards mastered</span>
+            <span>Cards reviewed</span>
             <strong id="badge-course-count">0 / 0</strong>
           </div>
           <div class="badge-overview-meter" aria-hidden="true">
@@ -1368,9 +1317,10 @@
 
     <script src="ocr-content.js?v=20260824-relaunch"></script>
     <script src="revision-generator.js?v=20260711-design-reset"></script>
-    <script src="revision-topics.js?v=20260711-design-reset"></script>
+    <script src="revision-session.js?v=20260907"></script>
+    <script src="revision-topics.js?v=20260907"></script>
     <script src="neat-questions.js?v=20260824-relaunch"></script>
     <script src="learning-model.js?v=20260824-relaunch"></script>
-    <script src="/app-relaunch.js?v=20260827-profile-r2"></script>
+    <script src="/app-relaunch.js?v=20260907-student-r1"></script>
   </body>
 </html>

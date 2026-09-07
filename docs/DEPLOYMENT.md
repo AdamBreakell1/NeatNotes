@@ -1,11 +1,11 @@
 # Production Deployment
 
-Updated: 24 August 2026
+Updated: 7 September 2026. Student relaunch is gated by `STUDENT_RELEASE_RUNBOOK.md`; these instructions are not deployment approval.
 
 ## Render service
 
 1. Deploy the GitHub repository as one Node web service.
-2. Use build command `npm install` and start command `npm start`.
+2. Use build command `npm ci` and start command `npm start`.
 3. Use a paid instance with a persistent disk mounted at `/var/data`.
 4. Set `DATABASE_PATH=/var/data/neat-notes.sqlite`.
 5. Set `NODE_ENV=production`, `BASE_URL=https://YOUR-DOMAIN`, and `CORS_ORIGIN` to that exact origin.
@@ -22,7 +22,7 @@ Create a Google OAuth web client and register `https://YOUR-DOMAIN/api/auth/goog
 
 ## Stripe
 
-Set live `STRIPE_SECRET_KEY` and the recurring Price IDs for Pro, Teacher and Institution. Add an HTTPS webhook destination at `https://YOUR-DOMAIN/api/billing/stripe/webhook`, subscribe to Checkout/subscription/invoice lifecycle events required by the app, and set its signing secret as `STRIPE_WEBHOOK_SECRET`. Confirm Checkout, cancellation/portal, upgrade and entitlement removal. Never set `ALLOW_MOCK_BILLING=true` in production.
+Validate in Stripe Sandbox before configuring live credentials with explicit approval. Public checkout needs `STRIPE_SECRET_KEY`, `STRIPE_PRICE_PRO` and `STRIPE_WEBHOOK_SECRET`; preserve any existing Teacher/Institution price mappings for legacy contracts. The HTTPS destination is `https://YOUR-DOMAIN/api/billing/stripe/webhook`. Required lifecycle events include `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid` and `invoice.payment_failed`. Confirm portal, renewal, failure/recovery, cancellation timing and entitlement removal. Annual checkout is disabled pending price/terms approval. Never set `ALLOW_MOCK_BILLING=true` in production.
 
 ## Operations
 

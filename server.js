@@ -4,7 +4,6 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const vm = require("node:vm");
 const { DatabaseSync } = require("node:sqlite");
 const express = require("express");
 const nodemailer = require("nodemailer");
@@ -19,6 +18,10 @@ const {
 const { buildContentModel, flattenContent, validateContentModel } = require("./ocr-content");
 const { QUESTION_BANK, getPublicQuestion, markAnswer, validateQuestionBank } = require("./exam-content");
 const { LABS, assessLab, getPublicLab, validateLabs } = require("./cs-labs");
+const { loadTopics, isReleased, hasAvailableConcepts } = require("./backend/services/contentRepository");
+const { trustedSchedule } = require("./backend/services/trustedSchedule");
+const { createSubscriptionEventProcessor, subscriptionAccess } = require("./backend/services/subscriptionEvents");
+const revisionGenerator = require("./revision-generator");
 
 const app = express();
 const PORT = Number(process.env.PORT || 4173);
@@ -64,83 +67,11 @@ const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SEC
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
 const STRIPE_PRICE_IDS = {
   pro: process.env.STRIPE_PRICE_PRO || process.env.STRIPE_PRICE_PLUS || "",
+  proAnnual: process.env.STRIPE_PRICE_PRO_ANNUAL || "",
   teacher: process.env.STRIPE_PRICE_TEACHER || "",
   institution: process.env.STRIPE_PRICE_INSTITUTION || "",
 };
-const PLAN_CATALOG = {
-  free: {
-    id: "free",
-    name: "Free",
-    price: "£0",
-    noteLimit: 25,
-    workspaceLimit: 2,
-    features: {
-      collaboration: false,
-      classroomSpaces: false,
-      pdfExport: false,
-      versionHistory: false,
-      studyPack: false,
-      teacherDashboard: false,
-      fullRevisionLibrary: false,
-      quickPractice: true,
-      billingPortal: false,
-    },
-  },
-  pro: {
-    id: "pro",
-    name: "Student Pro",
-    price: "£3.99/mo",
-    noteLimit: null,
-    workspaceLimit: null,
-    features: {
-      collaboration: true,
-      classroomSpaces: false,
-      pdfExport: true,
-      versionHistory: true,
-      studyPack: true,
-      teacherDashboard: false,
-      fullRevisionLibrary: true,
-      quickPractice: true,
-      billingPortal: true,
-    },
-  },
-  teacher: {
-    id: "teacher",
-    name: "Teacher / Classroom",
-    price: "£9.99/mo",
-    noteLimit: null,
-    workspaceLimit: null,
-    features: {
-      collaboration: true,
-      classroomSpaces: true,
-      pdfExport: true,
-      versionHistory: true,
-      studyPack: true,
-      teacherDashboard: true,
-      fullRevisionLibrary: true,
-      quickPractice: true,
-      billingPortal: true,
-    },
-  },
-  institution: {
-    id: "institution",
-    name: "Institution",
-    price: "Custom",
-    noteLimit: null,
-    workspaceLimit: null,
-    features: {
-      collaboration: true,
-      classroomSpaces: true,
-      pdfExport: true,
-      versionHistory: true,
-      studyPack: true,
-      teacherDashboard: true,
-      fullRevisionLibrary: true,
-      quickPractice: true,
-      billingPortal: true,
-    },
-  },
-};
+const { PLAN_CATALOG, PUBLIC_PLAN_IDS, BRAND, BILLING } = require("./product-config");
 const PRODUCT_EVENT_NAMES = new Set([
   "account_created", "onboarding_completed", "adaptive_session_started", "quick_practice_started",
   "quick_practice_completed", "exam_question_started", "exam_question_submitted", "mini_mock_started",
@@ -562,11 +493,26 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS lab_attempts_user_idx ON lab_attempts(user_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS revision_attempt_receipts (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    client_id TEXT NOT NULL,
+    request_hash TEXT NOT NULL,
+    response_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, client_id)
+  );
 `);
 
 migrateSchema();
 seedRevisionDecks();
 validatePublishedContent();
+const processSubscriptionEvent = createSubscriptionEventProcessor({
+  hasEvent: (id) => Boolean(db.prepare("SELECT 1 FROM stripe_events WHERE id = ?").get(id)),
+  recordEvent: (event) => db.prepare("INSERT INTO stripe_events (id, type, processed_at) VALUES (?, ?, ?)").run(event.id, event.type, new Date().toISOString()),
+  checkout: handleCheckoutCompleted,
+  subscription: handleSubscriptionChanged,
+});
 
 app.set("trust proxy", 1);
 app.use((req, res, next) => {
@@ -595,8 +541,10 @@ app.get("/api/session", requireUser, (req, res) => {
 });
 
 app.get("/api/plans", (req, res) => {
-  res.json({ plans: PLAN_CATALOG, stripeConfigured: isStripeConfigured() });
+  res.json({ plans: Object.fromEntries(PUBLIC_PLAN_IDS.map((id) => [id, PLAN_CATALOG[id]])), billing: BILLING, brand: BRAND, stripeConfigured: isStripeConfigured() });
 });
+
+app.get("/api/auth/providers", (req, res) => res.json({ google: isGoogleConfigured() }));
 
 app.post("/api/contact", contactRateLimiter, asyncHandler(async (req, res) => {
   const name = String(req.body.name || "").trim().slice(0, 120);
@@ -734,17 +682,21 @@ app.put("/api/internal/content-reviews/:conceptId", requireUser, requireAdmin, (
 
 app.post("/api/billing/checkout-session", billingRateLimiter, requireUser, asyncHandler(async (req, res) => {
   const plan = normalizePlanId(req.body.plan);
-  if (!["pro", "teacher"].includes(plan)) {
-    return res.status(400).json({ error: "Choose Pro or Teacher to start checkout." });
+  if (plan !== "pro" || (req.body.interval && req.body.interval !== "month")) {
+    return res.status(400).json({ error: "Only monthly Pro is currently available for new subscriptions. Existing classroom plans remain supported through account billing." });
+  }
+
+  if (req.user.stripe_subscription_id && ["active", "trialing", "past_due", "unpaid", "incomplete", "paused"].includes(req.user.subscription_status)) {
+    return res.status(409).json({ error: "You already have a subscription. Use account billing to manage it rather than starting another." });
   }
 
   if (!stripe) {
-    return res.status(503).json({ error: "Stripe is not configured yet. Add STRIPE_SECRET_KEY and price IDs in Render." });
+    return res.status(503).json({ error: "New subscriptions are temporarily unavailable. Your existing account and notes are unaffected." });
   }
 
   const price = STRIPE_PRICE_IDS[plan];
   if (!price) {
-    return res.status(503).json({ error: `Stripe price for ${PLAN_CATALOG[plan].name} is not configured yet.` });
+    return res.status(503).json({ error: "This subscription is not available for purchase yet. Please contact support." });
   }
 
   const user = await ensureStripeCustomer(req.user);
@@ -1017,8 +969,11 @@ app.delete("/api/account", requireUser, (req, res) => {
     return res.status(401).json({ error: "Sign in with Google again before deleting this account." });
   }
   if (["active", "trialing", "past_due"].includes(req.user.subscription_status)) {
-    return res.status(409).json({ error: "Cancel the active subscription in Billing before deleting this account." });
+    return res.status(409).json({ error: "Cancel in Billing and wait until the subscription ends before deleting this account. Contact support if you need help ending access earlier." });
   }
+
+  const sharedOwnership = db.prepare(`SELECT 1 FROM workspaces JOIN workspace_members ON workspace_members.workspace_id = workspaces.id WHERE workspaces.owner_id = ? AND workspace_members.user_id != ? LIMIT 1`).get(req.user.id, req.user.id);
+  if (sharedOwnership) return res.status(409).json({ error: "This account owns shared work. Contact support to arrange ownership and exports before deletion, so other members' notes are not lost." });
 
   const userId = req.user.id;
   db.prepare("DELETE FROM users WHERE id = ?").run(userId);
@@ -1804,11 +1759,15 @@ app.post("/api/revision/free-deck", requireUser, (req, res) => {
   const deck = db.prepare("SELECT * FROM flashcard_decks WHERE id = ? OR topic_id = ?").get(requestedDeckId, requestedDeckId);
   if (!deck) return res.status(404).json({ error: "Deck not found." });
 
+  if (!isReleased(REVISION_TOPICS.find((topic) => topic.id === deck.id))) {
+    return res.status(409).json({ error: "This topic is awaiting academic review and cannot be selected yet." });
+  }
+
   if (hasFeature(req.user, "fullRevisionLibrary")) {
     return res.json({
       user: publicUser(req.user),
       deck: getRevisionDeck(deck.id, req.user),
-      message: "Your plan already includes the full OCR revision library.",
+      message: "Your plan already includes all released OCR revision packs.",
     });
   }
 
@@ -1855,7 +1814,7 @@ app.post("/api/revision/attempts", revisionRateLimiter, requireUser, (req, res) 
   }
 
   const card = db.prepare("SELECT * FROM flashcards WHERE id = ? AND deck_id = ?").get(cardId, deckId);
-  if (!card) return res.status(404).json({ error: "Flashcard not found." });
+  if (!card || !isCurrentCard(card)) return res.status(404).json({ error: "Flashcard is no longer available for practice." });
   if (!canAccessRevisionDeck(req.user, deckId)) {
     return res.status(402).json({ error: "Upgrade to Pro to save progress on this OCR revision deck." });
   }
@@ -1863,6 +1822,16 @@ app.post("/api/revision/attempts", revisionRateLimiter, requireUser, (req, res) 
     return res.status(403).json({ error: "You are not joined to that class." });
   }
 
+  const clientId = String(req.body.clientAttemptId || "").trim();
+  if (clientId && !/^[a-zA-Z0-9_-]{3,120}$/.test(clientId)) return res.status(400).json({ error: "Invalid attempt identifier." });
+  const requestHash = crypto.createHash("sha256").update(JSON.stringify({ deckId, cardId, confidence, classId, source, rating, quizCorrect: req.body.quizCorrect })).digest("hex");
+  const receipt = clientId && db.prepare("SELECT * FROM revision_attempt_receipts WHERE user_id = ? AND client_id = ?").get(req.user.id, clientId);
+  if (receipt) {
+    if (receipt.request_hash !== requestHash) return res.status(409).json({ error: "This attempt identifier was already used for a different answer." });
+    return res.json(JSON.parse(receipt.response_json));
+  }
+  db.exec("BEGIN IMMEDIATE");
+  try {
   const quizCorrect = req.body.quizCorrect === undefined ? null : (req.body.quizCorrect ? 1 : 0);
   const responseTimeMs = req.body.responseTimeMs !== null && req.body.responseTimeMs !== undefined && Number.isFinite(Number(req.body.responseTimeMs))
     ? Math.max(0, Number(req.body.responseTimeMs))
@@ -1902,12 +1871,19 @@ app.post("/api/revision/attempts", revisionRateLimiter, requireUser, (req, res) 
   recordStudentActivity(req.user.id, classId, deckId, "card_attempt", { confidence, source, quizCorrect });
   pruneLearningHistory(req.user.id, card.id, learning.conceptId);
 
-  res.status(201).json({
+  const response = {
     attempt,
     confidence: confidenceSummary,
     learning,
     recommendations: getRevisionRecommendations(req.user.id, classId).slice(0, 3),
-  });
+  };
+  if (clientId) db.prepare("INSERT INTO revision_attempt_receipts VALUES (?, ?, ?, ?, ?)").run(req.user.id, clientId, requestHash, JSON.stringify(response), now);
+  db.exec("COMMIT");
+  res.status(201).json(response);
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 });
 
 app.get("/api/revision/recommendations", requireUser, (req, res) => {
@@ -1937,6 +1913,21 @@ app.get("/api/learning/dashboard", requireUser, (req, res) => {
   res.json(getLearningDashboard(req.user));
 });
 
+app.get("/api/revision/history", requireUser, (req, res) => {
+  const attempts = db.prepare(`SELECT a.*, f.card_key FROM flashcard_attempts a
+    JOIN flashcards f ON f.id = a.card_id WHERE a.user_id = ? ORDER BY a.created_at DESC LIMIT 1200`).all(req.user.id);
+  const evidence = db.prepare(`SELECT id, concept_id AS conceptId, activity_type AS activityType, score,
+    difficulty, confidence, created_at AS occurredAt FROM learning_evidence
+    WHERE user_id = ? AND activity_type != 'exam_response' ORDER BY created_at`).all(req.user.id);
+  const schedules = db.prepare("SELECT * FROM review_schedules WHERE user_id = ?").all(req.user.id)
+    .map((row) => getTrustedReviewSchedule(req.user.id, row.concept_id, row)).filter(Boolean);
+  const mistakes = db.prepare(`SELECT m.*, f.front, f.card_key FROM mistake_journal m
+    JOIN flashcards f ON f.id = m.card_id WHERE m.user_id = ? AND m.activity_type != 'exam_response'
+    ORDER BY m.updated_at DESC LIMIT 100`).all(req.user.id)
+    .filter((row) => canAccessRevisionDeck(req.user, row.deck_id) && isCurrentCard(row));
+  res.json({ attempts, evidence, schedules, mistakes });
+});
+
 app.post("/api/learning/session", requireUser, (req, res) => {
   const requestedDuration = Number(req.body.durationMinutes || 15);
   const durationMinutes = [5, 15, 25].includes(requestedDuration)
@@ -1964,13 +1955,13 @@ app.post("/api/learning/mistakes/:id/correct", requireUser, (req, res) => {
 app.get("/api/exam/questions", requireUser, (req, res) => {
   const topicId = String(req.query.topicId || "").trim();
   const available = QUESTION_BANK.filter((question) => !topicId || question.topicId === topicId)
-    .filter((question) => canAccessRevisionDeck(req.user, question.topicId));
+    .filter((question) => hasAvailableConcepts(question, REVISION_TOPICS) && canAccessRevisionDeck(req.user, question.topicId));
   res.json({
     questions: available.map(getPublicQuestion),
     lockedTopicIds: QUESTION_BANK
       .filter((question) => !canAccessRevisionDeck(req.user, question.topicId))
       .map((question) => question.topicId),
-    markingNotice: "Marks are suggested using a transparent Neat Notes rubric, not OCR examiner or AI marking.",
+    markingNotice: "Written practice uses guided rubric review. Answers are not automatically marked and do not count as validated mastery evidence.",
   });
 });
 
@@ -1978,7 +1969,7 @@ app.post("/api/exam/attempts", revisionRateLimiter, requireUser, (req, res) => {
   const questionId = String(req.body.questionId || "").trim();
   const answer = String(req.body.answer || "").trim().slice(0, 4000);
   const question = QUESTION_BANK.find((item) => item.id === questionId);
-  if (!question) return res.status(404).json({ error: "Exam-practice question not found." });
+  if (!question || !hasAvailableConcepts(question, REVISION_TOPICS)) return res.status(404).json({ error: "This question is no longer available for practice." });
   if (!canAccessRevisionDeck(req.user, question.topicId)) {
     return res.status(402).json({ error: "Choose this as your free deck or upgrade to Pro to submit this question." });
   }
@@ -2004,7 +1995,7 @@ app.post("/api/exam/attempts", revisionRateLimiter, requireUser, (req, res) => {
     ) VALUES (?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     attemptId, req.user.id, question.id, question.topicId, originalAttemptId, answer,
-    result.proposedMark, result.maximumMark, JSON.stringify(result), confidence, responseTimeMs, now,
+    result.proposedMark ?? 0, result.maximumMark, JSON.stringify(result), confidence, responseTimeMs, now,
   );
   const learning = recordExamLearningEvidence(req.user.id, question, result, {
     attemptId, confidence, responseTimeMs, corrected: Boolean(originalAttemptId), now,
@@ -2020,13 +2011,13 @@ app.post("/api/exam/attempts", revisionRateLimiter, requireUser, (req, res) => {
     question: getPublicQuestion(question),
     result: { ...result, modelReasoning: question.modelReasoning },
     learning,
-    notice: "This is a suggested mark from the published Neat Notes rubric. Equivalent valid wording may need teacher review.",
+    notice: "This is guided self-assessment, not an examiner mark. Compare meaning, examples and reasoning; ask a teacher when uncertain.",
   });
 });
 
 app.get("/api/exam/attempts", requireUser, (req, res) => {
   const attempts = db.prepare(`
-    SELECT id, question_id, topic_id, original_attempt_id, proposed_mark, maximum_mark,
+    SELECT id, question_id, topic_id, original_attempt_id, NULL AS proposed_mark, maximum_mark,
       confidence, response_time_ms, created_at
     FROM exam_attempts WHERE user_id = ? ORDER BY datetime(created_at) DESC LIMIT 100
   `).all(req.user.id);
@@ -2034,10 +2025,11 @@ app.get("/api/exam/attempts", requireUser, (req, res) => {
 });
 
 app.get("/api/labs", requireUser, (req, res) => {
-  const available = LABS.filter((labItem) => canAccessRevisionDeck(req.user, labItem.topicId));
+  const released = LABS.filter((labItem) => hasAvailableConcepts(labItem, REVISION_TOPICS) && isReleased(REVISION_TOPICS.find((topic) => topic.id === labItem.topicId)));
+  const available = released.filter((labItem) => canAccessRevisionDeck(req.user, labItem.topicId));
   res.json({
     labs: available.map(getPublicLab),
-    lockedCount: LABS.length - available.length,
+    lockedCount: released.length - available.length,
     notice: "Interactive tasks use original Neat Notes scenarios and feed the adaptive mastery model.",
   });
 });
@@ -2046,7 +2038,7 @@ app.post("/api/labs/attempts", revisionRateLimiter, requireUser, (req, res) => {
   const labId = String(req.body.labId || "").trim();
   const response = String(req.body.response || "").trim().slice(0, 2000);
   const labItem = LABS.find((item) => item.id === labId);
-  if (!labItem) return res.status(404).json({ error: "Interactive task not found." });
+  if (!labItem || !hasAvailableConcepts(labItem, REVISION_TOPICS)) return res.status(404).json({ error: "This task is no longer available for practice." });
   if (!canAccessRevisionDeck(req.user, labItem.topicId)) {
     return res.status(402).json({ error: "Choose this as your free deck or upgrade to Pro to submit this task." });
   }
@@ -2123,10 +2115,12 @@ function registerPublicAssetRoutes() {
     ["/app.js", "application/javascript"],
     ["/theme-init.js", "application/javascript"],
     ["/learning-model.js", "application/javascript"],
+    ["/revision-session.js", "application/javascript"],
     ["/ocr-content.js", "application/javascript"],
     ["/service-worker.js", "application/javascript"],
     ["/manifest.webmanifest", "application/manifest+json"],
     ["/styles.css", "text/css"],
+    ["/student-layout.css", "text/css"],
     ["/revision-generator.js", "application/javascript"],
     ["/neat-questions.js", "application/javascript"],
     ["/favicon.svg", "image/svg+xml"],
@@ -2159,13 +2153,13 @@ function registerPublicAssetRoutes() {
 
   app.get("/ocr-h446/:code", (req, res) => {
     const topic = REVISION_TOPICS.find((item) => item.code === req.params.code);
-    if (!topic) return res.status(404).type("text/plain").send("Topic not found.");
+    if (!isReleased(topic)) return res.status(404).type("text/plain").send("Topic not available.");
     res.setHeader("Cache-Control", "public, max-age=3600");
     res.type("html").send(renderPublicTopicPage(topic));
   });
 
   app.get("/sitemap.xml", (req, res) => {
-    const urls = [BASE_URL, ...REVISION_TOPICS.map((topic) => `${BASE_URL}/ocr-h446/${encodeURIComponent(topic.code)}`)];
+    const urls = [BASE_URL, ...REVISION_TOPICS.filter((topic) => isReleased(topic)).map((topic) => `${BASE_URL}/ocr-h446/${encodeURIComponent(topic.code)}`)];
     res.type("application/xml").send(
       `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map((url) => `<url><loc>${escapeHtml(url)}</loc></url>`).join("")}</urlset>`,
     );
@@ -2206,12 +2200,17 @@ function getOptionalSessionUser(req) {
 
 function createPublicRevisionTopic(topic, includeCards) {
   const cards = Array.isArray(topic.cards) ? topic.cards : [];
+  includeCards = includeCards && isReleased(topic);
   return {
     id: topic.id,
     subject: topic.subject || "Computer Science",
     code: topic.code || "",
     title: topic.title || "Untitled deck",
     summary: topic.summary || "",
+    componentId: topic.componentId,
+    reviewStatus: topic.reviewStatus,
+    contentAvailable: Boolean(isReleased(topic)),
+    quizCount: topic.componentId === "h446-02" ? cards.filter((card) => card.distractors?.length === 3).length : cards.length,
     cardCount: cards.length,
     lockedPreview: !includeCards,
     cards: includeCards ? cards.map((card) => decoratePublicRevisionCard(topic.id, card)) : [],
@@ -2226,6 +2225,7 @@ function decoratePublicRevisionCard(topicId, card) {
     category: card.category || "Revision",
     front: card.front || "",
     back: card.back || "",
+    distractors: card.distractors || [],
   };
 }
 
@@ -2241,25 +2241,7 @@ async function handleStripeWebhook(req, res) {
     return res.status(400).send(`Webhook signature verification failed: ${error.message}`);
   }
 
-  const existing = db.prepare("SELECT 1 FROM stripe_events WHERE id = ?").get(event.id);
-  if (existing) return res.json({ received: true, duplicate: true });
-
-  switch (event.type) {
-    case "checkout.session.completed":
-      await handleCheckoutCompleted(event.data.object);
-      break;
-    case "customer.subscription.created":
-    case "customer.subscription.updated":
-    case "customer.subscription.deleted":
-      await handleSubscriptionChanged(event.data.object);
-      break;
-    default:
-      break;
-  }
-
-  db.prepare("INSERT INTO stripe_events (id, type, processed_at) VALUES (?, ?, ?)")
-    .run(event.id, event.type, new Date().toISOString());
-  res.json({ received: true });
+  res.json(await processSubscriptionEvent(event));
 }
 
 async function handleCheckoutCompleted(session) {
@@ -2272,11 +2254,7 @@ async function handleCheckoutCompleted(session) {
     subscription = await stripe.subscriptions.retrieve(subscriptionId);
   }
 
-  const status = subscription?.status || "inactive";
-  const activeStatuses = new Set(["active", "trialing"]);
-  const pricedPlan = getPlanFromStripeSubscription(subscription);
-  const plan = activeStatuses.has(status) ? pricedPlan : "free";
-  const currentPeriodEnd = subscription?.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null;
+  const { status, plan, currentPeriodEnd } = subscriptionAccess(subscription, getPlanFromStripePrice);
   applyUserPlan(userId, plan, status, subscriptionId, currentPeriodEnd);
   db.prepare("INSERT INTO billing_events (id, user_id, plan, provider, status, created_at) VALUES (?, ?, ?, 'stripe', ?, ?)")
     .run(crypto.randomUUID(), userId, plan, "checkout_completed", new Date().toISOString());
@@ -2289,13 +2267,8 @@ async function handleSubscriptionChanged(subscription) {
   const subscriptionId = subscription.id;
   const user = db.prepare("SELECT * FROM users WHERE stripe_subscription_id = ? OR stripe_customer_id = ?")
     .get(subscriptionId, subscription.customer);
-  const plan = getPlanFromStripeSubscription(subscription);
-  if (!user || !PLAN_CATALOG[plan]) return;
-
-  const status = subscription.status || "inactive";
-  const activeStatuses = new Set(["active", "trialing"]);
-  const effectivePlan = activeStatuses.has(status) ? plan : "free";
-  const currentPeriodEnd = subscription.current_period_end ? new Date(subscription.current_period_end * 1000).toISOString() : null;
+  if (!user) return;
+  const { status, plan: effectivePlan, currentPeriodEnd } = subscriptionAccess(subscription, getPlanFromStripePrice);
   applyUserPlan(user.id, effectivePlan, status, subscriptionId, currentPeriodEnd);
   db.prepare("INSERT INTO billing_events (id, user_id, plan, provider, status, created_at) VALUES (?, ?, ?, 'stripe', ?, ?)")
     .run(crypto.randomUUID(), user.id, effectivePlan, `subscription_${status}`, new Date().toISOString());
@@ -2573,12 +2546,7 @@ function validatePublishedContent() {
 }
 
 function loadRevisionTopicsFromAssets() {
-  const topicsPath = path.join(__dirname, "revision-topics.js");
-  if (!fs.existsSync(topicsPath)) return [];
-
-  const sandbox = { window: {} };
-  vm.runInNewContext(fs.readFileSync(topicsPath, "utf8"), sandbox, { filename: "revision-topics.js" });
-  return Array.isArray(sandbox.window.REVISION_TOPICS) ? sandbox.window.REVISION_TOPICS : [];
+  return loadTopics();
 }
 
 function requireTeacher(req, res, next) {
@@ -2965,8 +2933,13 @@ function getClassStudents(classId) {
 }
 
 function canAccessRevisionDeck(user, deckId) {
+  if (!isReleased(REVISION_TOPICS.find((topic) => topic.id === deckId))) return false;
   if (hasFeature(user, "fullRevisionLibrary")) return true;
   return user?.free_revision_deck_id === deckId;
+}
+
+function isCurrentCard(card) {
+  return REVISION_TOPICS.find((topic) => topic.id === card.deck_id)?.cards.some((item) => item.id === card.card_key) || false;
 }
 
 function listRevisionDecks(user, classId = null) {
@@ -2974,7 +2947,8 @@ function listRevisionDecks(user, classId = null) {
     const attempts = getDeckAttempts(deck.id, user.id, classId);
     const summary = calculateConfidenceSummary(attempts);
     const locked = !canAccessRevisionDeck(user, deck.id);
-    const freeSelectable = !hasFeature(user, "fullRevisionLibrary") && !user.free_revision_deck_id;
+    const contentAvailable = isReleased(REVISION_TOPICS.find((topic) => topic.id === deck.id));
+    const freeSelectable = contentAvailable && !hasFeature(user, "fullRevisionLibrary") && !user.free_revision_deck_id;
     const selectedFreeDeck = user.free_revision_deck_id === deck.id;
     return {
       id: deck.id,
@@ -2987,6 +2961,7 @@ function listRevisionDecks(user, classId = null) {
       cardCount: deck.card_count,
       source: deck.source,
       locked,
+      contentAvailable,
       freeSelectable,
       selectedFreeDeck,
       requiredPlan: locked && !freeSelectable ? "pro" : null,
@@ -3001,7 +2976,7 @@ function getRevisionDeck(deckId, user, classId = null) {
   if (!deck) return null;
   const locked = !canAccessRevisionDeck(user, deck.id);
 
-  const cards = db.prepare("SELECT * FROM flashcards WHERE deck_id = ? ORDER BY position").all(deck.id);
+  const cards = locked ? [] : db.prepare("SELECT * FROM flashcards WHERE deck_id = ? ORDER BY position").all(deck.id).filter(isCurrentCard);
   const attempts = getDeckAttempts(deck.id, user.id, classId);
   const latestByCard = new Map();
   attempts.forEach((attempt) => {
@@ -3029,6 +3004,7 @@ function getRevisionDeck(deckId, user, classId = null) {
       back: card.back,
       position: card.position,
       latestAttempt: latestByCard.get(card.id) || null,
+      distractors: REVISION_TOPICS.find((topic) => topic.id === deck.id)?.cards.find((item) => item.id === card.card_key)?.distractors || [],
     })),
   };
 }
@@ -3084,8 +3060,7 @@ function getLearningActivityType(source) {
 
 function recordLearningEvidenceFromAttempt(userId, attempt, card, rating) {
   const conceptId = `${attempt.deck_id}:${card.card_key}`;
-  const existingSchedule = db.prepare("SELECT * FROM review_schedules WHERE user_id = ? AND concept_id = ?")
-    .get(userId, conceptId);
+  const existingSchedule = getTrustedReviewSchedule(userId, conceptId);
   const previousState = existingSchedule
     ? {
         difficulty: existingSchedule.difficulty,
@@ -3182,6 +3157,7 @@ function recordLearningEvidenceFromAttempt(userId, attempt, card, rating) {
 }
 
 function recordExamLearningEvidence(userId, question, result, context) {
+  if (!result.validated) return { conceptId: question.conceptIds[0], evidenceRecorded: false, reason: "guided_self_assessment" };
   const conceptId = question.conceptIds[0];
   const score = result.maximumMark ? result.proposedMark / result.maximumMark : 0;
   const rating = score >= 0.85 ? "easy" : score >= 0.6 ? "good" : score >= 0.35 ? "hard" : "again";
@@ -3259,8 +3235,7 @@ function recordExamLearningEvidence(userId, question, result, context) {
 }
 
 function recordLabLearningEvidence(userId, labItem, assessment, context) {
-  const existingSchedule = db.prepare("SELECT * FROM review_schedules WHERE user_id = ? AND concept_id = ?")
-    .get(userId, labItem.conceptId);
+  const existingSchedule = getTrustedReviewSchedule(userId, labItem.conceptId);
   const previousState = existingSchedule ? {
     difficulty: existingSchedule.difficulty,
     stabilityDays: existingSchedule.stability_days,
@@ -3397,9 +3372,16 @@ function getConceptEvidence(userId, conceptId) {
     SELECT activity_type AS activityType, score, difficulty, confidence,
       created_at AS occurredAt, misconception_id AS misconceptionId
     FROM learning_evidence
-    WHERE user_id = ? AND concept_id = ?
+    WHERE user_id = ? AND concept_id = ? AND activity_type != 'exam_response'
     ORDER BY datetime(created_at)
   `).all(userId, conceptId);
+}
+
+function getTrustedReviewSchedule(userId, conceptId, existing = null) {
+  const schedule = existing || db.prepare("SELECT * FROM review_schedules WHERE user_id = ? AND concept_id = ?").get(userId, conceptId);
+  if (!schedule) return null;
+  const evidence = db.prepare("SELECT activity_type, score, created_at FROM learning_evidence WHERE user_id = ? AND concept_id = ? ORDER BY created_at").all(userId, conceptId);
+  return trustedSchedule(schedule, evidence);
 }
 
 function getLearningDashboard(user, durationMinutes = 15) {
@@ -3410,20 +3392,21 @@ function getLearningDashboard(user, durationMinutes = 15) {
     FROM review_schedules
     WHERE review_schedules.user_id = ?
     ORDER BY datetime(review_schedules.next_review_at)
-  `).all(user.id).filter((row) => allowedDeckIds.has(row.deck_id));
+  `).all(user.id).filter((row) => allowedDeckIds.has(row.deck_id))
+    .map((row) => getTrustedReviewSchedule(user.id, row.concept_id, row)).filter(Boolean);
 
   const scheduledByConcept = new Map(schedules.map((row) => [row.concept_id, row]));
   const cards = accessibleDecks.flatMap((deck) => db.prepare(`
     SELECT flashcards.*, flashcard_decks.code, flashcard_decks.title
     FROM flashcards JOIN flashcard_decks ON flashcard_decks.id = flashcards.deck_id
     WHERE flashcards.deck_id = ? ORDER BY flashcards.position
-  `).all(deck.id));
+  `).all(deck.id).filter(isCurrentCard));
   const evidenceByConcept = new Map();
   db.prepare(`
     SELECT concept_id, activity_type AS activityType, score, difficulty, confidence,
       created_at AS occurredAt, misconception_id AS misconceptionId
     FROM learning_evidence
-    WHERE user_id = ?
+    WHERE user_id = ? AND activity_type != 'exam_response'
     ORDER BY datetime(created_at)
   `).all(user.id).forEach((entry) => {
     const entries = evidenceByConcept.get(entry.concept_id) || [];
@@ -4067,14 +4050,8 @@ function hasFeature(user, feature) {
 }
 
 function getPlanFromStripePrice(priceId) {
-  return Object.entries(STRIPE_PRICE_IDS).find(([, value]) => value && value === priceId)?.[0] || "free";
-}
-
-function getPlanFromStripeSubscription(subscription) {
-  const plans = (subscription?.items?.data || [])
-    .map((item) => getPlanFromStripePrice(item?.price?.id || ""))
-    .filter((plan) => plan !== "free");
-  return ["institution", "teacher", "pro"].find((plan) => plans.includes(plan)) || "free";
+  const plan = Object.entries(STRIPE_PRICE_IDS).find(([, value]) => value && value === priceId)?.[0] || "free";
+  return plan === "proAnnual" ? "pro" : plan;
 }
 
 async function ensureStripeCustomer(user) {
@@ -4260,7 +4237,7 @@ function isGoogleConfigured() {
 }
 
 function isStripeConfigured() {
-  return Boolean(stripe && STRIPE_PRICE_IDS.pro && STRIPE_PRICE_IDS.teacher);
+  return Boolean(stripe && STRIPE_PRICE_IDS.pro && STRIPE_WEBHOOK_SECRET);
 }
 
 function googleRedirectUri() {
@@ -4302,33 +4279,13 @@ function createSummary(body) {
 }
 
 function createStudyPack(note) {
-  const lines = getPlainNoteLines(note.body);
-  const title = note.title || createTitle(note.body);
-  const contentLines = getStudyContentLines(note.body, title);
-  const keyPoints = uniqueStrings(contentLines.length ? contentLines : lines.filter((line) => line !== title)).slice(0, 8);
-  const tasks = extractTaskLines(note.body).slice(0, 8);
-  const questions = keyPoints.slice(0, 8).map((point, index) => ({
-    prompt: point.includes(":")
-      ? `What should you remember about ${point.split(":")[0].trim()}?`
-      : `Explain this point in your own words: ${point}`,
-    answer: point.includes(":") ? point.split(":").slice(1).join(":").trim() : point,
-    type: index < 3 ? "recall" : "explain",
-  }));
-  const flashcards = keyPoints.slice(0, 6).map((point) => {
-    const term = point.split(/[-:–.]/)[0].trim().split(/\s+/).slice(0, 5).join(" ");
-    return {
-      front: term || title,
-      back: point,
-    };
-  });
-
+  const pack = revisionGenerator.generateStudyPack(note.body);
   return {
-    title,
-    summary: note.summary || createSummary(note.body),
-    keyPoints,
-    questions,
-    flashcards,
-    tasks,
+    ...pack,
+    title: note.title || createTitle(note.body),
+    keyPoints: pack.keyTerms,
+    questions: pack.quiz,
+    tasks: pack.checklist,
     generatedAt: new Date().toISOString(),
   };
 }

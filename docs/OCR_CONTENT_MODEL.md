@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Neat Notes treats curriculum identity as versioned product data rather than UI copy. `ocr-content.js` builds the current model from the existing reviewed Component 01 decks, preserving their topic and card identifiers.
+Neat Notes treats curriculum identity as versioned product data rather than UI copy. `ocr-content.js` preserves existing Component 01 topic and card identifiers. Prior publication is not evidence of recorded academic review.
 
 The hierarchy is:
 
@@ -12,15 +12,15 @@ The current specification identifier is `ocr-h446-2020`. Evidence refers to conc
 
 ## Published Scope
 
-- Component 01 Computer Systems: published from the existing Neat Notes topic/card library.
-- Component 02 Algorithms and Programming: qualification structure only. It is not exposed as authored revision content yet.
+- Component 01 Computer Systems: 16 existing topics, 316 cards, 16 original written questions and eight fixed applied tasks. Status is `published_unreviewed`; objective-level editorial mapping is pending.
+- Component 02 Algorithms and Programming: eight draft topics, 115 original cards, 16 original written questions and eight bounded applied checks. Local previews work; production delivery is blocked pending version-specific human academic approval.
 - Component 03/04 Programming Project: integrity guidance only. Neat Notes must not generate candidate-specific assessed NEA work.
 
 The product may say that content is aligned to the OCR H446 specification structure. It must not say that it is OCR approved or endorsed.
 
 ## Content Metadata
 
-Concepts currently include stable identity, topic/component/specification mapping, category, explanation, inferred search keywords, supported activity types, difficulty range and review status. Misconceptions, prerequisites and richer authoring metadata can be added without changing concept identity.
+New concepts include stable identity, component/objective mapping, category, explanation, misconceptions, prerequisites, difficulty, command word, activity types, review status and content version. See `H446_COVERAGE.md` for the generated 119-objective matrix, including all 35 Component 2 lettered objectives. A mapped draft card is not proof of comprehensive coverage.
 
 ## Validation
 
@@ -30,8 +30,24 @@ Run:
 npm run validate:content
 ```
 
-The validator fails on duplicate identifiers, orphan concepts, empty explanations and unpublished concepts referenced by the published tree. Server startup also validates the content so a broken content release fails visibly rather than silently corrupting learning evidence.
+The validator checks duplicate identifiers, orphan concepts, explanations, objective mappings, prerequisites, distractor shape and review metadata. Server startup checks content structure. Run `npm run coverage:content` to regenerate the editorial matrix. Structural checks cannot certify academic accuracy.
 
 ## Versioning Rule
 
 Never reuse an existing concept ID for a different learning objective. Minor wording corrections retain the ID. Substantive objective changes create a new specification/content version and a new concept ID, with an explicit migration or equivalence map if historic evidence should contribute.
+
+The official PDF inspected is OCR H446 specification version 3.0, copyright 2026. The internal `ocr-h446-2020` identifier remains unchanged for historic evidence compatibility; it is not a claim about the current PDF edition.
+
+## Academic release and quarantine
+
+`content-review.json` is the release authority. Human approval requires the exact topic ID, content version, reviewer, review date and decision `approved`. No approvals have been invented. Admin review notes alone do not release a version. Bump the content version after material edits so approval cannot accidentally carry forward.
+
+`quarantinedTopicIds` withdraws a topic in all environments. `quarantinedConceptIds` removes cards and dependent written/applied activities. Database records and history remain; public routes and practice submissions use the current repository view. Restart a reviewed build after a file change. Rollback must retain quarantine decisions.
+
+## Teaching-resource provenance
+
+The supplied Component2.zip remains unchanged and unpublished. `scripts/extract-teaching-resources.py` extracted 58 PPTX/DOCX/PDF resources into ignored `.resource-review/` for local editorial analysis. Original drafts are in `component-two.js`, `component-two-practice.js` and `component-two-labs.js`; copyrighted exam sheets were not copied into the app.
+
+Review explicitly checks corrections to resource pitfalls: logarithmic work grows slowly rather than decreasing; merge sort is O(n log n); binary-search bounds move correctly; recursion has stack limits; iteration is not universally memory-safe; return values need not be assigned; and Dijkstra/A* guarantees require their stated conditions. Check every answer, distractor, objective mapping, notation and worked example before release.
+
+Flashcard-derived MCQs are not independent written questions. Mini mocks are short practice selections, not complete OCR papers. NEA remains integrity guidance only.

@@ -1,26 +1,17 @@
-# Marking and Feedback
+# Written practice and feedback
 
-## Current Implementation
+Updated 7 September 2026. Supersedes the keyword-marking description.
 
-Neat Notes does not currently use AI to mark exam answers. The Exam Answer Coach uses a deterministic, published Neat Notes rubric for original questions. The server normalises an answer and matches explicit acceptable points, returning:
+Written answers receive guided rubric review, not an automated semantic mark. `markAnswer` keeps its compatibility name but returns `proposedMark: null`, `validated: false`, a checklist and reasoning guidance. Students compare meaning, then improve their answer. Incorrect sentences containing expected keywords cannot earn marks. No external AI provider receives the answer.
 
-- a **suggested mark**;
-- matched credit;
-- missing rubric points;
-- a reasoning guide;
-- a marking-confidence flag;
-- an action to improve and resubmit the same answer.
+Original and improved submissions remain in `exam_attempts`. Its legacy NOT NULL numeric column stores a compatibility zero; the result JSON and API expose a null mark, never a zero-grade claim. Do not reinterpret that column as a validated result. The interface does not show a total mark for a mini mock.
 
-The interface and API explicitly say this is not OCR examiner marking. Semantically equivalent wording can escape deterministic matching, so longer unmatched responses receive a teacher-review recommendation.
+## Evidence boundary
 
-## Learning Evidence
+New guided responses do not create strong learning evidence. Historic `exam_response` records remain stored but are excluded from current mastery calculations. Scheduling projections containing old keyword marks are rebuilt in memory from retained non-exam evidence (`trustedSchedule.js`). Original records are not destructively migrated. Reconstruction is heuristic, not recovery of an examiner-validated mark.
 
-Exam responses carry more evidence weight than recognition tasks in `learning-model.js`. The original and improved attempts are stored separately. A successful improvement can correct a mistake-journal entry; high stated confidence with a weak response creates a gentle confidence-mismatch signal.
+The benchmark tests paraphrases, negated claims, keyword stuffing, partial reasoning, irrelevant material, spelling, units and repeated calls. Passing means these never receive validated marks; it does not establish semantic marking accuracy.
 
-Student answers are stored in Neat Notes for progress and feedback. They must not be sent to third-party analytics.
+## Future reviewed marking
 
-## Future AI Boundary
-
-An AI marker may only be introduced behind a structured pipeline that accepts a question, maximum mark, command word, rubric, acceptable alternatives, misconceptions and candidate answer. Output must be schema-validated and include evidence, awarded points, missing points, confidence and an uncertainty reason.
-
-Low-confidence responses must be labelled for teacher review. Teacher overrides must be stored alongside, rather than replacing, the machine proposal. No future implementation may claim equivalence to OCR examiner marking without independent validation.
+Require an independently reviewed benchmark, rubric/version provenance, calibration, uncertainty handling, false-positive limits, appeals and a separate validated-mark field. Never upgrade a suggested match to mastery because a model sounds confident. Retain the NEA boundaries in `NEA_INTEGRITY.md`. Answers must not be sent to product analytics.

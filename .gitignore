@@ -1,3 +1,5 @@
 node_modules/
 .env
 data/
+.resource-review/
+test-results/

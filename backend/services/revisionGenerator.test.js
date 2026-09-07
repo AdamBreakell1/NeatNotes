@@ -15,8 +15,11 @@ test("generateStudyPack creates revision artefacts from note content", () => {
   const pack = generator.generateStudyPack(sampleNote);
 
   assert.match(pack.summary, /Structure of the Processor/i);
-  assert.ok(pack.flashcards.length >= 5);
-  assert.ok(pack.quiz.length >= 5);
+  assert.ok(pack.flashcards.length >= 2);
+  assert.equal(new Set(pack.flashcards.map((card) => card.front)).size, pack.flashcards.length);
+  assert.ok(pack.flashcards.every((card) => card.reviewRequired));
+  assert.ok(pack.flashcards.every((card) => !/what should you remember about/i.test(card.front)));
+  assert.equal(pack.quiz.length, pack.flashcards.length);
   assert.ok(pack.keyTerms.includes("CPU"));
   assert.ok(pack.checklist.length >= 2);
   assert.ok(pack.examPrompts.length >= 2);
@@ -25,7 +28,7 @@ test("generateStudyPack creates revision artefacts from note content", () => {
 test("assessNoteQuality rewards structure and revision tasks", () => {
   const quality = generator.assessNoteQuality(sampleNote);
 
-  assert.equal(quality.label, "Revision-ready");
+  assert.equal(quality.label, "Well structured");
   assert.ok(quality.score >= 70);
   assert.equal(quality.signals.headings, 1);
   assert.ok(quality.signals.definitions >= 2);
