@@ -70,6 +70,8 @@ Implemented locally, not yet release-approved:
 
 ## Next action
 
+Code and evidence are committed locally as `39fce97` on `codex/student-centric-relaunch`. HTTPS push failed because this environment cannot obtain a GitHub username/credential. GitHub CLI is not installed; an existing trusted SSH connection was not available. No credentials, remote configuration or SSH trust settings were changed. Authenticate using the user's Git client, then run `git push -u origin codex/student-centric-relaunch`. Do not push or merge main as a workaround.
+
 Do not restart the relaunch from scratch. Review the feature-branch commit and these documents. Next authorised work is editorial C1 mapping and human review of the C2 draft bank, followed by the staged provider/device/legal checks. Validate shared-device draft retention, long-session/load limits and signup/verification return-to-task across devices before broad release. These are explicit remaining acceptance items, not claims of completion.
 
 Keep the work on `codex/student-centric-relaunch`; do not merge main or deploy without approval. No production data, Stripe objects, customer communications, DNS or live provider settings were changed. Production relaunch remains **NO-GO pending the listed gates**.
