@@ -4,7 +4,7 @@ Neat Notes is a BreakellSystems OCR A-Level Computer Science revision and notes 
 
 ## Student Relaunch Checkpoint
 
-The student-centric relaunch is on `codex/student-centric-relaunch`. Start with [the checkpoint](docs/STUDENT_RELAUNCH.md), [content coverage](docs/H446_COVERAGE.md) and [release gates](docs/STUDENT_RELEASE_RUNBOOK.md). Component 2 is implemented as review-pending original content: local preview is available, production release requires recorded human academic approval. This branch is not approval to deploy or alter live billing.
+The guarded student-centric relaunch has been promoted to `main`. Start with [the checkpoint](docs/STUDENT_RELAUNCH.md), [content coverage](docs/H446_COVERAGE.md) and [release gates](docs/STUDENT_RELEASE_RUNBOOK.md). Component 2 is implemented as review-pending original content: local preview is available, production release requires recorded human academic approval. Generate local editorial packs with `npm run review:content -- --component h446-02`; see [the content model](docs/OCR_CONTENT_MODEL.md). Engineering deployment is not academic approval or permission to alter live billing.
 
 ## Local Setup
 

@@ -1,7 +1,8 @@
 "use strict";
 
-const SPECIFICATION = Object.freeze({ id: "ocr-h446", version: "3.0", checkedAt: "2026-09-07", url: "https://www.ocr.org.uk/images/170844-specification-accredited-a-level-gce-computer-science-h446.pdf" });
-const C1_RANGES = { "1.1.1": 5, "1.1.2": 3, "1.1.3": 4, "1.2.1": 8, "1.2.2": 6, "1.2.3": 3, "1.2.4": 5, "1.3.1": 4, "1.3.2": 6, "1.3.3": 5, "1.3.4": 4, "1.4.1": 10, "1.4.2": 3, "1.4.3": 5, "1.5.1": 4 };
+const { COMPONENT_ONE_MAPPING, SUPPLEMENTARY_CARDS, componentOneObjectives } = require("./component-one-mapping");
+const defaultReview = require("./content-review.json");
+const SPECIFICATION = Object.freeze({ id: "ocr-h446", version: "3.0", checkedAt: "2026-09-08", url: "https://www.ocr.org.uk/images/170844-specification-accredited-a-level-gce-computer-science-h446.pdf" });
 const C2_OBJECTIVES = {
   "2.1.1": ["Nature of abstraction", "Need for abstraction", "Model versus reality", "Devise an abstract model"],
   "2.1.2": ["Inputs and outputs", "Preconditions", "Caching", "Reusable components"],
@@ -14,24 +15,30 @@ const C2_OBJECTIVES = {
 };
 
 function specificationObjectives() {
-  const rows = Object.entries(C1_RANGES).flatMap(([code, count]) => Array.from({ length: count }, (_, i) => ({ id: `${code}(${String.fromCharCode(97 + i)})`, code, title: `Specification objective ${String.fromCharCode(97 + i)}`, componentId: "h446-01" })));
-  ["Computers in the workforce", "Automated decision making", "Artificial intelligence", "Environmental effects", "Censorship and the Internet", "Monitoring behaviour", "Analysis of personal information", "Piracy and offensive communications", "Layout, colour and character sets"].forEach((title, i) => rows.push({ id: `1.5.2[${i + 1}]`, code: "1.5.2", title, componentId: "h446-01", localReference: true }));
+  const rows = componentOneObjectives();
   Object.entries(C2_OBJECTIVES).forEach(([code, titles]) => titles.forEach((title, i) => rows.push({ id: `${code}(${String.fromCharCode(97 + i)})`, code, title, componentId: "h446-02" })));
   return rows;
 }
 
-function buildCoverage(topics, questions = [], labs = []) {
+function buildCoverage(topics, questions = [], labs = [], review = defaultReview) {
+  const quarantinedTopics = new Set(review.quarantinedTopicIds);
+  const quarantinedConcepts = new Set(review.quarantinedConceptIds);
+  const availableConcepts = new Set(topics.filter((topic) => !quarantinedTopics.has(topic.id)).flatMap((topic) => topic.cards.map((card) => `${topic.id}:${card.id}`)).filter((id) => !quarantinedConcepts.has(id)));
+  const availableQuestions = questions.filter((question) => question.conceptIds.length && question.conceptIds.every((id) => availableConcepts.has(id)));
+  const availableLabs = labs.filter((lab) => availableConcepts.has(lab.conceptId));
   return specificationObjectives().map((objective) => {
     const topic = topics.find((item) => item.code === objective.code);
-    const cards = (topic?.cards || []).filter((card) => card.objectives?.includes(objective.id));
+    const withheld = quarantinedTopics.has(topic?.id);
+    const cards = (topic?.cards || []).filter((card) => availableConcepts.has(`${topic.id}:${card.id}`) && card.objectives?.includes(objective.id));
     const concepts = new Set(cards.map((card) => `${topic.id}:${card.id}`));
     return {
       ...objective, topicId: topic?.id || null,
-      status: cards.length ? (topic.reviewStatus === "academically_reviewed" ? "academically_reviewed" : topic.reviewStatus === "review_pending" ? "draft" : "published_unreviewed") : "mapping_pending",
+      status: withheld ? "quarantined" : cards.length ? (topic.reviewStatus === "academically_reviewed" ? "academically_reviewed" : topic.reviewStatus === "review_pending" ? "draft" : "published_unreviewed") : objective.mappingComplete ? "missing" : "mapping_pending",
       flashcards: cards.length,
-      derivedMcqs: cards.filter((card) => card.distractors?.length === 3).length,
-      writtenQuestions: questions.filter((question) => question.conceptIds.some((id) => concepts.has(id))).length,
-      appliedTasks: labs.filter((lab) => concepts.has(lab.conceptId)).length,
+      derivedMcqs: objective.componentId === "h446-01" ? cards.length : cards.filter((card) => card.distractors?.length === 3).length,
+      authoredChoiceSets: cards.filter((card) => card.distractors?.length === 3).length,
+      writtenQuestions: availableQuestions.filter((question) => question.conceptIds.some((id) => concepts.has(id))).length,
+      appliedTasks: availableLabs.filter((lab) => concepts.has(lab.conceptId)).length,
       contentVersion: topic?.contentVersion || "legacy-c1",
       conceptIds: [...concepts],
     };
@@ -43,11 +50,21 @@ function validateCoverage(topics, questions, labs, review) {
   const objectives = new Set(specificationObjectives().map((item) => item.id));
   const concepts = new Set(topics.flatMap((topic) => topic.cards.map((card) => `${topic.id}:${card.id}`)));
   for (const topic of topics) {
+    if (topic.componentId === "h446-01") {
+      const mapping = COMPONENT_ONE_MAPPING[topic.code];
+      const supplementary = SUPPLEMENTARY_CARDS[topic.code];
+      const expectedIds = new Set([...Object.values(mapping || {}).flatMap((row) => row.cards), ...(supplementary?.cards || [])]);
+      const presentIds = new Set(topic.cards.map((card) => card.id));
+      for (const id of expectedIds) if (!presentIds.has(id)) errors.push(`Stale C1 mapping: ${topic.id}:${id}`);
+      for (const card of topic.cards) {
+        if (!expectedIds.has(card.id) || !["mapped", "supplementary"].includes(card.mappingStatus) || (!card.objectives?.length && !(supplementary?.cards.includes(card.id) && card.mappingNote))) errors.push(`Unmapped C1 concept: ${topic.id}:${card.id}`);
+      }
+    }
     for (const card of topic.cards) {
+      for (const id of card.objectives || []) if (!objectives.has(id) || !id.startsWith(`${topic.code}(`) && !id.startsWith(`${topic.code}[`)) errors.push(`Invalid objective: ${id}`);
+      for (const id of card.prerequisites || []) if (!concepts.has(id)) errors.push(`Missing prerequisite: ${id}`);
       if (topic.componentId !== "h446-02") continue;
       if (!card.objectives?.length) errors.push(`Missing objective: ${topic.id}:${card.id}`);
-      for (const id of card.objectives || []) if (!objectives.has(id) || !id.startsWith(topic.code)) errors.push(`Invalid objective: ${id}`);
-      for (const id of card.prerequisites || []) if (!concepts.has(id)) errors.push(`Missing prerequisite: ${id}`);
       if (!card.contentVersion || !card.commandWord || ![1, 2, 3].includes(card.difficulty) || !Array.isArray(card.commonMisconceptions)) errors.push(`Incomplete metadata: ${topic.id}:${card.id}`);
       if (card.distractors.length && (card.distractors.length !== 3 || new Set([card.back, ...card.distractors]).size !== 4)) errors.push(`Invalid choices: ${topic.id}:${card.id}`);
     }

@@ -12,7 +12,7 @@ The current specification identifier is `ocr-h446-2020`. Evidence refers to conc
 
 ## Published Scope
 
-- Component 01 Computer Systems: 16 existing topics, 316 cards, 16 original written questions and eight fixed applied tasks. Status is `published_unreviewed`; objective-level editorial mapping is pending.
+- Component 01 Computer Systems: 16 existing topics, 316 cards, 16 original written questions and eight fixed applied tasks. Status remains `published_unreviewed`. Editorial mapping accounts for all 316 cards: 306 directly mapped and 10 supplementary. Of 84 specification objective rows, 76 have mapped cards and eight have no directly mapped card. This is not a completeness or mastery score.
 - Component 02 Algorithms and Programming: eight draft topics, 115 original cards, 16 original written questions and eight bounded applied checks. Local previews work; production delivery is blocked pending version-specific human academic approval.
 - Component 03/04 Programming Project: integrity guidance only. Neat Notes must not generate candidate-specific assessed NEA work.
 
@@ -31,6 +31,22 @@ npm run validate:content
 ```
 
 The validator checks duplicate identifiers, orphan concepts, explanations, objective mappings, prerequisites, distractor shape and review metadata. Server startup checks content structure. Run `npm run coverage:content` to regenerate the editorial matrix. Structural checks cannot certify academic accuracy.
+
+`component-one-mapping.js` holds the explicit C1 objective links and partial-coverage notes. Its validator detects unmapped additions, stale card IDs and cross-topic objective references. Existing card IDs and answers are unchanged. Supplementary material remains available but cannot inflate objective coverage. Quarantined content and dependent activities are excluded from available coverage counts.
+
+## Local review packs
+
+Generate readable editorial packs without changing publication status:
+
+```bash
+npm run review:content -- --component h446-02
+npm run review:content -- --component h446-01
+npm run review:content -- --topic 2.1.1
+```
+
+Files are written under ignored `.resource-review/review-packs/`. Each topic includes objective links and gaps, stable IDs, answers, authored distractors, written rubrics and applied-task solutions. The manifest has blank human-review fields and unchecked criteria. SHA-256 fingerprints identify the source content inspected; they are evidence for review, not release credentials. Regenerate after edits. Completing a pack does not approve or unlock anything; the separate version-specific release process still applies.
+
+C1 Quick Practice currently selects other card answers as incorrect options at runtime. There are no dedicated authored C1 distractor sets. The coverage report distinguishes these derived questions from authored choices; plausible, academically reviewed distractors remain a quality requirement. Reviewing flashcard answers alone cannot certify those generated quizzes.
 
 ## Versioning Rule
 

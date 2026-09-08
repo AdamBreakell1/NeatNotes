@@ -26,7 +26,8 @@ The original brief did not authorise deployment. On 7 September 2026 the user ex
 - [x] 3. Component 2 extraction, original drafts, review pipeline and objective-level matrix implemented.
 - [x] 4. Public Free/Pro contract and legacy compatibility implemented; local billing state tests added.
 - [x] 5. Research, operational runbooks and automated desktop/mobile QA documented.
-- [ ] Human academic approval and C1 objective-level editorial mapping.
+- [x] C1 objective-level editorial mapping and repeatable human-review pack generation (8 September increment).
+- [ ] Human academic approval, missing objective content and dedicated C1 quiz distractor review.
 - [ ] Real provider Sandbox/email, real-device/screen-reader, legal and approved rollout checks.
 
 ## Release gates
@@ -45,7 +46,7 @@ Implemented and locally verified; guarded Render deployment authorised:
 - Guided written rubric review replaces keyword marks. Historic unreliable marks are excluded from current evidence and schedule projections without destroying records.
 - SQL evaluation is constrained to a synthetic in-memory exercise; malformed/adversarial/wrong queries are rejected.
 - Extracted 58 teaching resources without publishing originals. Eight C2 packs: 115 original cards, 16 written prompts and eight applied checks. All remain academic-review pending. Total: 24 topics, 431 cards, 32 written questions, 16 fixed applied tasks.
-- 119-objective coverage matrix, including all 35 C2 lettered objectives. C1 mapping remains explicitly pending; draft coverage is not complete academic coverage.
+- 119-objective coverage matrix, including all 35 C2 lettered objectives. The 8 September increment completes explicit C1 editorial mapping; draft coverage is not complete academic coverage.
 - Today/Revise/Practice/Progress/Notes, component/topic selection, one-card retrieval, bounded quizzes, saved written/timed drafts, editable generated-card drafts and universal account menu.
 - Account-owned server history and scoped local learning caches prevent cross-account/demo contamination. Unowned legacy browser data remains untouched but is not silently imported.
 - Free/Pro sales only; legacy Teacher/Institution contracts/data retained. Annual checkout disabled. Webhook deduplication, concurrent delivery and latest-state reconciliation tested locally.
@@ -84,6 +85,15 @@ Implemented and locally verified; guarded Render deployment authorised:
 
 Deployment is complete; do not repeat GitHub setup or redeploy the baseline. Keep C2 academic approvals empty until a human review actually occurs.
 
-Do not restart the relaunch from scratch. Review the feature-branch commit and these documents. Next authorised work is editorial C1 mapping and human review of the C2 draft bank, followed by the staged provider/device/legal checks. Validate shared-device draft retention, long-session/load limits and signup/verification return-to-task across devices before broad release. These are explicit remaining acceptance items, not claims of completion.
+Do not restart the relaunch from scratch or repeat C1 mapping. Next content work is dedicated, plausible C1 distractors and original draft material addressing the recorded gaps, followed by human academic review of both banks. Use the generated review packs; keep C2 approvals empty until real review occurs. Validate shared-device draft retention, long-session/load limits and signup/verification return-to-task across devices, then the staged provider/device/legal checks before broad release. These are explicit remaining acceptance items, not claims of completion.
 
 The user has approved deployment to the existing Render service. No Stripe objects, customer communications, DNS or content-review approvals have been changed. An unrestricted commercial relaunch remains **NO-GO pending the listed gates**, even after the guarded engineering release is deployed.
+
+## 8 September implementation increment
+
+- Work branch: `codex/curriculum-review-tools`, starting from `015f243` on main. Scope: content metadata, editorial reporting and review tooling; no visual redesign, new paywall rules or database migration.
+- All 316 C1 cards retain their IDs and content. Explicit links cover 76/84 objective rows; 10 supplementary cards do not count as direct objective evidence. Eight gaps remain: RAM/ROM, utilities, writing/following algorithms, positive binary representation, positive hexadecimal representation, actual base conversions, floating-point arithmetic and contextual Boolean modelling. Additional partial-depth gaps are recorded per objective.
+- Review packs generated for all 24 topics under ignored `.resource-review/review-packs/`, including answers, authored choices, rubrics, applied tasks, fingerprints and blank review records. No fabricated approvals and no C2 unlocking.
+- Confirmed legacy C1 MCQ distractors are chosen from other card answers at runtime. This increment documents that quality gap; it does not claim to fix it. C2 choices are authored but still require academic review.
+- Verification: Node 24 unit/API suite 49/49, JavaScript syntax checks 42 files, content validation 24 topics/431 concepts and generated coverage 119 rows. All 32 browser assertion groups passed, including responsive widths 320/390/768/1280, account/paywall state, practice resume and adaptive session completion. No browser JavaScript errors.
+- Publication state for this increment must be recorded after push/deployment verification; the earlier deployment record is not proof that these new changes are live.

@@ -13,7 +13,8 @@
     "validate:content": "node scripts/validate-content.js",
     "test": "node --test backend/*.test.js backend/**/*.test.js",
     "test:browser": "node scripts/browser-smoke.cjs",
-    "coverage:content": "node scripts/report-coverage.js"
+    "coverage:content": "node scripts/report-coverage.js",
+    "review:content": "node scripts/review-content.js"
   },
   "keywords": [],
   "author": "",
