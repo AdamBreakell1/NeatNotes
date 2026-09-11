@@ -1,6 +1,6 @@
 "use strict";
 
-const BRAND = Object.freeze({ name: "Neat Notes", owner: "BreakellSystems", supportEmail: "neatnotescontact@gmail.com", positioning: "Know what to revise next. Practise, repair and return." });
+const BRAND = Object.freeze({ name: "RecallStride", owner: "BreakellSystems", supportEmail: "neatnotescontact@gmail.com", positioning: "Know what to revise next. Practise, repair and return." });
 
 const PLAN_CATALOG = {
   free: {

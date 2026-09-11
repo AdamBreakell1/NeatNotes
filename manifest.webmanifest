@@ -1,7 +1,7 @@
 {
-  "name": "Neat Notes - OCR Computer Science Revision",
-  "short_name": "Neat Notes",
-  "description": "Teacher-built OCR A-Level Computer Science revision, notes and progress tracking.",
+  "name": "RecallStride - OCR Computer Science Revision",
+  "short_name": "RecallStride",
+  "description": "Personal OCR A-Level Computer Science revision, worked practice and progress tracking.",
   "id": "/",
   "start_url": "/",
   "scope": "/",

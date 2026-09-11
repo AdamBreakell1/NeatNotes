@@ -2,5 +2,7 @@
   "version": "2026-09-07",
   "quarantinedConceptIds": [],
   "quarantinedTopicIds": [],
-  "academicApprovals": []
+  "academicApprovals": [],
+  "quizApprovals": [],
+  "repairApprovals": []
 }

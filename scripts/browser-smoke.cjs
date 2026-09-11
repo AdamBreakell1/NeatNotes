@@ -28,7 +28,14 @@ async function screenshot(page, name) {
   await page.screenshot({ path: path.join(output, `${name}.png`), fullPage: true });
 }
 async function checkWidth(page, label) {
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   const widths = await page.evaluate(() => ({ viewport: innerWidth, body: document.documentElement.scrollWidth }));
+  if (widths.body > widths.viewport + 1) {
+    await screenshot(page, "overflow-failure");
+    console.error(await page.evaluate(() => [...document.querySelectorAll("body *")].filter((element) => {
+      const rect = element.getBoundingClientRect(); return rect.width && (rect.right > innerWidth + 1 || rect.left < -1);
+    }).slice(0, 18).map((element) => ({ tag: element.tagName, id: element.id, className: element.className, width: element.getBoundingClientRect().width }))));
+  }
   assert.ok(widths.body <= widths.viewport + 1, `${label}: overflow ${JSON.stringify(widths)}`);
   evidence.push(`${label}: no document overflow`);
 }
@@ -89,10 +96,51 @@ async function dismissLaunch(page) {
     await context.request.patch(`${base}/api/profile`, { data: { completeOnboarding: true } });
     assert.equal(await page.locator("#topbar-login-button:visible").count(), 0);
     assert.match(await page.locator("#topbar-user-label").innerText(), /Browser/);
+    const returnSignup = await context.request.post(`${base}/api/auth/signup`, { data: { name: "Return Student", email: "return@example.test", password: "ReturnPass123", returnTask: { section: "practice", topicId: "cs-1-1-2", practiceMode: "exam" } } });
+    const returnData = await returnSignup.json();
+    const otherBrowser = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
+    const returnPage = await otherBrowser.newPage();
+    returnPage.on("pageerror", (error) => errors.push(error.message));
+    await returnPage.goto(returnData.devVerificationUrl);
+    await dismissLaunch(returnPage);
+    await returnPage.locator("#login-email").fill("return@example.test");
+    await returnPage.locator("#login-password").fill("ReturnPass123");
+    await returnPage.locator("#login-form button[type=submit]").click();
+    await returnPage.locator("#menu-profile-avatar").waitFor({ state: "visible" });
+    await returnPage.locator('#revision-view[data-student-view="practice"]').waitFor({ timeout: 10000 }).catch(async (error) => {
+      console.error(await returnPage.locator("body").innerText());
+      console.error(await otherBrowser.request.get(`${base}/api/auth/continuation`).then((r) => r.json()));
+      throw error;
+    });
+    if (await returnPage.locator("#onboarding-modal").isVisible()) await returnPage.getByRole("button", { name: "Set up later" }).click();
+    assert.equal(await returnPage.locator("#component-topic-select").inputValue(), "cs-1-1-2");
+    assert.equal((await otherBrowser.request.get(`${base}/api/auth/continuation`).then((r) => r.json())).task, null);
+    assert.equal((await otherBrowser.request.get(`${base}/api/profile`).then((r) => r.json())).user.freeRevisionDeckId, null);
+    evidence.push("Verification in another browser restores only the owning account's topic/mode; no automatic free-deck claim");
+    await otherBrowser.close();
     const claim = await context.request.post(`${base}/api/revision/free-deck`, { data: { deckId: "cs-1-1-1" } });
     assert.equal(claim.status(), 200);
     await page.reload();
     await dismissLaunch(page);
+    await navigate(page, "practice");
+    await page.locator("[data-open-repair]").click();
+    await page.locator('[data-repair-id="repair-address-data"]').click();
+    assert.equal(await page.locator("#repair-response").count(), 0);
+    for (let step = 0; step < 3; step++) await page.locator("[data-repair-step]").click();
+    await page.locator("#repair-response").fill("17");
+    await page.locator("#repair-answer-form button").click();
+    assert.match(await page.locator(".repair-result").innerText(), /Expected answer: 64/);
+    await page.locator("[data-repair-next]").click();
+    await page.locator("#repair-response").fill("93");
+    await page.locator("#repair-answer-form button").click();
+    assert.match(await page.locator(".repair-result").innerText(), /Correct application/);
+    assert.match(await page.locator(".repair-result").innerText(), /not an exam mark/);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await checkWidth(page, "Worked example on mobile");
+    await screenshot(page, "repair-mobile");
+    await page.locator("[data-close-repair]").first().click();
+    await page.setViewportSize({ width: 1280, height: 900 });
+    evidence.push("Worked repair: progressive steps, wrong-answer correction, different retry and truthful feedback");
     await navigate(page, "revise");
     await page.locator('[data-component="h446-02"]').first().click();
     assert.equal(await page.locator("#component-topic-select option").count(), 8);

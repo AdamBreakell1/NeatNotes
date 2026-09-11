@@ -40,6 +40,23 @@ button, input, textarea, select, summary { scroll-margin-block: 110px; }
 .neat-questions-actions label { display: grid; gap: 4px; font-size: 12px; }
 .neat-quiz-panel, .exam-practice-panel { max-width: 900px; margin-inline: auto; }
 .neat-quiz-option:disabled { opacity: 1; color: var(--text); cursor: default; }
+.repair-player { padding: 28px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; min-width: 0; }
+.repair-player header { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 18px; border-bottom: 1px solid var(--border); padding-bottom: 18px; margin-bottom: 24px; }
+.repair-player h4 { font-size: 22px; line-height: 1.35; margin: 0; }
+.repair-player h5 { font-size: 19px; line-height: 1.4; margin: 12px 0; }
+.repair-player p, .repair-player label { line-height: 1.7; max-width: 65ch; overflow-wrap: anywhere; }
+.repair-player button { min-height: 44px; padding: 10px 16px; white-space: normal; }
+.repair-player .repair-step-count, .repair-notice { color: var(--text-secondary); font-size: 13px; }
+.repair-step-copy { min-height: 90px; animation: retrieval-enter 180ms ease-out; }
+.repair-picker { display: grid; gap: 10px; }
+.repair-picker button { text-align: left; color: var(--text); background: var(--surface-subtle); border-color: var(--border); }
+.repair-picker span { display: block; margin-top: 5px; font-size: 12px; color: var(--text-secondary); font-weight: 400; }
+#repair-answer-form { display: grid; gap: 16px; }
+#repair-answer-form label { font-size: 18px; font-weight: 600; }
+#repair-answer-form input { width: 100%; max-width: 320px; min-height: 44px; }
+#repair-answer-form button { justify-self: start; }
+@media (max-width: 520px) { .repair-player { padding: 18px; } .repair-player h4 { font-size: 20px; } }
+@media (prefers-reduced-motion: reduce) { .repair-step-copy { animation: none; } }
 .guided-answer-review { padding: 28px; border: 1px solid var(--border); background: var(--surface); border-radius: 6px; }
 .guided-answer-review h3 { font-size: 23px; }
 .guided-review-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px; margin-block: 24px; }

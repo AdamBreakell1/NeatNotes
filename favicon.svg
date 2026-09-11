@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Neat Notes">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="RecallStride">
   <rect x="4" y="4" width="56" height="56" fill="#0f766e"/>
   <rect x="4" y="4" width="56" height="56" fill="none" stroke="#0f766e" stroke-width="2"/>
   <path d="M8 60 48 4h12L20 60H8Z" fill="#ffffff" opacity=".13"/>
@@ -10,6 +10,6 @@
     font-family="Inter, Arial, Helvetica, sans-serif"
     font-size="21"
     font-weight="900"
-    letter-spacing="2.4"
-    text-anchor="middle">NN</text>
+    letter-spacing="0"
+    text-anchor="middle">RS</text>
 </svg>

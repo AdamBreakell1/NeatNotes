@@ -1,6 +1,19 @@
 # Student relaunch checkpoint
 
-## Current checkpoint: 11 September 2026
+## Current checkpoint: learning increment, 11 September 2026
+
+Branch: `codex/student-only-product`, continuing from `711f495`. Local implementation only: no push, Render deployment, domain purchase or live provider changes. Read `STUDENT_LEARNING_INCREMENT.md` for the current implementation and release caveats before resuming. The preceding student-only retirement is complete locally; do not repeat it.
+
+- Fixed authenticated workspace selection and added account-bound, 24-hour return-to-task after signup, verification and login, including verification in another browser. Guest data is not imported and a free deck is not chosen automatically.
+- Replaced C1 runtime distractor selection with 48 authored checks across 16 topics. Added nine progressive worked-example drafts with 18 transfer checks, addressing the eight recorded C1 gaps plus CPU address/data confusion. Guided success does not manufacture mastery evidence.
+- New quizzes and repairs require independent, version-specific human approval before production release. **Production C1 Quick Practice is withheld pending review.** Existing released flashcards, written practice and labs remain available. C2 remains draft-gated; the 431-concept coverage matrix is unchanged. Do not call this full OCR coverage or an unrestricted production relaunch.
+- Implemented RecallStride locally, with matching RS marks. Registrar availability was observed, not purchased; UKIPO screening encountered a security challenge. Legal/confusion clearance remains unresolved. Operational identifiers, support addresses and historic records remain unchanged.
+- Verified: 57 unit/API tests, 47 JavaScript syntax checks, content validation for 24 topics/431 concepts and 36 disposable Brave browser check groups. Browser error list is empty; responsive checks cover 320/390/768/1280 widths. Review packs regenerated for both components without any approvals. Mobile repair and desktop Today screenshots reviewed; `git diff --check` clean.
+- Next: human academic review and corrections, deeper objective coverage, manual naming clearance, approved retained-contract handling, actual provider/device/accessibility checks and explicit deployment permission. The repair player's step/answer does not survive reload yet; existing quiz/written/timed/adaptive resume behaviour remains intact.
+
+Local checkpoint commit subject: `Improve student practice, account continuity and local branding`. Do not commit ignored review packs, browser artefacts, credentials or databases.
+
+## Previous checkpoint: student-only retirement, 11 September 2026
 
 Branch: `codex/student-only-product`, from `2903927`. The latest request explicitly prohibits push/deployment; it supersedes earlier rollout permission for this increment. Work directly in this checkout; do not repeat GitHub setup or the September 8 mapping work.
 

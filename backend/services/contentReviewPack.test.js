@@ -6,10 +6,30 @@ const { buildReviewPack, contentFingerprint } = require("./contentReviewPack");
 const { QUESTION_BANK } = require("../../exam-content");
 const { LABS } = require("../../cs-labs");
 const review = require("../../content-review.json");
+const { REPAIR_LESSONS } = require("../../repair-lessons");
 
 function fixture(extra = {}) {
   return { topics: loadTopics({ ...review, quarantinedConceptIds: [] }), questions: QUESTION_BANK, labs: LABS, review, generatedAt: "2026-09-08T12:00:00Z", ...extra };
 }
+
+test("C1 review packs contain authored choices and all worked-example drafts", () => {
+  const source = fixture({ componentId: "h446-01" });
+  const pack = buildReviewPack(source);
+  for (const topic of source.topics.filter((item) => item.componentId === "h446-01")) {
+    const text = pack.documents.find((item) => item.filename === `${topic.code}.md`).markdown;
+    for (const card of topic.cards.filter((item) => item.quiz)) {
+      assert.ok(text.includes(card.quiz.prompt));
+      for (const option of card.quiz.options) assert.ok(text.includes(option));
+      assert.ok(text.includes(card.quiz.explanation));
+    }
+    for (const item of REPAIR_LESSONS.filter((item) => item.topicId === topic.id)) {
+      assert.ok(text.includes(item.id));
+      item.checks.forEach((check) => assert.ok(text.includes(check.explanation)));
+    }
+  }
+  assert.deepEqual(review.quizApprovals, []);
+  assert.deepEqual(review.repairApprovals, []);
+});
 
 test("review packs contain the complete selected bank without fabricating approval", () => {
   const before = JSON.stringify(review);

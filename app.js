@@ -115,6 +115,8 @@ let miniMockTimer = null;
 let practiceRequestId = 0;
 let csLabState = null;
 let activePasswordResetToken = "";
+let authReturnTask = null;
+let repairState = null;
 
 const REVISION_TOPICS = window.REVISION_TOPICS || [];
 const NEAT_QUESTIONS = window.NEAT_QUESTIONS || [];
@@ -138,6 +140,7 @@ function renderComponentContext() {
 }
 
 function changeComponent(componentId) {
+  repairState = null;
   practiceRequestId += 1;
   activeComponentId = componentId === "h446-02" ? "h446-02" : "h446-01";
   localStorage.setItem("neat-active-component", activeComponentId);
@@ -506,6 +509,7 @@ window.addEventListener("online", () => {
   Object.values(loadLocalObject(`neat-pending-attempts:${currentUser.id}`)).slice(0, 30).forEach(syncRevisionAttempt);
 });
 document.querySelector("#component-topic-select").addEventListener("change", (event) => {
+  repairState = null;
   activeRevisionTopicId = event.target.value;
   activeAdaptiveSession = null;
   revisionReviewMode = null;
@@ -757,6 +761,7 @@ function learningStorageKey(key) {
 }
 
 function selectAccountLearningState() {
+  repairState = null;
   cardAttempts = loadLocalArray(CARD_ATTEMPTS_KEY).filter((attempt) => !String(attempt.source).startsWith("demo"));
   activityEvents = loadLocalArray(ACTIVITY_EVENTS_KEY);
   reviewSchedules = loadLocalObject(REVIEW_SCHEDULES_KEY);
@@ -1584,7 +1589,7 @@ function updateContactMessageCounter() {
 function handleContactRouteClick(event) {
   const focusButton = event.target.closest("[data-contact-focus]");
   if (focusButton) {
-    elements.contactStatus.textContent = "Use the form below to send the enquiry directly in Neat Notes.";
+    elements.contactStatus.textContent = "Use the form below to send the enquiry directly in RecallStride.";
     elements.contactStatus.className = "status-message success";
     elements.contactForm.scrollIntoView({ behavior: "smooth", block: "center" });
     elements.contactName.focus();
@@ -1822,7 +1827,7 @@ function renderSettingsAccountPanel() {
   const avatarId = getActiveProfileAvatarId();
   elements.settingsAvatarId.value = avatarId;
   renderProfileAvatar(elements.settingsProfileAvatar);
-  elements.settingsAccountName.textContent = isSignedIn ? currentUser.name || "Neat Notes account" : "Guest workspace";
+  elements.settingsAccountName.textContent = isSignedIn ? currentUser.name || "RecallStride account" : "Guest workspace";
   elements.settingsAccountEmail.textContent = isSignedIn ? currentUser.email : "Not signed in";
   elements.settingsAccountPlan.textContent = isSignedIn
     ? `${planName} · synced workspace`
@@ -2039,9 +2044,9 @@ function getLegalPageContent(page) {
   const pages = {
     privacy: {
       title: "Privacy Policy",
-      html: `<p>Neat Notes uses account details, notes and revision activity to provide the workspace, save progress and support enquiries.</p>
+      html: `<p>RecallStride uses account details, notes and revision activity to provide the workspace, save progress and support enquiries.</p>
         <ul>
-          <li>Contact enquiries are routed to the Neat Notes support inbox.</li>
+          <li>Contact enquiries are routed to the RecallStride support inbox.</li>
           <li>Student workspace data is used to run notes, revision and class features.</li>
           <li>Payment processing is handled securely by Stripe when subscriptions are enabled.</li>
         </ul>
@@ -2049,7 +2054,7 @@ function getLegalPageContent(page) {
     },
     terms: {
       title: "Terms of Service",
-      html: `<p>Neat Notes is a personal OCR A-Level Computer Science revision workspace.</p>
+      html: `<p>RecallStride is a personal OCR A-Level Computer Science revision workspace.</p>
         <ul>
           <li>Users are responsible for the content they add to notes and collaboration spaces.</li>
           <li>Accounts may be limited or suspended if the service is misused.</li>
@@ -2058,12 +2063,12 @@ function getLegalPageContent(page) {
     },
     cookies: {
       title: "Cookie Policy",
-      html: `<p>Neat Notes uses essential cookies and local browser storage to keep users signed in, remember preferences and save local guest progress.</p>
+      html: `<p>RecallStride uses essential cookies and local browser storage to keep users signed in, remember preferences and save local guest progress.</p>
         <p>Analytics and marketing cookies should only be added with clear consent controls.</p>`,
     },
     "data-protection": {
       title: "Data Protection",
-      html: `<p>BreakellSystems is building Neat Notes with UK education workflows in mind.</p>
+      html: `<p>BreakellSystems is building RecallStride with UK education workflows in mind.</p>
         <ul>
           <li>Only collect data needed to run accounts, notes, revision progress, payments and support.</li>
           <li>Review your account data and export personal notes and revision history in Settings.</li>
@@ -2146,8 +2151,8 @@ async function boot() {
     if (publicDemo) openDemoWorkspace({ section: "home" });
     if (publicSignup) openAuthModal("signup");
     if (emailWasVerified) {
-      openAuthModal("login");
-      showAuthMessage("Email verified. You can log in now.", "success");
+      openAuthModal("login", { captureTask: false });
+      showAuthMessage("Email verified. Log in to return to your study workspace.", "success");
     }
     if (passwordResetToken) openPasswordReset(passwordResetToken);
   }
@@ -2256,6 +2261,7 @@ async function login(event) {
       body: {
         email: form.get("login-email") || document.querySelector("#login-email").value,
         password: form.get("login-password") || document.querySelector("#login-password").value,
+        returnTask: authReturnTask,
       },
     });
     applyAuthenticatedSession(response.user, response.plans);
@@ -2291,6 +2297,7 @@ async function signup(event) {
         name: document.querySelector("#signup-name").value,
         email: document.querySelector("#signup-email").value,
         password: document.querySelector("#signup-password").value,
+        returnTask: authReturnTask,
       },
     });
 
@@ -2298,6 +2305,7 @@ async function signup(event) {
       ? ` Local dev link: <a href="${response.devVerificationUrl}">verify now</a>.`
       : "";
     setAuthMode("login");
+    document.querySelector("#login-email").value = document.querySelector("#signup-email").value;
     showAuthMessage(`${response.message}${devLink}`, "success", true);
   } catch (error) {
     showAuthMessage(error.message, "error");
@@ -2423,7 +2431,12 @@ async function completePasswordReset(event) {
   }
 }
 
-function openAuthModal(mode = "login") {
+function openAuthModal(mode = "login", { captureTask = true } = {}) {
+  authReturnTask = captureTask && elements.landingView.hidden ? {
+    section: activeAppSection,
+    topicId: activeRevisionTopicId,
+    practiceMode: activePracticeMode,
+  } : null;
   setAuthMode(mode);
   elements.authView.hidden = false;
   document.body.classList.add("modal-open");
@@ -2591,10 +2604,28 @@ async function loadApp() {
   renderPlan();
 
   await loadWorkspaces();
-  await selectWorkspace(activeWorkspaceId || workspaces[0]?.id);
+  const accountWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) || workspaces[0];
+  await selectWorkspace(accountWorkspace?.id);
   renderAccountChrome();
   hideLaunchOverlay();
+  await restoreAuthDestination();
   maybeOpenOnboarding();
+}
+
+async function restoreAuthDestination() {
+  const userId = currentUser?.id;
+  const { task } = await api("/api/auth/continuation");
+  if (!task || currentUser?.id !== userId) return;
+  const topic = REVISION_TOPICS.find((item) => item.id === task.topicId);
+  if (topic) {
+    activeComponentId = topic.componentId || "h446-01";
+    activeRevisionTopicId = topic.id;
+    activePracticeMode = task.practiceMode;
+    // Only navigation crosses verification. Guest answers and notes are never imported.
+    setAppSection(task.section);
+  }
+  await api("/api/auth/continuation", { method: "DELETE" });
+  authReturnTask = null;
 }
 
 
@@ -2738,7 +2769,7 @@ async function completeOnboarding(event) {
     if (response.user) currentUser = response.user;
     elements.onboardingModal.hidden = true;
     document.body.classList.remove("modal-open");
-    setAppSection("home");
+    setAppSection(action === "diagnostic" ? "home" : activeAppSection);
     renderRevisionPage();
     focusBeforeOnboarding?.focus?.();
     trackEvent("onboarding_completed", { action, learnerType: data.get("learner-type"), revisionGoal: data.get("revision-goal") });
@@ -3588,7 +3619,7 @@ function renderAccountChrome() {
   document.querySelector('[data-global-action="logout"]').hidden = !isSignedIn;
   elements.guestAccountActions.hidden = isSignedIn;
   elements.signedInAccountActions.hidden = !isSignedIn;
-  elements.topbarBrandButton.setAttribute("aria-label", isSignedIn ? "Return to Today" : "Exit demo and return to the Neat Notes homepage");
+  elements.topbarBrandButton.setAttribute("aria-label", isSignedIn ? "Return to Today" : "Exit demo and return to the RecallStride homepage");
   elements.topbarBrandButton.title = isSignedIn ? "Return to Today" : "Exit demo";
   renderProfileAvatar(elements.topbarProfileAvatar);
 
@@ -4218,6 +4249,7 @@ function renderNeatQuestions() {
   elements.neatQuestionsCount.textContent = `${catalog.length} topic packs · ${totalQuestions} questions`;
   elements.neatQuestionsCurrentLink.textContent = "Start quick practice";
   elements.neatQuestionsCurrentLink.hidden = !activeTopic;
+  elements.neatQuestionsCurrentLink.disabled = !activeTopic?.quizCount;
 
   elements.neatQuestionsGrid.innerHTML = catalog.map((quiz) => {
     const isActive = quiz.topic.id === activeTopic?.id;
@@ -4234,10 +4266,11 @@ function renderNeatQuestions() {
         ? Math.round((completedCards / topicCardCount) * 100)
         : 0;
     const progressLabel = getNeatQuizProgressLabel(quiz.topic.id);
-    const sourceLabel = "flashcard-based checks";
+    const sourceLabel = "authored checks";
     const activeLabel = isActive ? `<span class="question-current">Current topic</span>` : "";
     const runningLabel = isRunning ? `<span class="question-variant">In progress</span>` : "";
     const inReview = quiz.topic.contentAvailable === false;
+    const quizInReview = inReview || quiz.questionCount === 0;
     const lockLabel = inReview ? `<span class="question-variant">In review</span>` : locked
       ? `<span class="question-variant pro">Pro library</span>`
       : access.canClaim
@@ -4275,7 +4308,7 @@ function renderNeatQuestions() {
       </div>
       <div class="topic-card-actions">
         <button type="button" data-topic-id="${escapeHtml(quiz.topic.id)}" ${inReview ? "disabled" : ""}>${inReview ? "Awaiting review" : openLabel}</button>
-        <button type="button" data-start-quiz="${escapeHtml(quiz.topic.id)}" ${inReview ? "disabled" : ""}>${inReview ? "Not released" : actionLabel}</button>
+        <button type="button" data-start-quiz="${escapeHtml(quiz.topic.id)}" ${quizInReview ? "disabled" : ""}>${quizInReview ? "Quiz in review" : actionLabel}</button>
       </div>
     </article>`;
   }).join("");
@@ -4306,6 +4339,7 @@ function getNeatQuizProgressLabel(topicId) {
 }
 
 function renderNeatQuizPanel() {
+  if (repairState) { elements.quickPracticeSection.classList.add("quiz-active"); renderRepairLesson(); return; }
   elements.quickPracticeSection.classList.toggle("quiz-active", Boolean(neatQuizState.questions.length && !neatQuizState.completed));
   const topic = getQuizTopicById(neatQuizState.quizId);
 
@@ -4313,6 +4347,7 @@ function renderNeatQuizPanel() {
     const activeTopic = getActiveRevisionTopic();
     const activeQuestionCount = activeTopic?.quizCount ?? getRevisionTopicCardCount(activeTopic);
     const access = getRevisionTopicAccessState(activeTopic?.id);
+    const quizInReview = !activeQuestionCount;
     const resumable = activeTopic && restoreQuizSession(activeTopic, buildNativeQuizQuestions(activeTopic));
     const actionLabel = access.canClaim ? "Choose free deck" : access.locked ? "Unlock Pro" : resumable ? "Continue quick practice" : "Start quick practice";
     const description = access.canAccess
@@ -4324,9 +4359,10 @@ function renderNeatQuizPanel() {
       <div>
         <p class="eyebrow">Quick Practice</p>
         <h4>Practise ${escapeHtml(activeTopic?.code || "this topic")} one question at a time.</h4>
-        <p>${escapeHtml(description)}</p>
+        <p>${escapeHtml(quizInReview ? "These authored questions are awaiting academic review. You can continue using the released flashcards; upgrading does not bypass review." : description)}</p>
       </div>
-      <button type="button" data-start-current-quiz>${escapeHtml(actionLabel)}</button>
+      <button type="button" data-start-current-quiz ${quizInReview ? "disabled" : ""}>${escapeHtml(quizInReview ? "Questions in review" : actionLabel)}</button>
+      ${currentUser && access.canAccess ? `<button type="button" data-open-repair>Worked examples</button>` : ""}
       <span class="quick-practice-note">${activeQuestionCount} questions in this topic pack${access.locked ? " · Pro" : ""}</span>
     </div>`;
     return;
@@ -4349,7 +4385,7 @@ function renderNeatQuizPanel() {
   elements.neatQuizPanel.innerHTML = `<article class="neat-quiz-player">
     <div class="neat-quiz-player-head">
       <div>
-        <p class="eyebrow">Neat Questions · ${escapeHtml(topic.code)}</p>
+        <p class="eyebrow">Practice · ${escapeHtml(topic.code)}</p>
         <h4>${escapeHtml(topic.title)}</h4>
       </div>
       <div class="neat-quiz-stats" aria-label="Quiz progress">
@@ -4389,7 +4425,7 @@ function renderNeatQuizOption(question, option, index) {
 
   return `<button class="neat-quiz-option${isSelected ? " selected" : ""}${stateClass}" type="button" data-quiz-option="${index}" ${neatQuizState.answered ? "disabled" : ""} aria-pressed="${String(isSelected)}">
     <span>${marker}</span>
-    <strong>${escapeHtml(formatQuizOptionText(option))}</strong>
+    <strong>${escapeHtml(option)}</strong>
   </button>`;
 }
 
@@ -4398,7 +4434,7 @@ function renderNeatQuizFeedback(question) {
   return `<div class="neat-quiz-feedback ${wasCorrect ? "correct" : "incorrect"}">
     <strong>${wasCorrect ? "Correct." : "Not quite."}</strong>
     <p>${escapeHtml(question.explanation)}</p>
-    ${wasCorrect ? "" : `<small>Read the explanation, then try recalling it again in Revise.</small>`}
+    ${wasCorrect ? "" : `<small>Use the explanation to repair the idea before returning to retrieval.</small>${currentUser ? `<button type="button" data-open-repair>Work through an example</button>` : ""}`}
   </div>`;
 }
 
@@ -4452,6 +4488,29 @@ async function handleNeatQuestionsClick(event) {
 }
 
 async function handleNeatQuizPanelClick(event) {
+  if (event.target.closest("[data-open-repair]")) { await openRepairLessons(); return; }
+  if (event.target.closest("[data-close-repair]")) { repairState = null; renderNeatQuizPanel(); return; }
+  const lessonButton = event.target.closest("[data-repair-id]");
+  if (lessonButton && repairState) {
+    repairState.current = repairState.lessons.find((item) => item.id === lessonButton.dataset.repairId);
+    repairState.step = 0;
+    repairState.result = null;
+    renderRepairLesson();
+    return;
+  }
+  if (event.target.closest("[data-repair-step]") && repairState?.current) {
+    repairState.step = Math.min(repairState.step + 1, repairState.current.steps.length);
+    renderRepairLesson();
+    elements.neatQuizPanel.querySelector("[data-repair-step], #repair-response")?.focus();
+    return;
+  }
+  if (event.target.closest("[data-repair-next]") && repairState?.result?.next) {
+    repairState.current = repairState.result.next;
+    repairState.result = null;
+    renderRepairLesson();
+    elements.neatQuizPanel.querySelector("#repair-response")?.focus();
+    return;
+  }
   if (event.target.closest("[data-quiz-today]")) { setAppSection("home"); return; }
   if (event.target.closest("[data-quiz-repair]")) {
     const cardIds = [...new Set(neatQuizState.missedIds)].map((id) => `${neatQuizState.quizId}:${id}`);
@@ -4486,6 +4545,57 @@ async function handleNeatQuizPanelClick(event) {
 
 async function startActiveTopicQuiz() {
   await startNeatQuiz(getActiveRevisionTopic()?.id);
+}
+
+async function openRepairLessons() {
+  const userId = currentUser?.id;
+  const topicId = activeRevisionTopicId;
+  const requestState = { loading: true, lessons: [], current: null, step: 0, result: null };
+  repairState = requestState;
+  renderNeatQuizPanel();
+  try {
+    const response = await api(`/api/revision/repairs?topicId=${encodeURIComponent(topicId)}`);
+    if (repairState !== requestState || currentUser?.id !== userId || activeRevisionTopicId !== topicId) return;
+    repairState = { ...repairState, ...response, loading: false };
+  } catch (error) {
+    if (repairState !== requestState || currentUser?.id !== userId || activeRevisionTopicId !== topicId) return;
+    repairState = { ...repairState, loading: false, error: error.message };
+  }
+  renderRepairLesson();
+}
+
+function renderRepairLesson() {
+  const state = repairState;
+  if (!state) return;
+  const item = state.current;
+  const step = item?.steps[state.step];
+  elements.neatQuizPanel.innerHTML = `<article class="repair-player">
+    <header><div><p class="eyebrow">Understand, then apply</p><h4>${escapeHtml(item?.title || "Worked examples")}</h4></div><button type="button" data-close-repair>Back to practice</button></header>
+    ${state.loading ? `<p role="status">Loading examples...</p>` : state.error ? `<p role="alert">${escapeHtml(state.error)}</p>` : !item ? `<div class="repair-picker">${state.lessons.length ? state.lessons.map((lesson) => `<button type="button" data-repair-id="${escapeHtml(lesson.id)}">${escapeHtml(lesson.title)}<span>3 steps, then a related question</span></button>`).join("") : `<p>${state.pendingCount ? "Worked examples for this topic are awaiting academic review. A subscription does not bypass review." : "No worked example is ready for this topic yet. Review the correction, then revisit the missed concept in Revise."}</p>`}</div>` : step ? `<p class="repair-step-count">Step ${state.step + 1} of ${item.steps.length}</p><h5>${escapeHtml(step.title)}</h5><p class="repair-step-copy">${escapeHtml(step.body)}</p><button type="button" data-repair-step>${state.step + 1 === item.steps.length ? "Try a related question" : "Next step"}</button>` : state.result ? `<div class="repair-result" role="status"><h5>${state.result.assessment.correct ? "Correct application" : "Check the reasoning"}</h5><p>${escapeHtml(state.result.assessment.explanation)}</p>${!state.result.assessment.correct ? `<p>Expected answer: <strong>${escapeHtml(state.result.assessment.answer)}</strong></p>` : ""}<p class="repair-notice">${escapeHtml(state.result.assessment.notice)} Revisit this idea in a later session without the example.</p>${state.result.next ? `<button type="button" data-repair-next>Try a different question</button>` : `<button type="button" data-close-repair>Return to practice</button>`}</div>` : `<form id="repair-answer-form"><label for="repair-response">${escapeHtml(item.prompt)}</label><input id="repair-response" name="response" autocomplete="off" maxlength="80" required><button type="submit">Check answer</button><p data-repair-status role="status"></p></form>`}
+  </article>`;
+  elements.neatQuizPanel.querySelector("#repair-answer-form")?.addEventListener("submit", submitRepairAnswer);
+}
+
+async function submitRepairAnswer(event) {
+  event.preventDefault();
+  const state = repairState;
+  const item = state?.current;
+  if (!item || state.submitting) return;
+  state.submitting = true;
+  const button = event.target.querySelector("button");
+  button.disabled = true;
+  button.textContent = "Checking...";
+  try {
+    const response = await api(`/api/revision/repairs/${encodeURIComponent(item.id)}/check`, { method: "POST", body: { variant: item.variant, response: new FormData(event.target).get("response") } });
+    if (repairState !== state) return;
+    state.result = response;
+    renderRepairLesson();
+  } catch (error) {
+    if (repairState !== state) return;
+    event.target.querySelector("[data-repair-status]").textContent = error.message;
+    button.disabled = false;
+    button.textContent = "Check answer";
+  } finally { state.submitting = false; }
 }
 
 async function loadExamPracticeQuestion({ next = false } = {}) {
@@ -4669,7 +4779,7 @@ async function loadMiniMock({ restart = false } = {}) {
     elements.examPracticePanel.innerHTML = `<div class="exam-empty-state exam-auth-state"><strong>Practise a short timed set</strong><p>Log in to use original written questions and review your reasoning afterwards. This is not a full OCR paper or an automatically marked assessment.</p><button type="button" data-exam-auth>Create account</button></div>`;
     return;
   }
-  elements.examPracticePanel.innerHTML = `<div class="exam-empty-state"><strong>Building your paper...</strong><p>Selecting a balanced set of original Neat Notes questions.</p></div>`;
+  elements.examPracticePanel.innerHTML = `<div class="exam-empty-state"><strong>Building your paper...</strong><p>Selecting a balanced set of original RecallStride questions.</p></div>`;
   try {
     const response = await api("/api/exam/questions");
     if (requestId !== practiceRequestId || !currentUser) return;
@@ -4859,6 +4969,7 @@ async function submitCsLab(event) {
 }
 
 async function startNeatQuiz(topicId, options = {}) {
+  repairState = null;
   const topic = getQuizTopicById(topicId) || getActiveRevisionTopic();
   if (!topic) return;
   if (!canAccessRevisionTopic(topic.id)) {
@@ -4879,6 +4990,7 @@ async function startNeatQuiz(topicId, options = {}) {
   activeRevisionTopicId = topic.id;
   const length = Number(document.querySelector("#practice-length")?.value) || 10;
   const bank = buildNativeQuizQuestions(topic);
+  if (!bank.length) { renderNeatQuestions(); return; }
   const saved = !options.restart && restoreQuizSession(topic, bank);
   if (saved) { neatQuizState = saved; renderRevisionPage(); return; }
   const offset = ((neatQuizProgress[topic.id]?.attempts || 0) * length) % (bank.length || 1);
@@ -4975,145 +5087,20 @@ function persistNeatQuizBestStreak(topicId, bestStreak) {
 }
 
 function buildNativeQuizQuestions(topic) {
-  const allCards = REVISION_TOPICS.flatMap((revisionTopic) =>
-    getTopicCards(revisionTopic).map((card) => ({
-      ...card,
-      topicId: revisionTopic.id,
-      topicCode: revisionTopic.code,
-      topicTitle: revisionTopic.title,
-    }))
-  );
-
-  return getTopicCards(topic).filter((card) => topic.componentId !== "h446-02" || card.distractors?.length === 3).map((card) => {
-    const distractors = card.distractors?.length === 3 ? card.distractors : getQuizDistractors(card, topic, allCards);
-    const options = seededSort([card.back, ...distractors], `${topic.id}:${card.id}:options`);
+  return getTopicCards(topic).filter((card) => card.quiz?.options?.length >= 2).map((card) => {
+    const quiz = card.quiz;
+    const answer = quiz.options[0];
+    const options = seededSort(quiz.options, `${topic.id}:${card.id}:options`);
     return {
       id: card.id,
       category: card.category,
-      prompt: card.front,
-      answer: card.back,
-      explanation: card.back,
+      prompt: quiz.prompt,
+      answer,
+      explanation: quiz.explanation,
       options,
-      correctIndex: options.findIndex((option) => option === card.back),
+      correctIndex: options.indexOf(answer),
     };
   });
-}
-
-function getQuizDistractors(card, topic, allCards) {
-  const answerSeen = new Set([normaliseQuizAnswer(card.back)]);
-  const optionSeen = new Set([normaliseQuizAnswer(formatQuizOptionText(card.back))]);
-  const ranked = allCards
-    .filter((candidate) => !(candidate.topicId === topic.id && candidate.id === card.id))
-    .filter((candidate) => {
-      const key = normaliseQuizAnswer(candidate.back);
-      if (!key || answerSeen.has(key)) return false;
-      answerSeen.add(key);
-      return true;
-    })
-    .map((candidate) => ({
-      answer: candidate.back,
-      score: scoreQuizDistractor(card, topic, candidate),
-    }))
-    .sort((a, b) => b.score - a.score || hashString(`${topic.id}:${card.id}:${a.answer}`) - hashString(`${topic.id}:${card.id}:${b.answer}`));
-
-  const selected = [];
-  ranked.forEach((candidate) => {
-    const displayKey = normaliseQuizAnswer(formatQuizOptionText(candidate.answer));
-    if (selected.length >= 3 || optionSeen.has(displayKey)) return;
-    optionSeen.add(displayKey);
-    selected.push(candidate.answer);
-  });
-
-  return selected;
-}
-
-function scoreQuizDistractor(card, topic, candidate) {
-  const sameTopic = candidate.topicId === topic.id;
-  const sameCategory = normaliseQuizAnswer(candidate.category) === normaliseQuizAnswer(card.category);
-  const sameQuestionType = getQuizQuestionType(candidate.front) === getQuizQuestionType(card.front);
-  const sameStem = getQuizQuestionStem(candidate.front) === getQuizQuestionStem(card.front);
-  const lengthDifference = Math.abs(normaliseQuizAnswer(candidate.back).length - normaliseQuizAnswer(card.back).length);
-
-  let score = 0;
-  score += sameTopic ? 80 : 10;
-  score += sameCategory ? 68 : 0;
-  score += sameQuestionType ? 36 : 0;
-  score += sameStem ? 18 : 0;
-  score += getQuizKeywordOverlapScore(card, topic, candidate);
-  score += Math.max(0, 24 - Math.floor(lengthDifference / 8));
-
-  if (!sameTopic && !sameCategory) score -= 14;
-  if (lengthDifference > 260) score -= 12;
-
-  return score;
-}
-
-function getQuizQuestionType(prompt) {
-  const text = normaliseQuizAnswer(prompt);
-  if (/\b(advantage|benefit|strength|why is it useful)\b/.test(text)) return "benefit";
-  if (/\b(disadvantage|drawback|limitation|weakness|problem)\b/.test(text)) return "limitation";
-  if (/\b(example|give|name|state)\b/.test(text)) return "example";
-  if (/\b(store|hold|contain)\b/.test(text)) return "storage";
-  if (/\b(role|do|used for|purpose|function)\b/.test(text)) return "role";
-  if (/\b(stage|step|cycle|process|during|happen)\b/.test(text)) return "process";
-  if (/\b(compare|difference|distinguish)\b/.test(text)) return "comparison";
-  if (/\b(factor|affect|improve|performance)\b/.test(text)) return "factor";
-  if (/\b(what is|define|mean|describe|explain)\b/.test(text)) return "definition";
-  return "general";
-}
-
-function getQuizQuestionStem(prompt) {
-  const text = normaliseQuizAnswer(prompt);
-  const match = text.match(/^(what is|what are|what does|what do|why|how|which|give|name|state|describe|explain|compare|define)\b/);
-  return match?.[1] || getQuizQuestionType(text);
-}
-
-function getQuizKeywordOverlapScore(card, topic, candidate) {
-  const targetWords = new Set(getQuizKeywords(`${card.front} ${card.category} ${topic.title}`));
-  const candidateWords = new Set(getQuizKeywords(`${candidate.front} ${candidate.category} ${candidate.topicTitle || ""}`));
-  let overlap = 0;
-  targetWords.forEach((word) => {
-    if (candidateWords.has(word)) overlap += 1;
-  });
-  return Math.min(32, overlap * 8);
-}
-
-function getQuizKeywords(value) {
-  const stopWords = new Set([
-    "about",
-    "after",
-    "answer",
-    "are",
-    "can",
-    "does",
-    "for",
-    "from",
-    "how",
-    "into",
-    "the",
-    "this",
-    "used",
-    "what",
-    "when",
-    "where",
-    "which",
-    "with",
-  ]);
-
-  return normaliseQuizAnswer(value)
-    .split(/[^a-z0-9]+/)
-    .filter((word) => word.length > 2 && !stopWords.has(word));
-}
-
-function formatQuizOptionText(value) {
-  let text = String(value || "").trim();
-  text = text.replace(/^it\s+/i, "");
-  text = text.replace(/^they\s+/i, "");
-  text = text.replace(
-    /^the\s+(?:[A-Z0-9][A-Za-z0-9()/-]*\s+){0,6}(stores|holds|executes|performs|decodes|retrieves|coordinates|manages|contains|uses|allows|provides|controls|represents|converts|translates|checks|carries|temporarily)\b/i,
-    "$1"
-  );
-  return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
 }
 
 function seededSort(items, seed) {
@@ -5128,10 +5115,6 @@ function hashString(value) {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
-}
-
-function normaliseQuizAnswer(value) {
-  return String(value).toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 function getQuizTopicById(topicId) {
@@ -5164,7 +5147,7 @@ function hydrateRevisionTopicFromDeck(deck) {
     category: card.category || "Revision",
     front: card.front || "",
     back: card.back || "",
-    distractors: card.distractors || [],
+    quiz: card.quiz || null,
   }));
 }
 
@@ -5682,7 +5665,7 @@ function renderSummaryContent(note) {
   const lines = getPlainNoteLines(note.body || "");
   if (!lines.length) {
     return renderSummaryEmptyState(
-      "Start writing and Neat Notes will shape this into a study summary.",
+      "Start writing and RecallStride will shape this into a study summary.",
       "Use headings, bullets, definitions, and tasks to unlock cleaner revision outputs."
     );
   }
@@ -6075,7 +6058,7 @@ function renderGeneratedStudyPack(pack, title = "Study pack", provenance = null)
       ${provenance ? `<aside class="generated-provenance" aria-label="Generated resource provenance">
         <span>Generated resource · Review required</span>
         <p>${escapeHtml(provenance.notice || "Generated from your note. Review accuracy before revising from it.")}</p>
-        <small>Source note saved ${escapeHtml(formatDate(provenance.sourceNoteUpdatedAt || provenance.generatedAt))} · ${escapeHtml(provenance.method || "Neat Notes generator")}</small>
+        <small>Source note saved ${escapeHtml(formatDate(provenance.sourceNoteUpdatedAt || provenance.generatedAt))} · ${escapeHtml(provenance.method || "RecallStride generator")}</small>
       </aside>` : ""}
       <article><strong>Summary</strong><p>${escapeHtml(pack.summary)}</p></article>
       <article><strong>Key terms</strong><div class="key-term-cloud">${pack.keyTerms.map((term) => `<span>${escapeHtml(term)}</span>`).join("")}</div></article>

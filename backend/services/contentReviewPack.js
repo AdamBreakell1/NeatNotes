@@ -1,6 +1,7 @@
 "use strict";
 const { createHash } = require("node:crypto");
 const { SPECIFICATION, buildCoverage } = require("../../curriculum-coverage");
+const { REPAIR_LESSONS } = require("../../repair-lessons");
 
 const CHECKLIST = [
   "Check each explanation for factual accuracy, scope and exceptions.",
@@ -11,14 +12,14 @@ const CHECKLIST = [
   "Check provenance and permissions; do not reproduce assessed NEA work.",
 ];
 
-function contentFingerprint(topic, questions, labs) {
+function contentFingerprint(topic, questions, labs, repairs = []) {
   // Stable authoring data only: recording approval must not change the content fingerprint.
   const canonical = (value) => {
     if (Array.isArray(value)) return value.map(canonical);
     if (!value || typeof value !== "object") return value;
-    return Object.fromEntries(Object.keys(value).sort().filter((key) => !["reviewStatus", "reviewedBy", "reviewedAt"].includes(key)).map((key) => [key, canonical(value[key])]));
+    return Object.fromEntries(Object.keys(value).sort().filter((key) => !["reviewStatus", "quizReviewStatus", "reviewedBy", "reviewedAt"].includes(key)).map((key) => [key, canonical(value[key])]));
   };
-  return createHash("sha256").update(JSON.stringify(canonical({ topic, questions, labs }))).digest("hex");
+  return createHash("sha256").update(JSON.stringify(canonical({ topic, questions, labs, repairs }))).digest("hex");
 }
 
 function tableText(value) {
@@ -37,7 +38,8 @@ function buildReviewPack({ topics, questions, labs, review, componentId, topicCo
   const documents = selected.map((topic) => {
     const written = questions.filter((item) => item.topicId === topic.id);
     const applied = labs.filter((item) => item.topicId === topic.id);
-    const fingerprint = contentFingerprint(topic, written, applied);
+    const repairs = REPAIR_LESSONS.filter((item) => item.topicId === topic.id);
+    const fingerprint = contentFingerprint(topic, written, applied, repairs);
     const quarantined = review.quarantinedTopicIds.includes(topic.id);
     const conceptWithheld = (id) => quarantined || review.quarantinedConceptIds.includes(id);
     const filename = `${topic.code}.md`;
@@ -60,10 +62,19 @@ function buildReviewPack({ topics, questions, labs, review, componentId, topicCo
       if (card.mappingNote) lines.push(`Editorial note: ${card.mappingNote}`, "");
       lines.push("**Question**", "", quote(card.front), "", "**Answer**", "", quote(card.back), "");
       if (card.distractors?.length) lines.push("**Incorrect choices to check**", "", ...card.distractors.map((choice) => `- ${tableText(choice)}`), "");
-      else lines.push(topic.componentId === "h446-01" ? "No authored distractors. Legacy Quick Practice chooses other available card answers at runtime; reviewing this answer does not certify those generated choices. Author and review dedicated incorrect options before claiming reviewed MCQ quality." : "No authored multiple-choice distractors; this card is not offered as a C2 MCQ.", "");
+      else if (card.quiz) lines.push(`**Authored quiz draft (${topic.quizContentVersion}; ${topic.quizReviewStatus})**`, "", quote(card.quiz.prompt), "", ...card.quiz.options.map((option, index) => `${index + 1}. ${tableText(option)}${index === 0 ? " [correct]" : ""}`), "", quote(card.quiz.explanation), "");
+      else lines.push("No authored multiple-choice question for this card. It remains a flashcard; no unrelated answer is substituted as a distractor.", "");
       if (card.commonMisconceptions?.length) lines.push("**Misconceptions**", "", ...card.commonMisconceptions.map((item) => `- ${item}`), "");
       lines.push("Review notes / correction: ____________________", "");
     }
+    lines.push("## Draft worked examples and transfer checks", "", "Separate repair approval is required. These guided drafts do not increase published objective coverage or validated mastery.", "");
+    for (const item of repairs) {
+      lines.push(`### ${item.id}: ${item.title}`, "", `Objective: ${item.objective}. Version: ${item.contentVersion}. Status: ${item.reviewStatus}.`, "",
+        ...item.steps.flatMap((step, index) => [`${index + 1}. **${step.title}**`, "", quote(step.body), ""]),
+        ...item.checks.flatMap((check, index) => [`**Transfer check ${index + 1}**`, "", quote(check.prompt), "", `Expected: ${check.answer}`, "", quote(check.explanation), ""]),
+        "Review notes / correction: ____________________", "");
+    }
+    if (!repairs.length) lines.push("No worked-example draft in this topic.", "");
     lines.push("## Independent written prompts", "");
     for (const question of written) {
       lines.push(`### ${question.id}`, "", `${question.commandWord}; ${question.marks} rubric points (not an automatically validated score).${question.conceptIds.some(conceptWithheld) ? " WITHHELD: linked content is quarantined." : ""}`, "", quote(question.prompt), "", "**Rubric**", "", ...question.rubric.map((point, i) => `${i + 1}. ${point.description}`), "", "**Reasoning guide**", "", quote(question.modelReasoning), "", "Review notes / correction: ____________________", "");

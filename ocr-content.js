@@ -8,7 +8,7 @@
     version: "3.0 (2026)",
     sourceUrl: "https://www.ocr.org.uk/images/170844-specification-accredited-a-level-gce-computer-science-h446.pdf",
     status: "current",
-    alignmentNotice: "Aligned to the OCR H446 specification structure. Neat Notes is not endorsed by OCR.",
+    alignmentNotice: "Aligned to the OCR H446 specification structure. RecallStride is not endorsed by OCR.",
     components: [
       { id: "h446-01", code: "01", title: "Computer Systems", weighting: 40, contentStatus: "published" },
       { id: "h446-02", code: "02", title: "Algorithms and Programming", weighting: 40, contentStatus: "review_pending" },

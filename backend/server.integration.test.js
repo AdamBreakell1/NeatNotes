@@ -78,7 +78,7 @@ test("student account verifies, logs in and cannot elevate its role", async () =
   const signupResponse = await fetch(`${baseUrl}/api/auth/signup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Integration Student", email: "student@example.test", password: "StrongPass123" }),
+    body: JSON.stringify({ name: "Integration Student", email: "student@example.test", password: "StrongPass123", returnTask: { section: "practice", topicId: "cs-1-1-2", practiceMode: "exam", notes: "Never transfer guest notes" } }),
   });
   const signup = await signupResponse.json();
   assert.equal(signupResponse.status, 201);
@@ -103,7 +103,13 @@ test("student account verifies, logs in and cannot elevate its role", async () =
   const login = await loginResponse.json();
   assert.equal(loginResponse.status, 200);
   assert.equal(login.user.role, "student");
+  assert.deepEqual(Object.keys(login.plans), ["free", "pro"]);
   cookie = loginResponse.headers.get("set-cookie").split(";")[0];
+  assert.equal((await fetch(`${baseUrl}/api/auth/continuation`)).status, 401);
+  const continuation = await fetch(`${baseUrl}/api/auth/continuation`, { headers: { Cookie: cookie } }).then((r) => r.json());
+  assert.deepEqual(continuation.task, { section: "practice", topicId: "cs-1-1-2", componentId: "h446-01", practiceMode: "exam" });
+  assert.equal((await fetch(`${baseUrl}/api/auth/continuation`, { method: "DELETE", headers: { Cookie: cookie } })).status, 200);
+  assert.equal((await fetch(`${baseUrl}/api/auth/continuation`, { headers: { Cookie: cookie } }).then((r) => r.json())).task, null);
 
   const profileResponse = await fetch(`${baseUrl}/api/profile`, {
     method: "PATCH",
@@ -147,6 +153,12 @@ test("free account cannot bypass deck entitlements or access retired routes", as
     body: JSON.stringify({ deckId: chosen.id }),
   });
   assert.equal(chooseResponse.status, 200);
+  const repairHeaders = { Cookie: cookie, "Content-Type": "application/json" };
+  const repairList = await fetch(`${baseUrl}/api/revision/repairs?topicId=cs-1-1-1`, { headers: repairHeaders }).then((r) => r.json());
+  assert.equal(repairList.lessons.length, 1);
+  assert.equal("checks" in repairList.lessons[0], false);
+  assert.equal((await fetch(`${baseUrl}/api/revision/repairs?topicId=cs-1-4-1`, { headers: repairHeaders })).status, 402);
+  assert.equal((await fetch(`${baseUrl}/api/revision/repairs/repair-positive-binary/check`, { method: "POST", headers: repairHeaders, body: JSON.stringify({ variant: 0, response: "00100110" }) })).status, 402);
 
   const refreshedDecks = await fetch(`${baseUrl}/api/revision/decks`, { headers: { Cookie: cookie } }).then((response) => response.json());
   assert.equal(refreshedDecks.decks.filter((deck) => !deck.locked).length, 1);
@@ -425,6 +437,12 @@ test("production-mode delivery blocks draft C2 even for Pro and disables mock bi
     assert.equal(ready, true);
     const headers = { Cookie: cookie, "Content-Type": "application/json" };
     assert.equal((await fetch(`${url}/api/revision/decks/cs-1-1-1`, { headers })).status, 200);
+    const reviewedBank = await fetch(`${url}/api/revision/decks/cs-1-1-1`, { headers }).then((r) => r.json());
+    assert.ok(reviewedBank.deck.cards.every((card) => card.quiz === null));
+    const repairs = await fetch(`${url}/api/revision/repairs?topicId=cs-1-1-1`, { headers }).then((r) => r.json());
+    assert.equal(repairs.lessons.length, 0);
+    assert.equal(repairs.pendingCount, 1);
+    assert.equal((await fetch(`${url}/api/revision/repairs/repair-address-data/check`, { method: "POST", headers, body: JSON.stringify({ variant: 0, response: "64" }) })).status, 404);
     assert.equal((await fetch(`${url}/api/revision/decks/cs-2-1-1`, { headers })).status, 402);
     const questions = await fetch(`${url}/api/exam/questions?topicId=cs-2-1-1`, { headers }).then((r) => r.json());
     assert.equal(questions.questions.length, 0);

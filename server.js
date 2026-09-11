@@ -19,6 +19,10 @@ const { buildContentModel, flattenContent, validateContentModel } = require("./o
 const { QUESTION_BANK, getPublicQuestion, markAnswer, validateQuestionBank } = require("./exam-content");
 const { LABS, assessLab, getPublicLab, validateLabs } = require("./cs-labs");
 const { loadTopics, isReleased, hasAvailableConcepts } = require("./backend/services/contentRepository");
+const { createAuthContinuationStore } = require("./backend/services/authContinuation");
+const { availableQuiz } = require("./component-one-quizzes");
+const { REPAIR_LESSONS, isRepairReleased, publicRepair, assessRepair } = require("./repair-lessons");
+const contentReviewState = require("./content-review.json");
 const { trustedSchedule } = require("./backend/services/trustedSchedule");
 const { createSubscriptionEventProcessor, subscriptionAccess } = require("./backend/services/subscriptionEvents");
 const revisionGenerator = require("./revision-generator");
@@ -84,6 +88,7 @@ const PRODUCT_EVENT_NAMES = new Set([
 const REVISION_TOPICS = loadRevisionTopicsFromAssets();
 
 const db = new DatabaseSync(DB_PATH);
+const authContinuations = createAuthContinuationStore(db, REVISION_TOPICS);
 db.exec("PRAGMA foreign_keys = ON");
 db.exec("PRAGMA journal_mode = WAL");
 
@@ -113,6 +118,12 @@ db.exec(`
     expires_at TEXT NOT NULL,
     used_at TEXT,
     created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS auth_continuations (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    task_json TEXT NOT NULL,
+    expires_at TEXT NOT NULL
   );
 
   CREATE TABLE IF NOT EXISTS password_reset_tokens (
@@ -534,10 +545,19 @@ registerPublicAssetRoutes();
 app.get("/api/session", requireUser, (req, res) => {
   res.json({
     user: publicUser(req.user),
-    plans: PLAN_CATALOG,
+    plans: Object.fromEntries(PUBLIC_PLAN_IDS.map((id) => [id, PLAN_CATALOG[id]])),
     googleConfigured: isGoogleConfigured(),
     stripeConfigured: isStripeConfigured(),
   });
+});
+
+app.get("/api/auth/continuation", requireUser, (req, res) => {
+  res.json({ task: authContinuations.read(req.user.id) });
+});
+
+app.delete("/api/auth/continuation", requireUser, (req, res) => {
+  authContinuations.clear(req.user.id);
+  res.json({ ok: true });
 });
 
 app.get("/api/plans", (req, res) => {
@@ -570,7 +590,7 @@ app.post("/api/contact", contactRateLimiter, asyncHandler(async (req, res) => {
     updateContactEnquiryDelivery(enquiry.id, "queued", smtpConfigError);
     console.warn(`Contact enquiry saved for ${CONTACT_TO}; email delivery is not ready: ${smtpConfigError}`, { enquiryId: enquiry.id, reason });
     return res.status(202).json({
-      message: "Thanks. Your enquiry has been received by Neat Notes. It has been saved and queued for email delivery.",
+      message: "Thanks. Your enquiry has been received by RecallStride. It has been saved and queued for email delivery.",
       delivery: "queued",
     });
   }
@@ -582,13 +602,13 @@ app.post("/api/contact", contactRateLimiter, asyncHandler(async (req, res) => {
     console.error("Contact email delivery failed:", sanitizeMailerError(error));
     updateContactEnquiryDelivery(enquiry.id, "delivery_failed", getEmailDeliveryErrorMessage(error));
     return res.status(202).json({
-      message: "Thanks. Your enquiry has been received by Neat Notes. Email delivery is being retried automatically.",
+      message: "Thanks. Your enquiry has been received by RecallStride. Email delivery is being retried automatically.",
       delivery: "queued",
     });
   }
 
   res.status(202).json({
-    message: "Thanks. Your enquiry has been sent to the Neat Notes team.",
+    message: "Thanks. Your enquiry has been sent to the RecallStride team.",
     delivery: "sent",
   });
 }));
@@ -775,6 +795,7 @@ app.post("/api/auth/signup", authRateLimiter, asyncHandler(async (req, res) => {
       const passwordMatches = existing.password_hash
         && verifyPassword(password, existing.password_salt, existing.password_hash);
       if (passwordMatches) {
+        authContinuations.save(existing.id, req.body.returnTask);
         await createAndSendVerification(existing.id, existing.email, existing.name);
       }
       return res.status(202).json({
@@ -798,6 +819,7 @@ app.post("/api/auth/signup", authRateLimiter, asyncHandler(async (req, res) => {
 
   ensurePersonalWorkspace(userId, name);
   ensureAccountProfiles({ id: userId, role: "student" });
+  authContinuations.save(userId, req.body.returnTask);
   const verification = await createAndSendVerification(userId, email, name);
 
   res.status(201).json({
@@ -820,8 +842,9 @@ app.post("/api/auth/login", authRateLimiter, asyncHandler(async (req, res) => {
   }
 
   ensureAccountProfiles(user);
+  authContinuations.save(user.id, req.body.returnTask);
   issueSession(res, user.id, req);
-  res.json({ user: publicUser(user), plans: PLAN_CATALOG });
+  res.json({ user: publicUser(user), plans: Object.fromEntries(PUBLIC_PLAN_IDS.map((id) => [id, PLAN_CATALOG[id]])) });
 }));
 
 app.post("/api/auth/logout", requireUser, (req, res) => {
@@ -979,7 +1002,7 @@ app.delete("/api/account", requireUser, (req, res) => {
   db.prepare("DELETE FROM users WHERE id = ?").run(userId);
   clearSessionCookie(res);
   console.info(JSON.stringify({ event: "account_deleted", userId, timestamp: new Date().toISOString() }));
-  res.json({ message: "Your Neat Notes account and associated personal data have been deleted." });
+  res.json({ message: "Your RecallStride account and associated personal data have been deleted." });
 });
 
 app.get("/api/auth/verify", (req, res) => {
@@ -1278,7 +1301,7 @@ app.get("/api/notes/:id/study-pack", requireUser, (req, res) => {
       sourceNoteId: note.id,
       sourceNoteUpdatedAt: note.updated_at,
       generatedAt,
-      method: "Deterministic Neat Notes generator",
+      method: "Deterministic RecallStride generator",
       alignmentStatus: "needs_review",
       notice: "Generated from your note. Review accuracy and OCR alignment before revising from it.",
     },
@@ -1661,13 +1684,32 @@ app.get("/api/exam/attempts", requireUser, (req, res) => {
   res.json({ attempts });
 });
 
+app.get("/api/revision/repairs", requireUser, (req, res) => {
+  const topicId = String(req.query.topicId || "");
+  if (!canAccessRevisionDeck(req.user, topicId)) return res.status(402).json({ error: "Choose this free deck or unlock the released library to practise this topic." });
+  const lessons = REPAIR_LESSONS.filter((item) => item.topicId === topicId && !contentReviewState.quarantinedTopicIds.includes(topicId));
+  res.json({ lessons: lessons.filter((item) => isRepairReleased(item, contentReviewState)).map((item) => publicRepair(item)), pendingCount: lessons.filter((item) => !isRepairReleased(item, contentReviewState)).length });
+});
+
+app.post("/api/revision/repairs/:id/check", revisionRateLimiter, requireUser, (req, res) => {
+  const item = REPAIR_LESSONS.find((lesson) => lesson.id === req.params.id);
+  if (!item || !isRepairReleased(item, contentReviewState) || contentReviewState.quarantinedTopicIds.includes(item.topicId)) return res.status(404).json({ error: "This worked example is not released." });
+  if (!canAccessRevisionDeck(req.user, item.topicId)) return res.status(402).json({ error: "This topic is not available on your plan." });
+  const variant = req.body.variant;
+  if (!Number.isInteger(variant) || variant < 0 || variant >= item.checks.length) return res.status(400).json({ error: "Choose an available practice question." });
+  const response = String(req.body.response || "").trim();
+  if (!response || response.length > 80) return res.status(400).json({ error: "Enter a short answer first." });
+  const assessment = assessRepair(item, response, variant);
+  res.json({ assessment, next: variant + 1 < item.checks.length ? publicRepair(item, variant + 1) : null });
+});
+
 app.get("/api/labs", requireUser, (req, res) => {
   const released = LABS.filter((labItem) => hasAvailableConcepts(labItem, REVISION_TOPICS) && isReleased(REVISION_TOPICS.find((topic) => topic.id === labItem.topicId)));
   const available = released.filter((labItem) => canAccessRevisionDeck(req.user, labItem.topicId));
   res.json({
     labs: available.map(getPublicLab),
     lockedCount: released.length - available.length,
-    notice: "Interactive tasks use original Neat Notes scenarios and feed the adaptive mastery model.",
+    notice: "Interactive tasks use original RecallStride scenarios and feed the adaptive mastery model.",
   });
 });
 
@@ -1715,7 +1757,7 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Neat Notes running at ${BASE_URL}`);
+  console.log(`RecallStride running at ${BASE_URL}`);
   const smtpConfigError = getSmtpConfigError();
   if (smtpConfigError) {
     console.log(`${smtpConfigError} Development verification links are available only outside production.`);
@@ -1804,19 +1846,19 @@ function registerPublicAssetRoutes() {
 }
 
 function renderPublicTopicPage(topic) {
-  const description = String(topic.summary || `Revise OCR H446 ${topic.code} ${topic.title} with Neat Notes.`).slice(0, 220);
+  const description = String(topic.summary || `Revise OCR H446 ${topic.code} ${topic.title} with RecallStride.`).slice(0, 220);
   const concepts = (topic.cards || []).slice(0, 6).map((card) => `<li><strong>${escapeHtml(card.front)}</strong><span>${escapeHtml(card.category || "Knowledge")}</span></li>`).join("");
   const canonical = `${BASE_URL}/ocr-h446/${encodeURIComponent(topic.code)}`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>${escapeHtml(topic.code)} ${escapeHtml(topic.title)} | OCR H446 revision | Neat Notes</title>
+    <title>${escapeHtml(topic.code)} ${escapeHtml(topic.title)} | OCR H446 revision | RecallStride</title>
     <meta name="description" content="${escapeHtml(description)}"><link rel="canonical" href="${escapeHtml(canonical)}">
-    <meta property="og:title" content="${escapeHtml(topic.code)} ${escapeHtml(topic.title)} | Neat Notes"><meta property="og:description" content="${escapeHtml(description)}">
+    <meta property="og:title" content="${escapeHtml(topic.code)} ${escapeHtml(topic.title)} | RecallStride"><meta property="og:description" content="${escapeHtml(description)}">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"></head>
-    <body class="public-topic-page"><header><a class="public-topic-brand" href="/"><span class="brand-mark">NN</span><span><strong>Neat Notes</strong><small>A BreakellSystems product</small></span></a><a class="primary-account-button" href="/?signup=1">Start free</a></header>
+    <body class="public-topic-page"><header><a class="public-topic-brand" href="/"><span class="brand-mark">RS</span><span><strong>RecallStride</strong><small>A BreakellSystems product</small></span></a><a class="primary-account-button" href="/?signup=1">Start free</a></header>
     <main><p class="eyebrow">OCR H446 · Component 01</p><h1>${escapeHtml(topic.code)} ${escapeHtml(topic.title)}</h1><p class="public-topic-summary">${escapeHtml(description)}</p>
-    <section><div><p class="eyebrow">Topic overview</p><h2>Build accurate recall, then apply it.</h2><p>Neat Notes combines active flashcards, quick checks, exam practice and scheduled review. Progress is based on learning evidence rather than passive completion.</p></div><ul>${concepts}</ul></section>
+    <section><div><p class="eyebrow">Topic overview</p><h2>Build accurate recall, then apply it.</h2><p>RecallStride combines active flashcards, quick checks, exam practice and scheduled review. Progress is based on learning evidence rather than passive completion.</p></div><ul>${concepts}</ul></section>
     <aside><div><strong>${Number(topic.cards?.length || 0)} original retrieval cards</strong><span>Mapped to stable OCR concepts</span></div><a href="/?demo=1">Try the interactive demo</a><a href="/?signup=1">Create a free account</a></aside>
-    <p class="public-topic-disclaimer">Neat Notes is independently produced and is not endorsed by OCR. OCR is a registered trademark of OCR.</p></main></body></html>`;
+    <p class="public-topic-disclaimer">RecallStride is independently produced and is not endorsed by OCR. OCR is a registered trademark of OCR.</p></main></body></html>`;
 }
 
 function getOptionalSessionUser(req) {
@@ -1847,7 +1889,8 @@ function createPublicRevisionTopic(topic, includeCards) {
     componentId: topic.componentId,
     reviewStatus: topic.reviewStatus,
     contentAvailable: Boolean(isReleased(topic)),
-    quizCount: topic.componentId === "h446-02" ? cards.filter((card) => card.distractors?.length === 3).length : cards.length,
+    quizCount: isReleased(topic) ? cards.filter((card) => availableQuiz(card, topic)).length : 0,
+    quizReviewStatus: topic.quizReviewStatus || topic.reviewStatus,
     cardCount: cards.length,
     lockedPreview: !includeCards,
     cards: includeCards ? cards.map((card) => decoratePublicRevisionCard(topic.id, card)) : [],
@@ -1862,7 +1905,7 @@ function decoratePublicRevisionCard(topicId, card) {
     category: card.category || "Revision",
     front: card.front || "",
     back: card.back || "",
-    distractors: card.distractors || [],
+    quiz: availableQuiz(card, REVISION_TOPICS.find((topic) => topic.id === topicId)),
   };
 }
 
@@ -1974,7 +2017,7 @@ function enforceSameOriginMutation(req, res, next) {
 
   const origin = req.headers.origin;
   if (!isAllowedRequestOrigin(req, origin)) {
-    return res.status(403).json({ error: "This request did not originate from Neat Notes." });
+    return res.status(403).json({ error: "This request did not originate from RecallStride." });
   }
 
   next();
@@ -2118,7 +2161,7 @@ function seedRevisionDecks() {
       String(topic.subject || "Computer Science"),
       "OCR A-Level",
       String(topic.summary || ""),
-      String(topic.source || "Neat Notes"),
+      String(topic.source || "RecallStride"),
       cards.length,
       now,
       now,
@@ -2390,7 +2433,7 @@ function getRevisionDeck(deckId, user, classId = null) {
       back: card.back,
       position: card.position,
       latestAttempt: latestByCard.get(card.id) || null,
-      distractors: REVISION_TOPICS.find((topic) => topic.id === deck.id)?.cards.find((item) => item.id === card.card_key)?.distractors || [],
+      quiz: availableQuiz(REVISION_TOPICS.find((topic) => topic.id === deck.id)?.cards.find((item) => item.id === card.card_key) || {}, REVISION_TOPICS.find((topic) => topic.id === deck.id)),
     })),
   };
 }
@@ -3038,9 +3081,9 @@ async function createAndSendVerification(userId, email, name) {
     await transport.sendMail({
       from: getEmailFromAddress(),
       to: email,
-      subject: "Verify your Neat Notes account",
-      text: `Hi ${name},\n\nVerify your Neat Notes account here:\n${verificationUrl}\n\nThis link expires in 24 hours.`,
-      html: `<p>Hi ${escapeHtml(name)},</p><p>Verify your Neat Notes account here:</p><p><a href="${verificationUrl}">Verify email</a></p><p>This link expires in 24 hours.</p>`,
+      subject: "Verify your RecallStride account",
+      text: `Hi ${name},\n\nVerify your RecallStride account here:\n${verificationUrl}\n\nThis link expires in 24 hours.`,
+      html: `<p>Hi ${escapeHtml(name)},</p><p>Verify your RecallStride account here:</p><p><a href="${verificationUrl}">Verify email</a></p><p>This link expires in 24 hours.</p>`,
     });
 
     return {};
@@ -3057,9 +3100,9 @@ async function sendPasswordResetEmail(user, resetUrl) {
   await transport.sendMail({
     from: getEmailFromAddress(),
     to: user.email,
-    subject: "Reset your Neat Notes password",
-    text: `Hi ${user.name},\n\nReset your Neat Notes password here:\n${resetUrl}\n\nThis link expires in 30 minutes. If you did not request it, you can ignore this email.`,
-    html: `<p>Hi ${escapeHtml(user.name)},</p><p>Use the link below to reset your Neat Notes password.</p><p><a href="${escapeHtml(resetUrl)}">Reset password</a></p><p>This link expires in 30 minutes. If you did not request it, you can ignore this email.</p>`,
+    subject: "Reset your RecallStride password",
+    text: `Hi ${user.name},\n\nReset your RecallStride password here:\n${resetUrl}\n\nThis link expires in 30 minutes. If you did not request it, you can ignore this email.`,
+    html: `<p>Hi ${escapeHtml(user.name)},</p><p>Use the link below to reset your RecallStride password.</p><p><a href="${escapeHtml(resetUrl)}">Reset password</a></p><p>This link expires in 30 minutes. If you did not request it, you can ignore this email.</p>`,
   });
 }
 
@@ -3067,9 +3110,9 @@ async function sendContactEmail({ name, email, reason, message }) {
   const transport = createMailTransport();
 
   const submittedAt = new Date().toISOString();
-  const subject = `Neat Notes enquiry: ${reason}`;
+  const subject = `RecallStride enquiry: ${reason}`;
   const text = [
-    "New Neat Notes enquiry",
+    "New RecallStride enquiry",
     "",
     `Name: ${name}`,
     `Email: ${email}`,
@@ -3086,7 +3129,7 @@ async function sendContactEmail({ name, email, reason, message }) {
     replyTo: email,
     subject,
     text,
-    html: `<h2>New Neat Notes enquiry</h2>
+    html: `<h2>New RecallStride enquiry</h2>
       <p><strong>Name:</strong> ${escapeHtml(name)}</p>
       <p><strong>Email:</strong> ${escapeHtml(email)}</p>
       <p><strong>Reason:</strong> ${escapeHtml(reason)}</p>
@@ -3497,7 +3540,7 @@ function getEmailFromAddress() {
   const settings = getSmtpSettings();
 
   if (isGmailHost(settings.host) && settings.user.includes("@")) {
-    return `Neat Notes <${settings.user}>`;
+    return `RecallStride <${settings.user}>`;
   }
 
   if (process.env.EMAIL_FROM) {
@@ -3505,10 +3548,10 @@ function getEmailFromAddress() {
   }
 
   if (settings.user.includes("@")) {
-    return `Neat Notes <${settings.user}>`;
+    return `RecallStride <${settings.user}>`;
   }
 
-  return "Neat Notes <no-reply@localhost>";
+  return "RecallStride <no-reply@localhost>";
 }
 
 function getEmailDeliveryErrorMessage(error) {
@@ -3742,13 +3785,13 @@ function renderMessagePage(title, message) {
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>${escapeHtml(title)} | Neat Notes</title>
+        <title>${escapeHtml(title)} | RecallStride</title>
         <link rel="stylesheet" href="/styles.css" />
       </head>
       <body>
         <main class="auth-page">
           <section class="auth-card">
-            <p class="eyebrow">Neat Notes</p>
+            <p class="eyebrow">RecallStride</p>
             <p class="product-signature">A BreakellSystems product</p>
             <h1>${escapeHtml(title)}</h1>
             <p>${escapeHtml(message)}</p>

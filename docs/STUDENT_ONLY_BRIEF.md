@@ -38,7 +38,7 @@ Current registry evidence captured at 18:12:34 UTC on 11 September 2026, using V
 | RecallCircuit | Memorable Computer Science association and a repeat-learning loop. | [recallcircuit.com](https://rdap.verisign.com/com/v1/domain/recallcircuit.com) returned an existing registered domain. Do not pursue without explicit acquisition authority. |
 | ReviseLoop | Immediately describes repeated revision. | [reviseloop.com](https://rdap.verisign.com/com/v1/domain/reviseloop.com) returned an existing registered domain. More descriptive and less distinctive. |
 
-Exact-name web searches did not establish clearance. Registry absence is not a registrar availability quote, a trademark search, or a guarantee the name remains available. Recommendation: user decision on RecallStride, followed by current registrar, UKIPO and confusingly similar education-brand checks. Neat Notes remains unchanged in this increment. Do not partly rename account emails, Stripe receipts or OAuth callback URLs before the operational rebrand is approved.
+The subsequent [learning increment](STUDENT_LEARNING_INCREMENT.md) selects RecallStride for local implementation and verifies an Add to cart listing on Namecheap. The user authorised a defensible naming choice, so a further aesthetic approval is not required. UKIPO screening encountered a security challenge; no legal clearance or domain purchase is claimed. Stable operational identifiers and support addresses remain unchanged. Public rollout still requires clearance and an approved provider/domain transition.
 
 ## Target learning experience
 
@@ -56,8 +56,8 @@ Exact-name web searches did not establish clearance. Registry absence is not a r
 | P0 | Remove classroom product surfaces and endpoints | Implemented locally. Retired endpoints return 410; no deletion of stored records or subscription identifiers. |
 | P0 | Protect student history and billing | Tests cover owned historic class-tagged attempts in personal revision, cross-account isolation, legacy paid student access and unchanged free gates. |
 | P0 | Component 2 release decision | Eight draft packs: 115 cards, 16 written prompts, eight applied tasks, 35 mapped objective rows. Zero recorded academic approvals. Local editorial preview is usable; production content stays withheld. |
-| P1 | Academic content work | Review every C2 answer, distractor, trace and rubric using the existing packs. C1 still has eight unmapped-content gaps and runtime-selected distractors. Mapping does not prove sufficient depth. |
-| P1 | Naming decision and clearance | RecallStride provisional; no production rebrand implemented. Preserve stable account/content/customer IDs when approved. |
+| P1 | Academic content work | Review every C2 answer, distractor, trace and rubric using the existing packs. The learning increment replaces C1 runtime distractors with 48 authored drafts and supplies worked-example drafts for eight gaps. Human review and deeper objective coverage remain outstanding. |
+| P1 | Naming clearance | RecallStride implemented locally with stable account/content/customer IDs retained. Registrar listing checked; trademark clearance and public rollout remain outstanding. |
 | P1 | Signup/verification return-to-task | Exercise browser changes and shared devices; restore the intended task only to the correct account. |
 | P1 | Retired-contract migration | Before release, inventory active obligations with approval, arrange retained-record exports and support handling. Do not silently change prices, cancel subscriptions or publish this breaking retirement without sign-off. |
 | P2 | Worked-example repair loop | Add reviewed original algorithm/SQL/representation examples, progressive hints and delayed transfer questions. Measure correction on later unseen items, not just same-screen retry success. |

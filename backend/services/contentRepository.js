@@ -5,11 +5,12 @@ const vm = require("node:vm");
 const { COMPONENT_TWO_TOPICS } = require("../../component-two");
 const review = require("../../content-review.json");
 const { mapComponentOneTopic } = require("../../component-one-mapping");
+const { attachAuthoredQuizzes } = require("../../component-one-quizzes");
 
 function loadTopics(reviewState = review) {
   const sandbox = { window: {} };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../../revision-topics.js"), "utf8"), sandbox, { timeout: 1000 });
-  return [...sandbox.window.REVISION_TOPICS.map(mapComponentOneTopic), ...COMPONENT_TWO_TOPICS].map((topic) => ({
+  return [...sandbox.window.REVISION_TOPICS.map(mapComponentOneTopic).map((topic) => attachAuthoredQuizzes(topic, reviewState)), ...COMPONENT_TWO_TOPICS].map((topic) => ({
     ...topic, componentId: topic.componentId || "h446-01",
     reviewStatus: hasApproval(topic, reviewState) ? "academically_reviewed" : topic.reviewStatus || "published_unreviewed",
     cards: topic.cards.filter((card) => !reviewState.quarantinedConceptIds.includes(`${topic.id}:${card.id}`)),

@@ -1,10 +1,10 @@
-# Neat Notes
+# RecallStride (formerly Neat Notes)
 
 ## Student-only direction
 
-The current local increment removes classroom workflows from the product. Start with the [student-only brief](docs/STUDENT_ONLY_BRIEF.md) and [checkpoint](docs/STUDENT_RELAUNCH.md) for research, naming findings, retained-data safeguards and release decisions. The rebrand is not yet selected, and Component 2 still requires recorded human academic approval. Do not push or deploy this increment without approval; older documentation of a classroom offering is historical, not the current product direction.
+The current local increment removes classroom workflows and introduces authored quizzes, worked-example repairs and account return-to-task. Read the [learning increment](docs/STUDENT_LEARNING_INCREMENT.md), [student-only brief](docs/STUDENT_ONLY_BRIEF.md) and [checkpoint](docs/STUDENT_RELAUNCH.md). RecallStride is the selected provisional local brand; trademark screening is incomplete. New quizzes, repairs and Component 2 require recorded human academic review. Do not push or deploy this increment without approval; older classroom and release documentation is historical.
 
-Neat Notes is a BreakellSystems OCR A-Level Computer Science revision and notes platform. The current app is a vanilla frontend served by an Express backend with SQLite persistence.
+RecallStride is a BreakellSystems OCR A-Level Computer Science revision and notes platform. The current app is a vanilla frontend served by an Express backend with SQLite persistence. Existing Neat Notes account identifiers, storage keys, support inbox and provider configuration remain compatible.
 
 ## Student Relaunch Checkpoint
 

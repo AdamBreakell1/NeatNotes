@@ -46,7 +46,7 @@ npm run review:content -- --topic 2.1.1
 
 Files are written under ignored `.resource-review/review-packs/`. Each topic includes objective links and gaps, stable IDs, answers, authored distractors, written rubrics and applied-task solutions. The manifest has blank human-review fields and unchecked criteria. SHA-256 fingerprints identify the source content inspected; they are evidence for review, not release credentials. Regenerate after edits. Completing a pack does not approve or unlock anything; the separate version-specific release process still applies.
 
-C1 Quick Practice currently selects other card answers as incorrect options at runtime. There are no dedicated authored C1 distractor sets. The coverage report distinguishes these derived questions from authored choices; plausible, academically reviewed distractors remain a quality requirement. Reviewing flashcard answers alone cannot certify those generated quizzes.
+C1 Quick Practice now uses 48 authored drafts in `component-one-quizzes.js`, three per topic. The unrelated-answer distractor generator has been removed. Separate `quizApprovals` entries in `content-review.json` require the exact topic, quiz content version, human reviewer, review date and approved decision; pending C1 MCQs are withheld in production without withholding the existing flashcards. They are not 316 reviewed questions. Nine worked-example drafts in `repair-lessons.js` use independent `repairApprovals` keyed by lesson ID and version. Their steps and 18 transfer checks appear in the review packs; they do not inflate published coverage or validated mastery. See [the learning increment](STUDENT_LEARNING_INCREMENT.md).
 
 ## Versioning Rule
 
