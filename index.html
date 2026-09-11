@@ -45,7 +45,7 @@
         <nav class="landing-primary-links" aria-label="Public site sections">
           <button type="button" data-landing-scroll="product">Product</button>
           <button type="button" data-landing-scroll="students">Students</button>
-          <button type="button" data-landing-scroll="teachers">Study approach</button>
+          <button type="button" data-landing-scroll="approach">Study approach</button>
           <button type="button" data-landing-scroll="pricing">Pricing</button>
           <button type="button" data-landing-action="contact">Contact</button>
         </nav>
@@ -90,7 +90,7 @@
         <article><span>3</span><strong>Return and build evidence</strong><p>Separate what you have completed, what feels familiar and what you can recall later.</p></article>
       </section>
 
-      <section id="landing-teachers" class="landing-benefits-grid">
+      <section id="landing-approach" class="landing-benefits-grid">
         <div>
           <p class="eyebrow">Students</p>
           <h2>Independent revision with structure.</h2>
@@ -113,28 +113,6 @@
         </div>
       </section>
 
-      <section id="landing-schools" class="landing-schools" aria-label="Legacy classroom services" hidden>
-        <div>
-          <p class="eyebrow">For schools</p>
-          <h2>Designed for teacher-led OCR Computer Science revision.</h2>
-          <p>
-            Neat Notes is being shaped for UK classrooms: teacher accounts, student join codes, topic insight,
-            activity exports and clear school setup conversations without making classroom data feel like admin noise.
-          </p>
-          <div class="landing-hero-actions">
-            <button class="primary-account-button" type="button" data-landing-action="teacher">Explore teacher mode</button>
-            <button type="button" data-landing-action="school-contact">Discuss school setup</button>
-          </div>
-        </div>
-        <div class="school-readiness-grid">
-          <article><span>Teacher accounts</span><strong>Class dashboards and assignment pathways</strong><p>Teachers can create classes, share join codes and review topic confidence.</p></article>
-          <article><span>Student join codes</span><strong>Simple classroom onboarding</strong><p>Students join a class with a code and keep personal revision separate from teacher-visible activity.</p></article>
-          <article><span>Data controls</span><strong>Export and deletion-ready structure</strong><p>Progress, class membership and support data are organised for future school data requests.</p></article>
-          <article><span>UK focus</span><strong>GDPR-conscious by design</strong><p>School rollout still needs formal agreements, but the product is already structured with UK education expectations in mind.</p></article>
-          <article><span>Invoices</span><strong>School purchasing pathway</strong><p>Institution conversations can support invoice requests, department rollout and procurement checks.</p></article>
-          <article><span>Procurement note</span><strong>Commercial readiness, not legal advice</strong><p>Final contracts, DPA wording and safeguarding review should be completed before larger deployments.</p></article>
-        </div>
-      </section>
 
       <section id="landing-pricing" class="landing-pricing-preview" aria-label="Pricing preview">
         <div class="section-title"><span>Pricing preview</span><span>Cancel anytime · Secure billing through Stripe</span></div>
@@ -146,7 +124,7 @@
 
       <section class="landing-trust-faq">
         <div class="landing-trust">
-          <article><span>Teacher-built</span><strong>Built by a UK Computer Science teacher</strong></article>
+          <article><span>Subject-focused</span><strong>Built from Computer Science teaching practice</strong></article>
           <article><span>OCR-focused</span><strong>Designed around A-Level Computer Science revision</strong></article>
           <article><span>Data-aware</span><strong>GDPR-conscious workspace and export controls</strong></article>
           <article><span>Study-focused</span><strong>Supports independent revision and reflection</strong></article>
@@ -155,7 +133,6 @@
           <p class="eyebrow">FAQ</p>
           <details open><summary>Is Neat Notes free?</summary><p>Yes. Free accounts can create notes and choose one OCR revision deck to try.</p></details>
           <details><summary>What does Pro unlock?</summary><p>Pro unlocks every released OCR topic pack, cross-topic practice and supporting note tools. Component 2 is being prepared for academic review; a subscription does not bypass that review.</p></details>
-          <details><summary>What happens to existing classroom accounts?</summary><p>Existing classroom subscriptions and shared work remain supported. New subscriptions focus on the student Free and Pro plans.</p></details>
           <details><summary>Is it only for OCR A-Level Computer Science?</summary><p>The current product focus is OCR A-Level Computer Science. The structure can expand to other courses as the product grows.</p></details>
           <details><summary>Can I cancel anytime?</summary><p>Paid plans are managed securely through Stripe, including billing changes and cancellation.</p></details>
           <details><summary>How is student data handled?</summary><p>Your account stores your notes and study progress. Account settings include data export and deletion controls. Existing shared spaces retain their membership permissions; see the privacy information for details.</p></details>
@@ -308,7 +285,6 @@
           <span id="upgrade-message" class="topbar-plan-message" role="status"></span>
           <button class="topbar-utility-button" type="button" data-app-section="contact">Contact</button>
           <button class="topbar-utility-button" id="settings-button" type="button">Settings</button>
-          <button class="topbar-utility-button teacher-entry-button" type="button" data-app-section="teacher">Teacher</button>
           <details class="global-account-menu">
             <summary id="global-menu-label">Account</summary>
             <nav aria-label="Account and help">
@@ -380,7 +356,6 @@
               <input id="workspace-name" type="text" placeholder="New collaboration space" />
               <select id="workspace-kind" aria-label="Workspace type">
                 <option value="project">Project</option>
-                <option value="classroom">Classroom</option>
               </select>
               <button type="submit" title="Create workspace" aria-label="Create workspace">+</button>
             </form>
@@ -505,7 +480,6 @@
                 <button id="study-pack-button" class="revision-action-primary" type="button">Study Pack <span>Pro</span></button>
                 <button id="export-pdf-button" type="button">Export PDF</button>
                 <button id="history-button" type="button">History</button>
-                <button id="dashboard-button" type="button">Workspace dashboard</button>
               </div>
             </details>
           </div>
@@ -554,7 +528,7 @@
             <section class="revision-generator-panel" aria-label="Revision generators">
               <div class="section-title">
                 <span>Generate revision</span>
-                <span>Teacher-led</span>
+                <span>Study-focused</span>
               </div>
               <div class="revision-generator-grid">
                 <button type="button" data-generator-action="flashcards">Flashcards</button>
@@ -590,13 +564,6 @@
           <label class="component-topic-picker" for="component-topic-select">Current topic<select id="component-topic-select"></select></label>
           <p id="component-content-status" class="content-review-notice"></p>
         </section>
-        <div class="learning-mode-bar" aria-label="Student and teacher mode" hidden>
-          <span>Viewing as:</span>
-          <div id="learning-mode-switch" class="learning-mode-switch" role="tablist" aria-label="Learning mode">
-            <button class="active" type="button" role="tab" aria-selected="true" data-learning-mode="student">Student</button>
-            <button type="button" role="tab" aria-selected="false" data-learning-mode="teacher">Teacher</button>
-          </div>
-        </div>
 
         <header class="revision-hero student-revision-section">
           <div class="revision-hero-copy">
@@ -746,9 +713,7 @@
           <span id="revision-weak-topic" hidden></span>
         </section>
 
-        <section id="student-class-panel" class="student-class-panel student-revision-section" aria-label="Student class membership"></section>
 
-        <section id="teacher-mode-panel" class="teacher-mode-panel" aria-label="Teacher learning intelligence" hidden></section>
       </section>
 
       <section id="contact-view" class="contact-view" aria-label="Contact BreakellSystems" hidden>
@@ -769,7 +734,7 @@
                 <strong>Used only to reply</strong>
               </article>
               <article>
-                <span>Built by teachers</span>
+                <span>Built for your revision</span>
                 <strong>UK education focus</strong>
               </article>
             </div>
@@ -857,8 +822,8 @@
 
         <section class="contact-credibility-band" aria-label="BreakellSystems trust signals">
           <article>
-            <span>Teacher-led</span>
-            <p>Built from real Computer Science teaching practice and classroom revision needs.</p>
+            <span>Independent study</span>
+            <p>Designed around OCR A-Level Computer Science and your personal revision progress.</p>
           </article>
           <article>
             <span>UK-based</span>
@@ -1021,7 +986,6 @@
           </article>
         </div>
         <p class="pricing-contract-note">£3.99 billed monthly. Cancel renewal in billing; paid access continues until the paid period ends. Your own notes and account data remain accessible after downgrade. Component 2 is in academic review, and no plan bypasses that release gate.</p>
-        <p class="pricing-contract-note">Existing classroom customers retain their contracted access. Contact support for help with a legacy plan.</p>
         <div class="billing-footer">
           <p>Already subscribed? Manage invoices, payment methods, and cancellations securely in Stripe.</p>
           <button class="plan-button subtle" type="button" data-billing-portal>Manage billing</button>
@@ -1227,7 +1191,7 @@
 
           <section id="settings-editor-panel" class="settings-panel" role="tabpanel" data-settings-panel="editor" hidden>
             <h3>Writing</h3>
-            <p>Tune the editor for longer revision sessions or dense classroom work.</p>
+            <p>Tune the editor for your revision sessions.</p>
             <div class="settings-row">
               <label for="settings-editor-font">Editor text size</label>
               <select id="settings-editor-font">
@@ -1320,7 +1284,7 @@
     <script src="revision-session.js?v=20260907"></script>
     <script src="revision-topics.js?v=20260907"></script>
     <script src="neat-questions.js?v=20260824-relaunch"></script>
-    <script src="learning-model.js?v=20260824-relaunch"></script>
-    <script src="/app-relaunch.js?v=20260907-student-r1"></script>
+    <script src="learning-model.js?v=20260911-student-only"></script>
+    <script src="/app-relaunch.js?v=20260911-student-only"></script>
   </body>
 </html>

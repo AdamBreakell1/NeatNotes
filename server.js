@@ -76,7 +76,7 @@ const PRODUCT_EVENT_NAMES = new Set([
   "account_created", "onboarding_completed", "adaptive_session_started", "quick_practice_started",
   "quick_practice_completed", "exam_question_started", "exam_question_submitted", "mini_mock_started",
   "mini_mock_completed", "cs_lab_completed", "note_created", "note_revision_generated",
-  "instant_cards_generated", "study_pack_generated", "teacher_assignment_created", "teacher_assignment_prepared",
+  "instant_cards_generated", "study_pack_generated",
   "pricing_opened", "demo_workspace_opened", "demo_exited_to_landing", "contact_enquiry_sent",
   "checkout_started", "checkout_completed", "upgrade_prompt_viewed",
   "profile_updated",
@@ -683,7 +683,7 @@ app.put("/api/internal/content-reviews/:conceptId", requireUser, requireAdmin, (
 app.post("/api/billing/checkout-session", billingRateLimiter, requireUser, asyncHandler(async (req, res) => {
   const plan = normalizePlanId(req.body.plan);
   if (plan !== "pro" || (req.body.interval && req.body.interval !== "month")) {
-    return res.status(400).json({ error: "Only monthly Pro is currently available for new subscriptions. Existing classroom plans remain supported through account billing." });
+    return res.status(400).json({ error: "Only monthly Pro is available for new subscriptions. Manage an existing subscription through Billing." });
   }
 
   if (req.user.stripe_subscription_id && ["active", "trialing", "past_due", "unpaid", "incomplete", "paused"].includes(req.user.subscription_status)) {
@@ -1082,57 +1082,29 @@ app.get("/api/workspaces", requireUser, (req, res) => {
     workspace.role === "owner" || ownerHasWorkspaceCollaboration(workspace.id),
   );
 
-  res.json({ workspaces });
+  res.json({ workspaces: workspaces.map((workspace) => ({ ...workspace, kind: workspace.kind === "classroom" ? "project" : workspace.kind })) });
 });
 
 app.post("/api/workspaces", requireUser, (req, res) => {
   const name = String(req.body.name || "").trim().slice(0, 80);
   const kind = normalizeWorkspaceKind(req.body.kind || "project");
   if (!name) return res.status(400).json({ error: "Workspace name is required." });
-  if (kind === "classroom" && !hasFeature(req.user, "classroomSpaces")) {
-    return res.status(402).json({ error: "Classroom spaces are part of the Teacher plan." });
+  if (kind === "classroom") {
+    return res.status(400).json({ error: "Choose a personal or project workspace." });
   }
 
   const limit = getPlan(req.user).workspaceLimit;
   const currentCount = countOwnedWorkspaces(req.user.id);
   if (limit !== null && currentCount >= limit) {
-    return res.status(402).json({ error: `Free accounts can create ${limit} spaces. Upgrade for unlimited projects and classes.` });
+    return res.status(402).json({ error: `Free accounts can create ${limit} spaces. Upgrade for unlimited projects.` });
   }
 
   const workspace = createWorkspace(req.user.id, name, kind);
   res.status(201).json({ workspace });
 });
 
-app.get("/api/workspaces/:id/dashboard", requireUser, (req, res) => {
-  const membership = requireWorkspaceMember(req, res);
-  if (!membership) return;
-  const workspace = getWorkspace(req.params.id);
-  if (!workspace || workspace.owner_id !== req.user.id) {
-    return res.status(403).json({ error: "Only the owner can view this dashboard." });
-  }
-  if (!hasFeature(req.user, "teacherDashboard")) {
-    return res.status(402).json({ error: "Teacher dashboards are part of the Teacher plan." });
-  }
-
-  const summary = db.prepare(`
-    SELECT
-      COUNT(notes.id) AS note_count,
-      COUNT(DISTINCT notes.owner_id) AS active_authors,
-      MAX(notes.updated_at) AS last_activity
-    FROM notes
-    WHERE notes.workspace_id = ?
-  `).get(req.params.id);
-  const contributors = db.prepare(`
-    SELECT users.name, users.email, COUNT(notes.id) AS note_count, MAX(notes.updated_at) AS last_activity
-    FROM workspace_members
-    JOIN users ON users.id = workspace_members.user_id
-    LEFT JOIN notes ON notes.owner_id = users.id AND notes.workspace_id = workspace_members.workspace_id
-    WHERE workspace_members.workspace_id = ?
-    GROUP BY users.id
-    ORDER BY note_count DESC, users.name
-  `).all(req.params.id);
-
-  res.json({ workspace, summary, contributors });
+app.all("/api/workspaces/:id/dashboard", requireUser, (req, res) => {
+  res.status(410).json({ error: "This endpoint is no longer available." });
 });
 
 app.get("/api/workspaces/:id/members", requireUser, (req, res) => {
@@ -1353,7 +1325,6 @@ app.get("/api/profile", requireUser, (req, res) => {
   res.json({
     user: publicUser(req.user),
     studentProfile: getStudentProfile(req.user.id),
-    teacherProfile: getTeacherProfile(req.user.id),
   });
 });
 
@@ -1375,9 +1346,7 @@ app.patch("/api/profile", requireUser, (req, res) => {
   const personalTarget = String(req.body.personalTarget ?? student?.personal_target ?? "").trim().slice(0, 240) || null;
   const revisionGoal = normalizeRevisionGoal(req.body.revisionGoal ?? student?.revision_goal);
   const taughtTopicIds = normalizeTopicIdArray(req.body.taughtTopicIds ?? parseJsonValue(student?.taught_topic_ids, []));
-  const taughtTopicSource = ["self", "teacher", "class"].includes(req.body.taughtTopicSource)
-    ? req.body.taughtTopicSource
-    : student?.taught_topic_source || "self";
+  const taughtTopicSource = "self";
   const examDates = normalizeExamDates(req.body.examDates ?? parseJsonValue(student?.exam_dates, {}));
   const notificationPreferences = normalizeNotificationPreferences(
     req.body.notificationPreferences ?? parseJsonValue(student?.notification_preferences, {}),
@@ -1414,343 +1383,23 @@ app.patch("/api/profile", requireUser, (req, res) => {
   res.json({
     user: publicUser(updatedUser),
     studentProfile: getStudentProfile(req.user.id),
-    teacherProfile: getTeacherProfile(req.user.id),
   });
 });
 
-app.get("/api/centres", requireUser, (req, res) => {
-  const centres = db.prepare(`
-    SELECT centres.*, centre_memberships.role AS membership_role
-    FROM centres
-    JOIN centre_memberships ON centre_memberships.centre_id = centres.id
-    WHERE centre_memberships.user_id = ?
-    ORDER BY centres.name
-  `).all(req.user.id);
-
-  res.json({ centres });
+// Retired product routes cannot expose or modify retained migration records.
+app.use(["/api/centres", "/api/classes", "/api/assignments"], requireUser, (req, res) => {
+  res.status(410).json({ error: "This endpoint is no longer available." });
 });
 
-app.post("/api/centres", requireUser, requireTeacher, (req, res) => {
-  const name = String(req.body.name || "").trim().slice(0, 120);
-  const type = normalizeCentreType(req.body.type);
-  if (!name) return res.status(400).json({ error: "Centre name is required." });
-
-  const now = new Date().toISOString();
-  const centre = {
-    id: crypto.randomUUID(),
-    name,
-    type,
-    code: createJoinCode("CENTRE"),
-    created_by: req.user.id,
-    created_at: now,
-    updated_at: now,
-  };
-
-  db.prepare(`
-    INSERT INTO centres (id, name, type, code, created_by, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(centre.id, centre.name, centre.type, centre.code, centre.created_by, centre.created_at, centre.updated_at);
-  db.prepare("INSERT INTO centre_memberships (centre_id, user_id, role, joined_at) VALUES (?, ?, 'owner', ?)")
-    .run(centre.id, req.user.id, now);
-
-  res.status(201).json({ centre: { ...centre, membership_role: "owner" } });
-});
-
-app.post("/api/centres/join", joinRateLimiter, requireUser, requireTeacher, (req, res) => {
-  const code = normaliseClassCode(req.body.code);
-  if (!code) return res.status(400).json({ error: "Enter a centre code." });
-
-  const centre = db.prepare("SELECT * FROM centres WHERE code = ?").get(code);
-  if (!centre) return res.status(404).json({ error: "We could not find a centre with that code." });
-
-  db.prepare(`
-    INSERT OR IGNORE INTO centre_memberships (centre_id, user_id, role, joined_at)
-    VALUES (?, ?, 'teacher', ?)
-  `).run(centre.id, req.user.id, new Date().toISOString());
-
-  res.status(201).json({ centre: { ...centre, membership_role: "teacher" } });
-});
-
-app.get("/api/classes", requireUser, (req, res) => {
-  const classes = isTeacherUser(req.user) ? listTeacherClasses(req.user.id) : listStudentClasses(req.user.id);
-  res.json({ classes });
-});
-
-app.post("/api/classes", requireUser, requireTeacher, (req, res) => {
-  const name = String(req.body.name || "").trim().slice(0, 120);
-  const subject = String(req.body.subject || "Computer Science").trim().slice(0, 80);
-  const examBoard = String(req.body.examBoard || "OCR A-Level").trim().slice(0, 80);
-  const yearGroup = String(req.body.yearGroup || "").trim().slice(0, 40);
-  const description = String(req.body.description || "").trim().slice(0, 500);
-  const centreId = String(req.body.centreId || "").trim() || null;
-
-  if (!name) return res.status(400).json({ error: "Class name is required." });
-  if (centreId && !canManageCentre(centreId, req.user.id)) {
-    return res.status(403).json({ error: "You cannot create classes for that centre." });
+app.use("/api/revision", (req, res, next) => {
+  if (req.query.classId || req.body?.classId) {
+    return res.status(400).json({ error: "Revision is personal. Remove the unsupported context and try again." });
   }
-
-  const now = new Date().toISOString();
-  const classGroup = {
-    id: crypto.randomUUID(),
-    centre_id: centreId,
-    teacher_id: req.user.id,
-    name,
-    subject,
-    exam_board: examBoard,
-    year_group: yearGroup,
-    description,
-    join_code: createJoinCode("NN"),
-    join_code_enabled: 1,
-    created_at: now,
-    updated_at: now,
-  };
-
-  db.prepare(`
-    INSERT INTO class_groups (id, centre_id, teacher_id, name, subject, exam_board, year_group, description, join_code, join_code_enabled, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
-  `).run(
-    classGroup.id,
-    classGroup.centre_id,
-    classGroup.teacher_id,
-    classGroup.name,
-    classGroup.subject,
-    classGroup.exam_board,
-    classGroup.year_group,
-    classGroup.description,
-    classGroup.join_code,
-    classGroup.created_at,
-    classGroup.updated_at,
-  );
-  db.prepare(`
-    INSERT INTO class_memberships (id, class_id, user_id, role, status, joined_at)
-    VALUES (?, ?, ?, 'teacher', 'active', ?)
-  `).run(crypto.randomUUID(), classGroup.id, req.user.id, now);
-  recordStudentActivity(req.user.id, classGroup.id, null, "class_created", { name: classGroup.name });
-
-  res.status(201).json({ class: decorateClassGroup(classGroup) });
-});
-
-app.post("/api/classes/preview", joinRateLimiter, requireUser, (req, res) => {
-  const code = normaliseClassCode(req.body.code);
-  if (!code || !isValidClassCode(code)) return res.status(400).json({ error: "That class code does not look right." });
-  const classGroup = db.prepare(`
-    SELECT class_groups.*, users.name AS teacher_name
-    FROM class_groups JOIN users ON users.id = class_groups.teacher_id
-    WHERE class_groups.join_code = ? AND class_groups.join_code_enabled = 1 AND class_groups.archived_at IS NULL
-  `).get(code);
-  if (!classGroup) return res.status(404).json({ error: "We could not find an active class with that code." });
-  res.json({
-    class: {
-      name: classGroup.name,
-      subject: classGroup.subject,
-      examBoard: classGroup.exam_board,
-      yearGroup: classGroup.year_group,
-      description: classGroup.description,
-      teacherName: classGroup.teacher_name,
-    },
-  });
-});
-
-app.post("/api/classes/join", joinRateLimiter, requireUser, (req, res) => {
-  const code = normaliseClassCode(req.body.code);
-  if (!code) return res.status(400).json({ error: "Enter a class code to continue." });
-  if (!isValidClassCode(code)) {
-    return res.status(400).json({ error: "That class code does not look right. Check it and try again." });
-  }
-
-  const classGroup = db.prepare("SELECT * FROM class_groups WHERE join_code = ? AND join_code_enabled = 1 AND archived_at IS NULL").get(code);
-  if (!classGroup) return res.status(404).json({ error: "We could not find a class with that code." });
-  if (classGroup.teacher_id === req.user.id) {
-    return res.status(409).json({ error: "You already manage this class as the teacher." });
-  }
-
-  const existing = db.prepare(`
-    SELECT * FROM class_memberships
-    WHERE class_id = ? AND user_id = ? AND role = 'student'
-  `).get(classGroup.id, req.user.id);
-
-  const now = new Date().toISOString();
-  if (existing?.status === "active") {
-    return res.status(409).json({ error: "You have already joined this class." });
-  }
-
-  if (existing) {
-    db.prepare("UPDATE class_memberships SET status = 'active', joined_at = ?, left_at = NULL WHERE id = ?").run(now, existing.id);
-  } else {
-    db.prepare(`
-      INSERT INTO class_memberships (id, class_id, user_id, role, status, joined_at)
-      VALUES (?, ?, ?, 'student', 'active', ?)
-    `).run(crypto.randomUUID(), classGroup.id, req.user.id, now);
-  }
-
-  ensureAccountProfiles(req.user);
-  recordStudentActivity(req.user.id, classGroup.id, null, "class_joined", { code });
-  res.status(201).json({
-    message: `You have joined ${classGroup.name}.`,
-    class: decorateClassGroup(classGroup, req.user.id),
-  });
-});
-
-app.get("/api/classes/:id", requireUser, requireClassAccess, (req, res) => {
-  res.json({ class: decorateClassGroup(req.classGroup, req.user.id) });
-});
-
-app.delete("/api/classes/:id/members/me", requireUser, requireClassAccess, (req, res) => {
-  const now = new Date().toISOString();
-  db.prepare(`
-    UPDATE class_memberships
-    SET status = 'left', left_at = ?
-    WHERE class_id = ? AND user_id = ? AND role = 'student'
-  `).run(now, req.classGroup.id, req.user.id);
-  recordStudentActivity(req.user.id, req.classGroup.id, null, "class_left", {});
-  res.json({ ok: true });
-});
-
-app.get("/api/classes/:id/students", requireUser, requireClassTeacher, (req, res) => {
-  res.json({ students: getClassStudents(req.classGroup.id) });
-});
-
-app.delete("/api/classes/:id/members/:userId", requireUser, requireClassTeacher, (req, res) => {
-  const membership = db.prepare(`
-    SELECT * FROM class_memberships WHERE class_id = ? AND user_id = ? AND role = 'student' AND status = 'active'
-  `).get(req.classGroup.id, req.params.userId);
-  if (!membership) return res.status(404).json({ error: "Active student membership not found." });
-  const now = new Date().toISOString();
-  db.prepare("UPDATE class_memberships SET status = 'removed', left_at = ? WHERE id = ?").run(now, membership.id);
-  writeAuditLog(req.user.id, "class_member_removed", "class", req.classGroup.id, { studentId: req.params.userId });
-  res.json({ message: "Student removed from the class." });
-});
-
-app.patch("/api/classes/:id/archive", requireUser, requireClassTeacher, (req, res) => {
-  const now = new Date().toISOString();
-  db.prepare("UPDATE class_groups SET archived_at = ?, join_code_enabled = 0, updated_at = ? WHERE id = ?")
-    .run(now, now, req.classGroup.id);
-  db.prepare("UPDATE class_assignments SET status = 'archived', updated_at = ? WHERE class_id = ? AND status = 'active'")
-    .run(now, req.classGroup.id);
-  writeAuditLog(req.user.id, "class_archived", "class", req.classGroup.id);
-  res.json({ message: "Class archived and its join code disabled." });
-});
-
-app.get("/api/assignments", requireUser, (req, res) => {
-  const classes = isTeacherUser(req.user) ? listTeacherClasses(req.user.id) : listStudentClasses(req.user.id);
-  const classIds = classes.map((classGroup) => classGroup.id);
-  if (!classIds.length) return res.json({ assignments: [] });
-  const placeholders = classIds.map(() => "?").join(",");
-  const assignments = db.prepare(`
-    SELECT class_assignments.*, flashcard_decks.topic_id, flashcard_decks.code, flashcard_decks.title AS topic_title,
-      class_groups.name AS class_name,
-      (SELECT COUNT(*) FROM assignment_completions WHERE assignment_id = class_assignments.id AND status = 'complete') AS completed_count,
-      (SELECT COUNT(*) FROM class_memberships WHERE class_id = class_assignments.class_id AND role = 'student' AND status = 'active') AS student_count,
-      (SELECT status FROM assignment_completions WHERE assignment_id = class_assignments.id AND user_id = ?) AS user_status
-    FROM class_assignments
-    JOIN class_groups ON class_groups.id = class_assignments.class_id
-    LEFT JOIN flashcard_decks ON flashcard_decks.id = class_assignments.deck_id
-    WHERE class_assignments.class_id IN (${placeholders})
-    ORDER BY CASE WHEN class_assignments.due_at IS NULL THEN 1 ELSE 0 END, datetime(class_assignments.due_at)
-  `).all(req.user.id, ...classIds).map(decorateAssignment);
-  res.json({ assignments });
-});
-
-app.post("/api/classes/:id/assignments", requireUser, requireClassTeacher, (req, res) => {
-  const topicId = String(req.body.topicId || "").trim();
-  const deck = db.prepare("SELECT * FROM flashcard_decks WHERE id = ? OR topic_id = ?").get(topicId, topicId);
-  if (!deck) return res.status(400).json({ error: "Choose a published OCR topic." });
-  const taskType = normalizeAssignmentType(req.body.taskType);
-  const instructions = String(req.body.instructions || "").trim().slice(0, 1000);
-  const startAt = normalizeOptionalDate(req.body.startAt);
-  const dueAt = normalizeOptionalDate(req.body.dueAt);
-  if (startAt && dueAt && new Date(dueAt) < new Date(startAt)) {
-    return res.status(400).json({ error: "Due date must be after the start date." });
-  }
-  const estimatedMinutes = Math.min(120, Math.max(5, Number(req.body.estimatedMinutes) || 15));
-  const now = new Date().toISOString();
-  const assignment = {
-    id: crypto.randomUUID(), class_id: req.classGroup.id, deck_id: deck.id,
-    title: String(req.body.title || `${deck.code} ${deck.title}`).trim().slice(0, 160),
-    instructions, task_type: taskType, start_at: startAt, due_at: dueAt,
-    estimated_minutes: estimatedMinutes, status: "active", created_by: req.user.id,
-    created_at: now, updated_at: now,
-  };
-  db.prepare(`
-    INSERT INTO class_assignments (
-      id, class_id, deck_id, title, instructions, task_type, start_at, due_at,
-      estimated_minutes, status, created_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)
-  `).run(
-    assignment.id, assignment.class_id, assignment.deck_id, assignment.title, assignment.instructions,
-    assignment.task_type, assignment.start_at, assignment.due_at, assignment.estimated_minutes,
-    assignment.created_by, assignment.created_at, assignment.updated_at,
-  );
-  writeAuditLog(req.user.id, "assignment_created", "assignment", assignment.id, { classId: req.classGroup.id, taskType });
-  res.status(201).json({ assignment: decorateAssignment({ ...assignment, topic_id: deck.topic_id, code: deck.code, topic_title: deck.title, class_name: req.classGroup.name, completed_count: 0, student_count: getClassStudents(req.classGroup.id).length }) });
-});
-
-app.patch("/api/assignments/:id/status", requireUser, (req, res) => {
-  const assignment = db.prepare(`
-    SELECT class_assignments.* FROM class_assignments
-    JOIN class_groups ON class_groups.id = class_assignments.class_id
-    JOIN class_memberships ON class_memberships.class_id = class_assignments.class_id
-    WHERE class_assignments.id = ? AND class_memberships.user_id = ?
-      AND class_memberships.role = 'student' AND class_memberships.status = 'active'
-      AND class_assignments.status = 'active' AND class_groups.archived_at IS NULL
-  `).get(req.params.id, req.user.id);
-  if (!assignment) return res.status(404).json({ error: "Assignment not found for this account." });
-  const status = ["started", "complete"].includes(req.body.status) ? req.body.status : "started";
-  const now = new Date().toISOString();
-  db.prepare(`
-    INSERT INTO assignment_completions (assignment_id, user_id, status, started_at, completed_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(assignment_id, user_id) DO UPDATE SET
-      status = excluded.status,
-      started_at = COALESCE(assignment_completions.started_at, excluded.started_at),
-      completed_at = excluded.completed_at,
-      updated_at = excluded.updated_at
-  `).run(assignment.id, req.user.id, status, now, status === "complete" ? now : null, now);
-  recordStudentActivity(req.user.id, assignment.class_id, assignment.deck_id, `assignment_${status}`, { assignmentId: assignment.id });
-  res.json({ status, updatedAt: now });
-});
-
-app.get("/api/classes/:id/dashboard", requireUser, requireClassTeacher, (req, res) => {
-  res.json(getClassDashboard(req.classGroup.id));
-});
-
-app.get("/api/classes/:id/insights", requireUser, requireClassTeacher, (req, res) => {
-  const students = getClassStudents(req.classGroup.id);
-  res.json({
-    dashboard: getClassDashboard(req.classGroup.id),
-    students,
-    studentProfiles: students.map((student) => getStudentConfidenceProfile(req.classGroup.id, student.id)),
-  });
-});
-
-app.get("/api/classes/:id/students/:studentId/dashboard", requireUser, requireClassTeacher, (req, res) => {
-  const student = getClassStudents(req.classGroup.id).find((item) => item.id === req.params.studentId);
-  if (!student) return res.status(404).json({ error: "That student is not in this class." });
-
-  res.json(getStudentConfidenceProfile(req.classGroup.id, student.id));
-});
-
-app.post("/api/classes/:id/join-code/regenerate", requireUser, requireClassTeacher, (req, res) => {
-  const now = new Date().toISOString();
-  const joinCode = createJoinCode("NN");
-  db.prepare("UPDATE class_groups SET join_code = ?, join_code_enabled = 1, updated_at = ? WHERE id = ?")
-    .run(joinCode, now, req.classGroup.id);
-  res.json({ joinCode, enabled: true });
-});
-
-app.post("/api/classes/:id/join-code/disable", requireUser, requireClassTeacher, (req, res) => {
-  db.prepare("UPDATE class_groups SET join_code_enabled = 0, updated_at = ? WHERE id = ?")
-    .run(new Date().toISOString(), req.classGroup.id);
-  res.json({ enabled: false });
+  next();
 });
 
 app.get("/api/revision/decks", requireUser, (req, res) => {
-  const classId = String(req.query.classId || "").trim() || null;
-  if (classId && !isClassParticipant(classId, req.user.id)) {
-    return res.status(403).json({ error: "You do not have access to that class context." });
-  }
-
-  const decks = listRevisionDecks(req.user, classId);
+  const decks = listRevisionDecks(req.user);
   res.json({ decks });
 });
 
@@ -1790,12 +1439,7 @@ app.post("/api/revision/free-deck", requireUser, (req, res) => {
 });
 
 app.get("/api/revision/decks/:id", requireUser, (req, res) => {
-  const classId = String(req.query.classId || "").trim() || null;
-  if (classId && !isClassParticipant(classId, req.user.id)) {
-    return res.status(403).json({ error: "You do not have access to that class context." });
-  }
-
-  const deck = getRevisionDeck(req.params.id, req.user, classId);
+  const deck = getRevisionDeck(req.params.id, req.user);
   if (!deck) return res.status(404).json({ error: "Deck not found." });
   if (deck.locked) return res.status(402).json({ error: "Upgrade to Pro to unlock this OCR revision deck." });
   res.json({ deck });
@@ -1805,7 +1449,7 @@ app.post("/api/revision/attempts", revisionRateLimiter, requireUser, (req, res) 
   const deckId = String(req.body.deckId || "").trim();
   const cardId = String(req.body.cardId || "").trim();
   const confidence = normalizeConfidence(req.body.confidence);
-  const classId = String(req.body.classId || "").trim() || null;
+  const classId = null;
   const source = String(req.body.source || "flashcard").trim().slice(0, 40) || "flashcard";
   const rating = normalizeReviewRating(req.body.rating || req.body.difficulty, confidence);
 
@@ -1817,9 +1461,6 @@ app.post("/api/revision/attempts", revisionRateLimiter, requireUser, (req, res) 
   if (!card || !isCurrentCard(card)) return res.status(404).json({ error: "Flashcard is no longer available for practice." });
   if (!canAccessRevisionDeck(req.user, deckId)) {
     return res.status(402).json({ error: "Upgrade to Pro to save progress on this OCR revision deck." });
-  }
-  if (classId && !isActiveClassStudent(classId, req.user.id)) {
-    return res.status(403).json({ error: "You are not joined to that class." });
   }
 
   const clientId = String(req.body.clientAttemptId || "").trim();
@@ -1887,20 +1528,16 @@ app.post("/api/revision/attempts", revisionRateLimiter, requireUser, (req, res) 
 });
 
 app.get("/api/revision/recommendations", requireUser, (req, res) => {
-  const classId = String(req.query.classId || "").trim() || null;
-  if (classId && !isClassParticipant(classId, req.user.id)) {
-    return res.status(403).json({ error: "You do not have access to that class context." });
-  }
-
-  res.json({ recommendations: getRevisionRecommendations(req.user.id, classId) });
+  res.json({ recommendations: getRevisionRecommendations(req.user.id) });
 });
 
 app.get("/api/revision/activity", requireUser, (req, res) => {
   const activity = db.prepare(`
-    SELECT student_activity_events.*, flashcard_decks.code, flashcard_decks.title AS deck_title, class_groups.name AS class_name
+    SELECT student_activity_events.id, student_activity_events.type, student_activity_events.deck_id,
+      student_activity_events.metadata, student_activity_events.created_at,
+      flashcard_decks.code, flashcard_decks.title AS deck_title
     FROM student_activity_events
     LEFT JOIN flashcard_decks ON flashcard_decks.id = student_activity_events.deck_id
-    LEFT JOIN class_groups ON class_groups.id = student_activity_events.class_id
     WHERE student_activity_events.user_id = ?
     ORDER BY datetime(student_activity_events.created_at) DESC
     LIMIT 80
@@ -2433,19 +2070,6 @@ function migrateSchema() {
   addColumnIfMissing("student_profiles", "onboarding_completed_at", "TEXT");
   db.prepare("UPDATE workspaces SET kind = 'personal' WHERE kind = 'project' AND name LIKE ?").run("%'s Notes");
   db.prepare("UPDATE users SET plan = 'pro' WHERE plan = 'plus'").run();
-  db.prepare("UPDATE users SET role = 'teacher' WHERE role = 'student' AND plan IN ('teacher', 'institution')").run();
-  db.prepare("SELECT id, join_code FROM class_groups").all().forEach((classGroup) => {
-    if (isLegacyClassJoinCode(classGroup.join_code)) {
-      db.prepare("UPDATE class_groups SET join_code = ?, updated_at = ? WHERE id = ?")
-        .run(createJoinCode("NN"), new Date().toISOString(), classGroup.id);
-    }
-  });
-  db.prepare("SELECT id, code FROM centres").all().forEach((centre) => {
-    if (isLegacyCentreCode(centre.code)) {
-      db.prepare("UPDATE centres SET code = ?, updated_at = ? WHERE id = ?")
-        .run(createJoinCode("CENTRE"), new Date().toISOString(), centre.id);
-    }
-  });
 }
 
 function addColumnIfMissing(table, column, definition) {
@@ -2549,13 +2173,6 @@ function loadRevisionTopicsFromAssets() {
   return loadTopics();
 }
 
-function requireTeacher(req, res, next) {
-  if (!isTeacherUser(req.user)) {
-    return res.status(403).json({ error: "Teacher access is required." });
-  }
-
-  next();
-}
 
 function requireAdmin(req, res, next) {
   if (req.user?.role !== "admin") {
@@ -2564,30 +2181,6 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-function requireClassTeacher(req, res, next) {
-  const classGroup = getClassGroup(req.params.id);
-  if (!classGroup) return res.status(404).json({ error: "Class not found." });
-  if (!hasFeature(req.user, "teacherDashboard")) {
-    return res.status(402).json({ error: "An active Teacher plan is required to manage classes." });
-  }
-  if (!canManageClass(classGroup, req.user.id)) {
-    return res.status(403).json({ error: "You cannot manage this class." });
-  }
-
-  req.classGroup = classGroup;
-  next();
-}
-
-function requireClassAccess(req, res, next) {
-  const classGroup = getClassGroup(req.params.id);
-  if (!classGroup) return res.status(404).json({ error: "Class not found." });
-  if (!isClassParticipant(classGroup.id, req.user.id)) {
-    return res.status(403).json({ error: "You do not have access to that class." });
-  }
-
-  req.classGroup = classGroup;
-  next();
-}
 
 function normalizeUserRole(role) {
   const normalized = String(role || "").trim().toLowerCase();
@@ -2642,7 +2235,6 @@ function normalizeNotificationPreferences(value) {
   return {
     weeklyProgress: source.weeklyProgress === true,
     dueRevision: source.dueRevision === true,
-    assignmentDue: source.assignmentDue !== false,
     billingSecurity: source.billingSecurity !== false,
     usageAnalytics: source.usageAnalytics === true,
   };
@@ -2661,42 +2253,6 @@ function sanitizeEventMetadata(value) {
   return safe;
 }
 
-function normalizeAssignmentType(value) {
-  const normalized = String(value || "topic_revision").trim().toLowerCase();
-  const allowed = new Set(["adaptive_session", "topic_revision", "flashcards", "quick_quiz", "exam_questions", "mini_mock", "interactive_lab"]);
-  return allowed.has(normalized) ? normalized : "topic_revision";
-}
-
-function normalizeOptionalDate(value) {
-  const raw = String(value || "").trim();
-  if (!raw) return null;
-  const parsed = new Date(raw.length === 10 ? `${raw}T16:00:00.000Z` : raw);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
-}
-
-function decorateAssignment(assignment) {
-  return {
-    id: assignment.id,
-    classId: assignment.class_id,
-    className: assignment.class_name,
-    deckId: assignment.deck_id,
-    topicId: assignment.topic_id || assignment.deck_id,
-    topicCode: assignment.code,
-    topicTitle: assignment.topic_title,
-    title: assignment.title,
-    instructions: assignment.instructions,
-    taskType: assignment.task_type,
-    startAt: assignment.start_at,
-    dueAt: assignment.due_at,
-    estimatedMinutes: assignment.estimated_minutes,
-    status: assignment.status,
-    userStatus: assignment.user_status || "not_started",
-    completedCount: Number(assignment.completed_count || 0),
-    studentCount: Number(assignment.student_count || 0),
-    createdAt: assignment.created_at,
-    updatedAt: assignment.updated_at,
-  };
-}
 
 function parseJsonValue(value, fallback) {
   try {
@@ -2706,15 +2262,6 @@ function parseJsonValue(value, fallback) {
   }
 }
 
-function normalizeCentreType(type) {
-  const normalized = String(type || "").trim().toLowerCase();
-  return ["school", "college", "department", "trust"].includes(normalized) ? normalized : "school";
-}
-
-function isTeacherUser(user) {
-  return hasFeature(user, "teacherDashboard")
-    && ["teacher", "centre_admin", "admin"].includes(user?.role);
-}
 
 function ensureAccountProfiles(user) {
   if (!user?.id) return;
@@ -2725,12 +2272,6 @@ function ensureAccountProfiles(user) {
     VALUES (?, ?, ?)
   `).run(user.id, now, now);
 
-  if (isTeacherUser(user)) {
-    db.prepare(`
-      INSERT OR IGNORE INTO teacher_profiles (user_id, created_at, updated_at)
-      VALUES (?, ?, ?)
-    `).run(user.id, now, now);
-  }
 }
 
 function getStudentProfile(userId) {
@@ -2776,161 +2317,6 @@ function describeUserAgent(userAgent) {
   return `${browser} on this ${device}`;
 }
 
-function normaliseClassCode(value) {
-  return String(value || "")
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-+/g, "-");
-}
-
-function isValidClassCode(code) {
-  return /^[A-Z0-9]{2,}(?:-[A-Z0-9]{2,})+$/.test(code);
-}
-
-function isLegacyClassJoinCode(value) {
-  return /^NN-[A-Z0-9]{5}$/i.test(String(value || ""));
-}
-
-function isLegacyCentreCode(value) {
-  return /^CENTRE-[A-Z0-9]{5}$/i.test(String(value || ""));
-}
-
-function createJoinCode(prefix) {
-  const alphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-  const randomSegment = (length) => {
-    let segment = "";
-    while (segment.length < length) {
-      const byte = crypto.randomBytes(1)[0];
-      if (byte >= 224) continue;
-      segment += alphabet[byte % alphabet.length];
-    }
-    return segment;
-  };
-  let code;
-  do {
-    code = `${normaliseClassCode(prefix)}-${randomSegment(5)}-${randomSegment(5)}`;
-  } while (
-    db.prepare("SELECT 1 FROM class_groups WHERE join_code = ?").get(code) ||
-    db.prepare("SELECT 1 FROM centres WHERE code = ?").get(code)
-  );
-
-  return code;
-}
-
-function getClassGroup(classId) {
-  return db.prepare("SELECT * FROM class_groups WHERE id = ?").get(classId);
-}
-
-function canManageCentre(centreId, userId) {
-  return Boolean(db.prepare(`
-    SELECT 1 FROM centre_memberships
-    WHERE centre_id = ? AND user_id = ? AND role IN ('owner', 'admin', 'teacher')
-  `).get(centreId, userId));
-}
-
-function canManageClass(classGroup, userId) {
-  if (classGroup.teacher_id === userId) return true;
-  return Boolean(db.prepare(`
-    SELECT 1
-    FROM class_groups
-    JOIN centre_memberships ON centre_memberships.centre_id = class_groups.centre_id
-    WHERE class_groups.id = ?
-      AND centre_memberships.user_id = ?
-      AND centre_memberships.role IN ('owner', 'admin')
-  `).get(classGroup.id, userId));
-}
-
-function isActiveClassStudent(classId, userId) {
-  return Boolean(db.prepare(`
-    SELECT 1 FROM class_memberships
-    WHERE class_id = ? AND user_id = ? AND role = 'student' AND status = 'active'
-  `).get(classId, userId));
-}
-
-function isClassParticipant(classId, userId) {
-  const classGroup = getClassGroup(classId);
-  if (classGroup && canManageClass(classGroup, userId)) return true;
-  return Boolean(db.prepare(`
-    SELECT 1 FROM class_memberships
-    WHERE class_id = ? AND user_id = ? AND status = 'active'
-  `).get(classId, userId));
-}
-
-function decorateClassGroup(classGroup, userId = null) {
-  const centre = classGroup.centre_id ? db.prepare("SELECT id, name, type FROM centres WHERE id = ?").get(classGroup.centre_id) : null;
-  const studentCount = db.prepare(`
-    SELECT COUNT(*) AS count FROM class_memberships
-    WHERE class_id = ? AND role = 'student' AND status = 'active'
-  `).get(classGroup.id).count;
-  const membership = userId
-    ? db.prepare("SELECT role, status, joined_at, left_at FROM class_memberships WHERE class_id = ? AND user_id = ?").get(classGroup.id, userId)
-    : null;
-
-  return {
-    id: classGroup.id,
-    centreId: classGroup.centre_id,
-    centre,
-    teacherId: classGroup.teacher_id,
-    name: classGroup.name,
-    subject: classGroup.subject,
-    examBoard: classGroup.exam_board,
-    yearGroup: classGroup.year_group,
-    description: classGroup.description,
-    joinCode: classGroup.join_code,
-    joinCodeEnabled: Boolean(classGroup.join_code_enabled),
-    studentCount,
-    membership: membership || null,
-    createdAt: classGroup.created_at,
-    updatedAt: classGroup.updated_at,
-  };
-}
-
-function listTeacherClasses(userId) {
-  return db.prepare(`
-    SELECT class_groups.*
-    FROM class_groups
-    LEFT JOIN centre_memberships ON centre_memberships.centre_id = class_groups.centre_id
-    WHERE (class_groups.teacher_id = ?
-       OR (centre_memberships.user_id = ? AND centre_memberships.role IN ('owner', 'admin')))
-      AND class_groups.archived_at IS NULL
-    GROUP BY class_groups.id
-    ORDER BY datetime(class_groups.updated_at) DESC
-  `).all(userId, userId).map((classGroup) => decorateClassGroup(classGroup));
-}
-
-function listStudentClasses(userId) {
-  return db.prepare(`
-    SELECT class_groups.*
-    FROM class_memberships
-    JOIN class_groups ON class_groups.id = class_memberships.class_id
-    WHERE class_memberships.user_id = ?
-      AND class_memberships.role = 'student'
-      AND class_memberships.status = 'active'
-      AND class_groups.archived_at IS NULL
-    ORDER BY datetime(class_memberships.joined_at) DESC
-  `).all(userId).map((classGroup) => decorateClassGroup(classGroup, userId));
-}
-
-function getClassStudents(classId) {
-  return db.prepare(`
-    SELECT users.id, users.name, users.email, users.last_accessed_at,
-      class_memberships.joined_at,
-      (SELECT COUNT(*) FROM flashcard_attempts
-        WHERE flashcard_attempts.user_id = users.id AND flashcard_attempts.class_id = class_memberships.class_id
-      ) AS attempt_count,
-      (SELECT MAX(student_activity_events.created_at) FROM student_activity_events
-        WHERE student_activity_events.user_id = users.id AND student_activity_events.class_id = class_memberships.class_id
-      ) AS last_activity
-    FROM class_memberships
-    JOIN users ON users.id = class_memberships.user_id
-    WHERE class_memberships.class_id = ?
-      AND class_memberships.role = 'student'
-      AND class_memberships.status = 'active'
-    ORDER BY users.name
-  `).all(classId);
-}
 
 function canAccessRevisionDeck(user, deckId) {
   if (!isReleased(REVISION_TOPICS.find((topic) => topic.id === deckId))) return false;
@@ -2964,7 +2350,7 @@ function listRevisionDecks(user, classId = null) {
       contentAvailable,
       freeSelectable,
       selectedFreeDeck,
-      requiredPlan: locked && !freeSelectable ? "pro" : null,
+      requiredPlan: contentAvailable && locked && !freeSelectable ? "pro" : null,
       confidence: summary,
       lastAttemptAt: attempts[0]?.created_at || null,
     };
@@ -3019,8 +2405,6 @@ function getDeckAttempts(deckId, userId = null, classId = null) {
   if (classId) {
     where.push("class_id = ?");
     params.push(classId);
-  } else if (classId === null) {
-    where.push("class_id IS NULL");
   }
 
   return db.prepare(`
@@ -3555,101 +2939,6 @@ function getRevisionRecommendations(userId, classId = null) {
   }));
 }
 
-function getClassDashboard(classId) {
-  const classGroup = getClassGroup(classId);
-  const students = getClassStudents(classId);
-  const topicSummaries = getClassTopicSummaries(classId);
-  const activity = getClassActivity(classId, 30);
-  const activeSince = new Date(Date.now() - 1000 * 60 * 60 * 24 * 7);
-  const activeStudentIds = new Set(activity.filter((event) => new Date(event.created_at) >= activeSince).map((event) => event.user_id));
-
-  return {
-    class: decorateClassGroup(classGroup),
-    summary: {
-      students: students.length,
-      activeThisWeek: activeStudentIds.size,
-      totalAttempts: topicSummaries.reduce((sum, topic) => sum + topic.confidence.totalAttempts, 0),
-      weakestTopic: topicSummaries.find((topic) => topic.confidence.totalAttempts)?.title || null,
-    },
-    topicConfidence: topicSummaries,
-    weakestTopics: topicSummaries.filter((topic) => topic.confidence.totalAttempts).slice(0, 5),
-    strongestTopics: [...topicSummaries]
-      .filter((topic) => topic.confidence.totalAttempts)
-      .sort((a, b) => b.confidence.percent - a.confidence.percent)
-      .slice(0, 5),
-    inactiveStudents: students.filter((student) => !student.last_activity || new Date(student.last_activity) < activeSince),
-    recentActivity: activity.slice(0, 12),
-  };
-}
-
-function getClassTopicSummaries(classId) {
-  return db.prepare("SELECT * FROM flashcard_decks ORDER BY code").all().map((deck) => {
-    const attempts = getClassDeckAttempts(deck.id, classId);
-    const confidence = calculateConfidenceSummary(attempts);
-    return {
-      deckId: deck.id,
-      topicId: deck.topic_id,
-      code: deck.code,
-      title: deck.title,
-      cardCount: deck.card_count,
-      confidence,
-      lastAttemptAt: attempts[0]?.created_at || null,
-    };
-  }).sort((a, b) => {
-    if (a.confidence.totalAttempts !== b.confidence.totalAttempts) {
-      return a.confidence.percent - b.confidence.percent;
-    }
-    return a.code.localeCompare(b.code, undefined, { numeric: true });
-  });
-}
-
-function getClassDeckAttempts(deckId, classId, studentId = null) {
-  const params = [deckId, classId];
-  const studentFilter = studentId ? "AND user_id = ?" : "";
-  if (studentId) params.push(studentId);
-
-  return db.prepare(`
-    SELECT * FROM flashcard_attempts
-    WHERE deck_id = ? AND class_id = ? ${studentFilter}
-    ORDER BY datetime(created_at) DESC
-  `).all(...params);
-}
-
-function getStudentConfidenceProfile(classId, studentId) {
-  const student = db.prepare("SELECT id, name, email, last_accessed_at FROM users WHERE id = ?").get(studentId);
-  const topics = db.prepare("SELECT * FROM flashcard_decks ORDER BY code").all().map((deck) => {
-    const attempts = getClassDeckAttempts(deck.id, classId, studentId);
-    return {
-      deckId: deck.id,
-      topicId: deck.topic_id,
-      code: deck.code,
-      title: deck.title,
-      confidence: calculateConfidenceSummary(attempts),
-      lastAttemptAt: attempts[0]?.created_at || null,
-    };
-  });
-  const recommendations = buildRevisionRecommendations(topics).slice(0, 5);
-
-  return {
-    student,
-    topics,
-    recommendations,
-    recentActivity: getClassActivity(classId, 20).filter((event) => event.user_id === studentId),
-  };
-}
-
-function getClassActivity(classId, limit = 30) {
-  return db.prepare(`
-    SELECT student_activity_events.*, users.name AS user_name, users.email AS user_email,
-      flashcard_decks.code, flashcard_decks.title AS deck_title
-    FROM student_activity_events
-    JOIN users ON users.id = student_activity_events.user_id
-    LEFT JOIN flashcard_decks ON flashcard_decks.id = student_activity_events.deck_id
-    WHERE student_activity_events.class_id = ?
-    ORDER BY datetime(student_activity_events.created_at) DESC
-    LIMIT ?
-  `).all(classId, limit);
-}
 
 function requireUser(req, res, next) {
   const token = parseCookies(req.headers.cookie || "")[SESSION_COOKIE];
@@ -4073,7 +3362,6 @@ async function ensureStripeCustomer(user) {
 function applyUserPlan(userId, plan, subscriptionStatus = "active", subscriptionId = null, currentPeriodEnd = null) {
   const planId = normalizePlanId(plan);
   const now = new Date().toISOString();
-  const role = ["teacher", "institution"].includes(planId) ? "teacher" : "student";
   const planStatus = ["active", "trialing"].includes(subscriptionStatus) ? "active" : subscriptionStatus || "inactive";
 
   db.prepare(`
@@ -4081,13 +3369,12 @@ function applyUserPlan(userId, plan, subscriptionStatus = "active", subscription
     SET plan = ?,
       plan_status = ?,
       plan_updated_at = ?,
-      role = ?,
       stripe_subscription_id = COALESCE(?, stripe_subscription_id),
       subscription_status = ?,
       subscription_current_period_end = ?,
       updated_at = ?
     WHERE id = ?
-  `).run(planId, planStatus, now, role, subscriptionId, subscriptionStatus, currentPeriodEnd, now, userId);
+  `).run(planId, planStatus, now, subscriptionId, subscriptionStatus, currentPeriodEnd, now, userId);
 
   const updatedUser = db.prepare("SELECT * FROM users WHERE id = ?").get(userId);
   ensureAccountProfiles(updatedUser);
@@ -4154,21 +3441,28 @@ function parseCookies(cookieHeader) {
 
 function publicUser(user) {
   const plan = getPlan(user);
+  const publicPlan = {
+    id: plan.legacyOnly ? "pro" : plan.id,
+    name: plan.legacyOnly ? "Student Pro" : plan.name,
+    price: plan.price,
+    noteLimit: plan.noteLimit,
+    workspaceLimit: plan.workspaceLimit,
+    features: Object.fromEntries(Object.entries(plan.features).filter(([key]) => !["classroomSpaces", "teacherDashboard"].includes(key))),
+  };
   return {
     id: user.id,
     email: user.email,
     name: user.name,
-    role: user.role || "student",
-    isTeacher: isTeacherUser(user),
-    plan: plan.id,
-    planName: plan.name,
+    role: user.role === "admin" ? "admin" : "student",
+    plan: publicPlan.id,
+    planName: publicPlan.name,
     planStatus: user.plan_status || "active",
     subscriptionStatus: user.subscription_status || null,
     subscriptionCurrentPeriodEnd: user.subscription_current_period_end || null,
     freeRevisionDeckId: user.free_revision_deck_id || null,
     freeRevisionDeckLimit: FREE_REVISION_DECK_LIMIT,
     billingPortalReady: Boolean(user.stripe_customer_id && stripe),
-    entitlements: plan,
+    entitlements: publicPlan,
     emailVerified: Boolean(user.email_verified),
   };
 }

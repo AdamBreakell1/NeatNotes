@@ -8,12 +8,6 @@ const NEAT_QUIZ_PROGRESS_KEY = "neat-notes-quiz-progress";
 const FREE_REVISION_DECK_KEY = "neat-notes-free-revision-deck";
 const CARD_ATTEMPTS_KEY = "neat-notes-card-attempts";
 const ACTIVITY_EVENTS_KEY = "neat-notes-activity-events";
-const CLASS_GROUPS_KEY = "neat-notes-class-groups";
-const CLASS_MEMBERSHIPS_KEY = "neat-notes-class-memberships";
-const ACTIVE_STUDENT_CLASS_KEY = "neat-notes-active-student-class";
-const CENTRES_KEY = "neat-notes-centres";
-const TEACHER_ASSIGNMENTS_KEY = "neat-notes-teacher-assignments";
-const LEARNING_MODE_KEY = "neat-notes-learning-mode";
 const APP_EVENT_LOG_KEY = "neat-notes-event-log";
 const REVIEW_SCHEDULES_KEY = "neat-notes-review-schedules";
 const MISTAKE_JOURNAL_KEY = "neat-notes-mistake-journal";
@@ -102,26 +96,13 @@ let cardAttempts = loadLocalArray(CARD_ATTEMPTS_KEY);
 let serverLearningEvidence = [];
 let liveLearningAttemptIds = new Set();
 let activityEvents = loadLocalArray(ACTIVITY_EVENTS_KEY);
-let classGroups = loadLocalArray(CLASS_GROUPS_KEY);
-let classMemberships = loadLocalArray(CLASS_MEMBERSHIPS_KEY);
-let centres = loadLocalArray(CENTRES_KEY);
-let teacherAssignments = loadLocalArray(TEACHER_ASSIGNMENTS_KEY);
-let activeLearningMode = localStorage.getItem(LEARNING_MODE_KEY) === "teacher" ? "teacher" : "student";
-let activeTeacherSection = "dashboard";
-let teacherActionMessage = { text: "", type: "" };
-let activeClassId = classGroups[0]?.id || null;
-let activeStudentClassId = localStorage.getItem(ACTIVE_STUDENT_CLASS_KEY) || null;
-let activeCentreId = centres[0]?.id || null;
 let revisionSession = createRevisionSession(activeRevisionTopicId);
 let revisionReviewMode = null;
-let studentClassJoinMessage = { text: "", type: "" };
-let studentClassCodeDraft = "";
 let reviewSchedules = loadLocalObject(REVIEW_SCHEDULES_KEY);
 let mistakeJournal = loadLocalArray(MISTAKE_JOURNAL_KEY);
 let activeAdaptiveSession = null;
 let adaptivePlanPreview = null;
 let accountProfile = null;
-let serverStudentTopicConfidence = new Map();
 let focusBeforeGlobalSearch = null;
 let focusBeforeSettings = null;
 let globalSearchSelection = 0;
@@ -148,9 +129,10 @@ function renderComponentContext() {
   document.querySelectorAll("[data-component]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.component === activeComponentId)));
   const select = document.querySelector("#component-topic-select");
   select.innerHTML = topics.map((topic) => `<option value="${escapeHtml(topic.id)}" ${activeRevisionTopicId === topic.id ? "selected" : ""}>${escapeHtml(topic.code)} ${escapeHtml(topic.title)}</option>`).join("");
-  const pending = topics.some((topic) => topic.reviewStatus === "review_pending");
-  document.querySelector("#component-content-status").textContent = pending
-    ? `${topics.length} topic packs · Academic review pending. ${topics.some((topic) => topic.contentAvailable) ? "Local editorial preview; not yet approved for public release." : "New material is being reviewed before release."}`
+  const pendingCount = topics.filter((topic) => topic.reviewStatus === "review_pending").length;
+  const previewAvailable = topics.some((topic) => topic.reviewStatus === "review_pending" && topic.contentAvailable);
+  document.querySelector("#component-content-status").textContent = pendingCount
+    ? `${topics.length} topic packs · Academic review pending for ${pendingCount}. ${previewAvailable ? "Local editorial preview; draft packs are not yet approved for public release." : "Only reviewed new packs become available; Pro does not bypass review."}`
     : `${topics.length} topic packs · OCR H446. Completion reflects the available study material, not full specification mastery.`;
   document.querySelector("#progress-component-label").textContent = `OCR Component ${activeComponentId === "h446-02" ? "2" : "1"}`;
 }
@@ -204,7 +186,6 @@ const elements = {
   badgeProgressBar: document.querySelector("#badge-progress-bar"),
   badgeProgressLabel: document.querySelector("#badge-progress-label"),
   badgeProgressPercent: document.querySelector("#badge-progress-percent"),
-  dashboardButton: document.querySelector("#dashboard-button"),
   deleteButton: document.querySelector("#delete-note-button"),
   exportPdfButton: document.querySelector("#export-pdf-button"),
   editorPanel: document.querySelector(".editor"),
@@ -235,7 +216,6 @@ const elements = {
   neatQuestionsCurrentLink: document.querySelector("#neat-questions-current-link"),
   neatQuestionsGrid: document.querySelector("#neat-questions-grid"),
   neatQuizPanel: document.querySelector("#neat-quiz-panel"),
-  learningModeSwitch: document.querySelector("#learning-mode-switch"),
   newButton: document.querySelector("#new-note-button"),
   notesSidebarContext: document.querySelector("#notes-sidebar-context"),
   onboardingModal: document.querySelector("#onboarding-modal"),
@@ -357,13 +337,11 @@ const elements = {
   instantCardsButton: document.querySelector("#instant-cards-button"),
   studyPackButton: document.querySelector("#study-pack-button"),
   startDailyReviewButton: document.querySelector("#start-daily-review-button"),
-  studentClassPanel: document.querySelector("#student-class-panel"),
   studentDashboardPanel: document.querySelector("#student-dashboard-panel"),
   studyPane: document.querySelector(".study-pane"),
   summaryText: document.querySelector("#summary-text"),
   tagInput: document.querySelector("#tag-input"),
   tagList: document.querySelector("#tag-list"),
-  teacherModePanel: document.querySelector("#teacher-mode-panel"),
   themeToggle: document.querySelector("#theme-toggle"),
   themeChoiceGroup: document.querySelector("#theme-choice-group"),
   topbarLoginButton: document.querySelector("#topbar-login-button"),
@@ -483,15 +461,8 @@ elements.instantCardsButton.addEventListener("click", showInstantCards);
 elements.insightsPanel.addEventListener("click", handleInsightsPanelClick);
 elements.revisionCardGrid.addEventListener("click", flipRevisionCard);
 elements.revisionCardGrid.addEventListener("keydown", handleRevisionCardKeydown);
-elements.learningModeSwitch.addEventListener("click", switchLearningMode);
-elements.studentClassPanel.addEventListener("click", handleStudentClassPanelClick);
-elements.studentClassPanel.addEventListener("submit", handleStudentClassPanelSubmit);
-elements.studentClassPanel.addEventListener("change", handleStudentClassPanelChange);
 elements.studentDashboardPanel.addEventListener("click", handleStudentDashboardClick);
 elements.mistakeJournalPanel.addEventListener("click", handleMistakeJournalClick);
-elements.teacherModePanel.addEventListener("click", handleTeacherModeClick);
-elements.teacherModePanel.addEventListener("submit", handleTeacherModeSubmit);
-elements.teacherModePanel.addEventListener("change", handleTeacherModeChange);
 elements.revisionTopicList.addEventListener("click", selectRevisionTopic);
 elements.revisionMasteryMap.addEventListener("click", handleMasteryMapClick);
 elements.revisionResetButton.addEventListener("click", resetActiveRevisionCards);
@@ -556,7 +527,6 @@ elements.deleteButton.addEventListener("click", deleteSelectedNote);
 elements.studyPackButton.addEventListener("click", showStudyPack);
 elements.exportPdfButton.addEventListener("click", exportSelectedPdf);
 elements.historyButton.addEventListener("click", showVersionHistory);
-elements.dashboardButton.addEventListener("click", showTeacherDashboard);
 elements.formatToolbar.addEventListener("click", applyFormattingAction);
 elements.autoTitle.addEventListener("keydown", handleTitleKeydown);
 elements.autoTitle.addEventListener("blur", renameSelectedNoteFromTitle);
@@ -594,21 +564,13 @@ function setAppSection(section) {
   closeMobileNotesSidebar();
   const previousSection = activeAppSection;
   const normalizedSection = section === "revision" ? "revise" : section;
-  activeAppSection = ["home", "revise", "practice", "progress", "notes", "teacher", "contact"].includes(normalizedSection)
+  activeAppSection = ["home", "revise", "practice", "progress", "notes", "contact"].includes(normalizedSection)
     ? normalizedSection
     : "home";
   const isNotes = activeAppSection === "notes";
   const isStudent = ["home", "revise", "practice", "progress"].includes(activeAppSection);
-  const isRevision = isStudent || activeAppSection === "teacher";
-  const isTeacher = activeAppSection === "teacher";
+  const isRevision = isStudent;
   const isContact = activeAppSection === "contact";
-
-  if (isTeacher) {
-    activeLearningMode = "teacher";
-  } else if (isStudent) {
-    activeLearningMode = "student";
-  }
-  localStorage.setItem(LEARNING_MODE_KEY, activeLearningMode);
 
   elements.notesColumn.hidden = !isNotes;
   elements.editorPanel.hidden = !isNotes;
@@ -617,7 +579,6 @@ function setAppSection(section) {
   elements.notesSidebarContext.hidden = !isNotes;
   elements.appView.classList.toggle("notes-mode", isNotes);
   elements.appView.classList.toggle("revision-mode", isRevision);
-  elements.appView.classList.toggle("teacher-app-mode", isTeacher);
   elements.appView.classList.toggle("contact-mode", isContact);
   elements.revisionView.dataset.studentView = isStudent ? activeAppSection : "";
 
@@ -628,13 +589,10 @@ function setAppSection(section) {
     if (button.closest(".topbar-section-switch")) {
       button.setAttribute("aria-current", isActiveSection ? "page" : "false");
     }
-    button.classList.toggle("locked-section", button.dataset.appSection === "teacher" && !canUseTeacherMode());
   });
 
   if (isRevision) {
-    if (!isTeacher) {
-      recordActivityEvent({ type: "revision_started", topicId: activeRevisionTopicId });
-    }
+    recordActivityEvent({ type: "revision_started", topicId: activeRevisionTopicId });
     renderRevisionPage();
   }
 
@@ -849,15 +807,13 @@ function startRevisionSession(topicId, mode = "full", cardIds = null) {
 }
 
 function recordCardAttempt(cardId, topicId, confidence, options = {}) {
-  const classId = options.classId || getActiveRevisionClassId();
   const attempt = {
     id: createLocalId("attempt"),
     userId: currentUser?.id,
     cardId,
     topicId,
     deckId: topicId,
-    classId,
-    assignmentId: options.assignmentId,
+    classId: null,
     confidence,
     revealedAnswer: true,
     responseTimeMs: options.responseTimeMs,
@@ -1047,7 +1003,7 @@ async function syncRevisionAttempt(attempt) {
         deckId: topic.id,
         clientAttemptId: attempt.id,
         cardId: serverCardId,
-        classId: attempt.classId || null,
+        classId: null,
         confidence: attempt.confidence,
         quizCorrect: attempt.quizCorrect,
         responseTimeMs: attempt.responseTimeMs,
@@ -1230,8 +1186,7 @@ function getNextRevisionTopic(topicId) {
 }
 
 function recordActivityEvent(event) {
-  const revisionActivityTypes = new Set(["revision_started", "card_rated", "deck_completed"]);
-  const classId = event.classId || (revisionActivityTypes.has(event.type) ? getActiveRevisionClassId() : undefined);
+  const classId = null;
   const activity = {
     id: createLocalId("activity"),
     userId: currentUser?.id,
@@ -2090,11 +2045,11 @@ function getLegalPageContent(page) {
           <li>Student workspace data is used to run notes, revision and class features.</li>
           <li>Payment processing is handled securely by Stripe when subscriptions are enabled.</li>
         </ul>
-        <p>This page is a product-facing summary. Formal legal wording should be reviewed for larger school agreements.</p>`,
+        <p>This is a summary of how your personal revision workspace handles data.</p>`,
     },
     terms: {
       title: "Terms of Service",
-      html: `<p>Neat Notes is an education workspace for note taking, OCR Computer Science revision and classroom support.</p>
+      html: `<p>Neat Notes is a personal OCR A-Level Computer Science revision workspace.</p>
         <ul>
           <li>Users are responsible for the content they add to notes and collaboration spaces.</li>
           <li>Accounts may be limited or suspended if the service is misused.</li>
@@ -2111,8 +2066,7 @@ function getLegalPageContent(page) {
       html: `<p>BreakellSystems is building Neat Notes with UK education workflows in mind.</p>
         <ul>
           <li>Only collect data needed to run accounts, notes, revision progress, payments and support.</li>
-          <li>Use school-facing exports and teacher dashboards carefully, with clear class membership context.</li>
-          <li>Review GDPR documentation, retention rules and processor agreements before institution rollout.</li>
+          <li>Review your account data and export personal notes and revision history in Settings.</li>
         </ul>`,
     },
     billing: {
@@ -2121,7 +2075,7 @@ function getLegalPageContent(page) {
         <ul>
           <li>Students can start on the Free plan and upgrade to Pro.</li>
           <li>Subscribers manage payment methods, invoices and cancellation through Stripe.</li>
-          <li>School and institution billing can be handled by enquiry until a full sales workflow is added.</li>
+          <li>Contact support if you need help with an existing subscription.</li>
         </ul>`,
     },
   };
@@ -2221,17 +2175,9 @@ function handleLandingClick(event) {
     return;
   }
 
-  if (action === "teacher") {
-    openDemoWorkspace({ section: "teacher", teacher: true });
-    return;
-  }
-
-  if (action === "contact" || action === "school-contact") {
+  if (action === "contact") {
     openDemoWorkspace({ section: "contact" });
     window.setTimeout(() => {
-      if (action === "school-contact" && elements.contactReason) {
-        elements.contactReason.value = "School setup";
-      }
       elements.contactName?.focus();
     }, 80);
     return;
@@ -2259,8 +2205,6 @@ function handleTopbarBrandAction() {
 function exitDemoWorkspace() {
   localStorage.removeItem(LANDING_DISMISSED_KEY);
   activeAppSection = "home";
-  activeLearningMode = "student";
-  localStorage.setItem(LEARNING_MODE_KEY, activeLearningMode);
   elements.authView.hidden = true;
   elements.appView.hidden = true;
   elements.landingView.hidden = false;
@@ -2274,10 +2218,6 @@ function openDemoWorkspace(options = {}) {
   ensureDemoWorkspace({ reset: false });
   elements.landingView.hidden = true;
   elements.appView.hidden = false;
-  if (options.teacher) {
-    activeLearningMode = "teacher";
-    localStorage.setItem(LEARNING_MODE_KEY, "teacher");
-  }
   activeComponentId = "h446-01";
   setAppSection(options.section === "contact" ? "contact" : "revise");
   if (options.section !== "contact") {
@@ -2286,10 +2226,7 @@ function openDemoWorkspace(options = {}) {
     openNextAdaptiveSessionTopic();
   }
   render();
-  if (options.teacher) {
-    renderRevisionPage();
-  }
-  trackEvent("demo_workspace_opened", { section: options.section || "home", teacher: Boolean(options.teacher) });
+  trackEvent("demo_workspace_opened", { section: options.section || "home" });
 }
 
 function hideLaunchOverlay() {
@@ -2605,10 +2542,8 @@ function loadGuestApp(options = {}) {
       workspaceLimit: 1,
       features: {
         collaboration: false,
-        classroomSpaces: false,
         pdfExport: false,
         studyPack: false,
-        teacherDashboard: false,
         versionHistory: false,
         fullRevisionLibrary: false,
         quickPractice: true,
@@ -2655,8 +2590,6 @@ async function loadApp() {
   pruneRevisionTopicCardsForCurrentPlan();
   renderPlan();
 
-  await loadAccountLearningWorkspace();
-
   await loadWorkspaces();
   await selectWorkspace(activeWorkspaceId || workspaces[0]?.id);
   renderAccountChrome();
@@ -2664,35 +2597,6 @@ async function loadApp() {
   maybeOpenOnboarding();
 }
 
-async function loadAccountLearningWorkspace() {
-  if (isGuestMode || !currentUser) return;
-  const [classResponse, assignmentResponse, centreResponse] = await Promise.all([
-    api("/api/classes"),
-    api("/api/assignments"),
-    currentUser.isTeacher ? api("/api/centres") : Promise.resolve({ centres: [] }),
-  ]);
-  classGroups = (classResponse.classes || []).map(normaliseServerClass);
-  teacherAssignments = assignmentResponse.assignments || [];
-  centres = centreResponse.centres || [];
-  activeClassId = classGroups.some((group) => group.id === activeClassId) ? activeClassId : classGroups[0]?.id || null;
-  activeStudentClassId = classGroups.some((group) => group.id === activeStudentClassId) ? activeStudentClassId : classGroups[0]?.id || null;
-  classMemberships = currentUser.isTeacher ? [] : classGroups.map((group) => ({
-    id: `server-membership-${group.id}`,
-    classId: group.id,
-    userId: currentUser.id,
-    studentName: currentUser.name,
-    studentEmail: currentUser.email,
-    role: "student",
-    status: "active",
-    joinedAt: group.membership?.joined_at || group.createdAt,
-  }));
-  if (currentUser.isTeacher && activeClassId) {
-    await loadTeacherClassEvidence(activeClassId);
-  } else if (currentUser.isTeacher) {
-    activityEvents = [];
-    serverStudentTopicConfidence = new Map();
-  }
-}
 
 async function loadAccountLearningHistory() {
   const userId = currentUser?.id;
@@ -2735,51 +2639,9 @@ async function loadAccountLearningHistory() {
   adaptivePlanPreview = null;
 }
 
-function normaliseServerClass(group) {
-  return {
-    id: group.id,
-    centreId: group.centreId,
-    teacherId: group.teacherId,
-    name: group.name,
-    subject: group.subject,
-    examBoard: group.examBoard,
-    yearGroup: group.yearGroup,
-    description: group.description,
-    inviteCode: group.joinCode,
-    joinCodeEnabled: group.joinCodeEnabled,
-    studentCount: group.studentCount,
-    membership: group.membership,
-    createdAt: group.createdAt,
-    updatedAt: group.updatedAt,
-  };
-}
-
-async function loadTeacherClassEvidence(classId) {
-  const response = await api(`/api/classes/${encodeURIComponent(classId)}/insights`);
-  const dashboard = response.dashboard || {};
-  const students = response.students || [];
-  classMemberships = students.map((student) => ({
-    id: `server-membership-${classId}-${student.id}`,
-    classId,
-    userId: student.id,
-    studentName: student.name,
-    studentEmail: student.email,
-    role: "student",
-    status: "active",
-    joinedAt: student.joined_at,
-  }));
-  activityEvents = dashboard.recentActivity || [];
-  serverStudentTopicConfidence = new Map();
-  const studentDashboards = response.studentProfiles || [];
-  studentDashboards.filter(Boolean).forEach((studentDashboard) => {
-    studentDashboard.topics.forEach((topic) => {
-      serverStudentTopicConfidence.set(`${studentDashboard.student.id}:${topic.topicId || topic.id}`, topic.confidence);
-    });
-  });
-}
 
 function maybeOpenOnboarding() {
-  if (isGuestMode || !currentUser || currentUser.isTeacher || accountProfile?.studentProfile?.onboarding_completed_at) return;
+  if (isGuestMode || !currentUser || accountProfile?.studentProfile?.onboarding_completed_at) return;
   openOnboarding();
 }
 
@@ -3070,187 +2932,6 @@ When explaining performance, link clock speed, cores and cache to how quickly in
 - [ ] Compare Von Neumann and Harvard architecture.`;
 }
 
-function seedDemoProgress() {
-  const topic = REVISION_TOPICS.find((item) => item.id === "cs-1-1-1");
-  if (!topic) return;
-
-  const todayKey = getStudyDayKey();
-  const now = Date.now();
-  const demoClassId = seedDemoTeacherWorkspace();
-
-  getTopicCards(topic).slice(0, 18).forEach((card, index) => {
-    const cardKey = getRevisionCardKey(topic, card);
-    completedRevisionCards.add(cardKey);
-    if (!cardAttempts.some((attempt) => attempt.cardId === cardKey && attempt.source === "demo")) {
-      cardAttempts.unshift({
-        id: createLocalId("demo-attempt"),
-        userId: "guest",
-        cardId: cardKey,
-        topicId: topic.id,
-        deckId: topic.id,
-        classId: null,
-        confidence: index < 12 ? "confident" : "needs_practice",
-        quizCorrect: index < 12,
-        source: "demo",
-        sessionId: revisionSession?.id,
-        createdAt: new Date(now - index * 42 * 60 * 1000).toISOString(),
-      });
-    }
-  });
-
-  getTopicCards(topic).slice(0, 12).forEach((card, index) => {
-    const cardKey = getRevisionCardKey(topic, card);
-    if (!cardAttempts.some((attempt) => attempt.cardId === cardKey && attempt.source === "demo-class")) {
-      cardAttempts.unshift({
-        id: createLocalId("demo-class-attempt"),
-        userId: index % 2 === 0 ? "demo-student-ava" : "demo-student-sam",
-        cardId: cardKey,
-        topicId: topic.id,
-        deckId: topic.id,
-        classId: demoClassId,
-        confidence: index < 7 ? "confident" : "needs_practice",
-        quizCorrect: index < 7,
-        source: "demo-class",
-        sessionId: "demo-class-session",
-        createdAt: new Date(now - index * 75 * 60 * 1000).toISOString(),
-      });
-    }
-  });
-
-  studyHistory = {
-    ...studyHistory,
-    [todayKey]: {
-      cards: Math.max(Number(studyHistory[todayKey]?.cards) || 0, 6),
-      topics: Array.from(new Set([...(studyHistory[todayKey]?.topics || []), topic.id])),
-      updatedAt: new Date().toISOString(),
-    },
-  };
-  saveStudyHistory();
-
-  neatQuizProgress = {
-    ...neatQuizProgress,
-    [topic.id]: {
-      attempts: Math.max(Number(neatQuizProgress[topic.id]?.attempts) || 0, 1),
-      bestScore: Math.max(Number(neatQuizProgress[topic.id]?.bestScore) || 0, 4),
-      bestStreak: Math.max(Number(neatQuizProgress[topic.id]?.bestStreak) || 0, 3),
-      lastScore: Math.max(Number(neatQuizProgress[topic.id]?.lastScore) || 0, 4),
-      totalQuestions: Math.max(Number(neatQuizProgress[topic.id]?.totalQuestions) || 0, 5),
-      lastCompletedAt: neatQuizProgress[topic.id]?.lastCompletedAt || new Date(now - 2 * 60 * 60 * 1000).toISOString(),
-    },
-  };
-  saveNeatQuizProgress();
-
-  if (!activityEvents.some((event) => event.source === "demo-onboarding")) {
-    activityEvents = [
-      {
-        id: createLocalId("demo-activity"),
-        userId: "guest",
-        classId: demoClassId,
-        type: "quiz_completed",
-        topicId: topic.id,
-        source: "demo-onboarding",
-        createdAt: new Date(now - 45 * 60 * 1000).toISOString(),
-      },
-      {
-        id: createLocalId("demo-activity"),
-        userId: "guest",
-        classId: demoClassId,
-        type: "note_created",
-        topicId: topic.id,
-        source: "demo-onboarding",
-        createdAt: new Date(now - 3 * 60 * 60 * 1000).toISOString(),
-      },
-      ...activityEvents,
-    ].slice(0, 800);
-  }
-
-  cardAttempts = cardAttempts.slice(0, 1200);
-  saveLocalArray(CARD_ATTEMPTS_KEY, cardAttempts);
-  saveLocalArray(ACTIVITY_EVENTS_KEY, activityEvents);
-}
-
-function seedDemoTeacherWorkspace() {
-  const centreId = "demo-centre-breakell";
-  const classId = "demo-class-ocr-y12";
-  const now = new Date().toISOString();
-
-  if (!centres.some((centre) => centre.id === centreId)) {
-    centres = [
-      {
-        id: centreId,
-        name: "BreakellSystems Demo College",
-        type: "college",
-        code: "CENTRE-DEMO",
-        createdAt: now,
-      },
-      ...centres,
-    ];
-    saveLocalArray(CENTRES_KEY, centres);
-  }
-
-  if (!classGroups.some((group) => group.id === classId)) {
-    classGroups = [
-      {
-        id: classId,
-        centreId,
-        name: "Year 12 OCR Computer Science",
-        subject: "Computer Science",
-        examBoard: "OCR A-Level",
-        yearGroup: "Year 12",
-        description: "Demo class for teacher insight, topic confidence and assignment workflows.",
-        inviteCode: "NN-DEMO",
-        students: [],
-        createdAt: now,
-        updatedAt: now,
-      },
-      ...classGroups,
-    ];
-    saveLocalArray(CLASS_GROUPS_KEY, classGroups);
-  }
-
-  const demoStudents = [
-    { id: "demo-membership-ava", userId: "demo-student-ava", studentName: "Ava Patel", studentEmail: "ava.demo@example.com" },
-    { id: "demo-membership-sam", userId: "demo-student-sam", studentName: "Sam Taylor", studentEmail: "sam.demo@example.com" },
-    { id: "demo-membership-mia", userId: "demo-student-mia", studentName: "Mia Jones", studentEmail: "mia.demo@example.com" },
-  ];
-  const existingMembershipIds = new Set(classMemberships.map((membership) => membership.id));
-  const missingMemberships = demoStudents
-    .filter((student) => !existingMembershipIds.has(student.id))
-    .map((student, index) => ({
-      ...student,
-      classId,
-      role: "student",
-      status: "active",
-      joinedAt: new Date(Date.now() - (index + 2) * 24 * 60 * 60 * 1000).toISOString(),
-    }));
-
-  if (missingMemberships.length) {
-    classMemberships = [...missingMemberships, ...classMemberships];
-    saveClassMemberships();
-  }
-
-  if (!teacherAssignments.some((assignment) => assignment.id === "demo-assignment-111")) {
-    teacherAssignments = [
-      {
-        id: "demo-assignment-111",
-        classId,
-        topicId: "cs-1-1-1",
-        title: "Structure of the processor recovery task",
-        taskType: "flashcards_quiz",
-        instructions: "Complete the remaining flashcards, then score 4/5 or better in Quick Practice.",
-        dueAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-        status: "active",
-        createdAt: now,
-      },
-      ...teacherAssignments,
-    ];
-    saveLocalArray(TEACHER_ASSIGNMENTS_KEY, teacherAssignments);
-  }
-
-  activeClassId = activeClassId || classId;
-  activeCentreId = activeCentreId || centreId;
-  return classId;
-}
 
 function saveGuestState(state = null) {
   const nextNotes = state ? state.notes : collectGuestNotesForStorage();
@@ -3452,13 +3133,6 @@ async function handleBillingAction(event) {
   if (!button) return;
   const plan = button.dataset.plan;
 
-  if (plan === "institution") {
-    closePlansModal();
-    setAppSection("contact");
-    elements.upgradeMessage.textContent = "Institution plans are handled as school partnership enquiries.";
-    elements.upgradeMessage.className = "topbar-plan-message success";
-    return;
-  }
 
   if (isGuestMode) {
     closePlansModal();
@@ -3479,7 +3153,7 @@ async function handleBillingAction(event) {
     elements.upgradeMessage.textContent = error.message;
     elements.upgradeMessage.className = "topbar-plan-message error";
     button.disabled = false;
-    button.textContent = plan === "teacher" ? "Start Teacher plan" : "Upgrade to Pro";
+    button.textContent = "Upgrade to Pro";
   }
 }
 
@@ -3912,7 +3586,6 @@ function renderAccountChrome() {
   menuLabel.setAttribute("aria-label", isSignedIn ? `Signed in as ${currentUser.name || "your account"}. Open account menu` : "Open account and help menu");
   document.querySelectorAll('[data-global-action="login"], [data-global-action="signup"]').forEach((button) => { button.hidden = isSignedIn; });
   document.querySelector('[data-global-action="logout"]').hidden = !isSignedIn;
-  document.querySelectorAll(".teacher-entry-button").forEach((button) => { button.hidden = !currentUser?.isTeacher; });
   elements.guestAccountActions.hidden = isSignedIn;
   elements.signedInAccountActions.hidden = !isSignedIn;
   elements.topbarBrandButton.setAttribute("aria-label", isSignedIn ? "Return to Today" : "Exit demo and return to the Neat Notes homepage");
@@ -3996,957 +3669,6 @@ function getTopicLearningSummary(topicId, items = getAdaptiveLearningItems()) {
   return { state: "Learning", score, conceptsDue };
 }
 
-function renderLearningMode() {
-  elements.revisionView.classList.toggle("teacher-mode-active", activeLearningMode === "teacher");
-  const legacyModeBar = elements.learningModeSwitch.closest(".learning-mode-bar");
-  if (legacyModeBar) {
-    legacyModeBar.hidden = true;
-  }
-  document.querySelectorAll(".student-revision-section").forEach((section) => {
-    section.hidden = activeLearningMode === "teacher";
-  });
-  elements.teacherModePanel.hidden = activeLearningMode !== "teacher";
-
-  elements.learningModeSwitch.querySelectorAll("[data-learning-mode]").forEach((button) => {
-    const isActive = button.dataset.learningMode === activeLearningMode;
-    button.classList.toggle("active", isActive);
-    button.setAttribute("aria-selected", String(isActive));
-  });
-}
-
-function switchLearningMode(event) {
-  const button = event.target.closest("[data-learning-mode]");
-  if (!button) return;
-
-  activeLearningMode = button.dataset.learningMode === "teacher" ? "teacher" : "student";
-  localStorage.setItem(LEARNING_MODE_KEY, activeLearningMode);
-  renderRevisionPage();
-}
-
-function renderStudentClassPanel() {
-  const memberships = getStudentClassMemberships();
-  elements.studentClassPanel.hidden = memberships.length === 0;
-  if (!memberships.length) return;
-  if (memberships.length === 1 && !activeStudentClassId) {
-    activeStudentClassId = memberships[0].classId;
-    localStorage.setItem(ACTIVE_STUDENT_CLASS_KEY, activeStudentClassId);
-  }
-
-  if (activeStudentClassId && !memberships.some((membership) => membership.classId === activeStudentClassId)) {
-    activeStudentClassId = memberships[0]?.classId || null;
-    if (activeStudentClassId) {
-      localStorage.setItem(ACTIVE_STUDENT_CLASS_KEY, activeStudentClassId);
-    } else {
-      localStorage.removeItem(ACTIVE_STUDENT_CLASS_KEY);
-    }
-  }
-
-  const activeMembership = memberships.find((membership) => membership.classId === activeStudentClassId);
-  const activeClass = activeMembership ? getClassById(activeMembership.classId) : null;
-  const invalidCodeAttribute = studentClassJoinMessage?.type === "error" ? ` aria-invalid="true"` : "";
-  const message = studentClassJoinMessage?.text
-    ? `<p id="join-class-status" class="status-message ${escapeHtml(studentClassJoinMessage.type || "")}" role="status">${escapeHtml(studentClassJoinMessage.text)}</p>`
-    : `<p id="join-class-status" class="status-message" role="status"></p>`;
-
-  elements.studentClassPanel.innerHTML = `
-    <div class="student-class-head">
-      <div>
-        <p class="eyebrow">Class</p>
-        <h3>${memberships.length ? "Your teacher classes" : "Join a class"}</h3>
-        <p>Enter the class code your teacher gave you. Once joined, your teacher can see your revision activity and topic confidence for that class.</p>
-      </div>
-      <form class="join-class-form" data-join-class-form novalidate>
-        <label for="join-class-code">Class code</label>
-        <div class="class-code-row">
-          <input id="join-class-code" name="classCode" data-class-code-input type="text" value="${escapeHtml(studentClassCodeDraft)}" placeholder="e.g. 12B-CS-7FQ" aria-describedby="join-class-status" autocomplete="off"${invalidCodeAttribute} />
-          <button type="button" data-paste-class-code>Paste</button>
-        </div>
-        <div class="join-class-actions">
-          <button type="submit">Join class</button>
-          <button type="button" data-clear-class-code>Cancel</button>
-        </div>
-        ${message}
-      </form>
-    </div>
-    ${isGuestMode ? `<p class="class-membership-notice">You are joining as a guest. Create an account to keep your class membership saved across devices.</p>` : ""}
-    <p class="class-membership-notice">When you join a class, your teacher can see revision activity, card confidence, and topic progress linked to that class.</p>
-    ${
-      memberships.length
-        ? `<div class="student-class-context">
-            <label for="student-class-context">Revising for</label>
-            <select id="student-class-context" data-student-class-context>
-              <option value="">Personal revision</option>
-              ${memberships.map((membership) => {
-                const group = getClassById(membership.classId);
-                if (!group) return "";
-                return `<option value="${escapeHtml(group.id)}" ${group.id === activeStudentClassId ? "selected" : ""}>${escapeHtml(group.name)}</option>`;
-              }).join("")}
-            </select>
-            ${activeClass ? `<span>Current class context: ${escapeHtml(activeClass.name)}</span>` : `<span>Personal revision is not linked to a teacher class.</span>`}
-          </div>
-          <div class="student-class-list">
-            ${memberships.map(renderStudentClassCard).join("")}
-          </div>`
-        : `<div class="student-class-empty"><strong>Join a class using the code your teacher gave you.</strong><span>Class-linked revision assignments are shown here when your teacher sets them.</span></div>`
-    }`;
-}
-
-async function handleStudentClassPanelSubmit(event) {
-  const form = event.target.closest("[data-join-class-form]");
-  if (!form) return;
-  event.preventDefault();
-
-  const input = form.querySelector("[data-class-code-input]");
-  const rawCode = input.value;
-  const normalisedCode = normaliseClassCode(rawCode);
-  studentClassCodeDraft = normalisedCode || rawCode.trim();
-  input.removeAttribute("aria-invalid");
-
-  if (!normalisedCode) {
-    input.setAttribute("aria-invalid", "true");
-    setStudentClassMessage("Enter a class code to continue.", "error");
-    return;
-  }
-
-  if (!isValidNormalisedClassCode(normalisedCode)) {
-    input.setAttribute("aria-invalid", "true");
-    setStudentClassMessage("That class code does not look right. Check it and try again.", "error");
-    return;
-  }
-
-  if (!isGuestMode && currentUser) {
-    const submitButton = form.querySelector('button[type="submit"]');
-    submitButton.disabled = true;
-    setStudentClassMessage("Checking class code...", "");
-    try {
-      const preview = await api("/api/classes/preview", { method: "POST", body: { code: normalisedCode } });
-      const classPreview = preview.class;
-      const confirmed = window.confirm(
-        `Join ${classPreview.name}?\n\n${classPreview.examBoard} ${classPreview.subject}${classPreview.teacherName ? `\nTeacher: ${classPreview.teacherName}` : ""}`,
-      );
-      if (!confirmed) {
-        setStudentClassMessage("Class join cancelled.", "");
-        return;
-      }
-      const response = await api("/api/classes/join", { method: "POST", body: { code: normalisedCode } });
-      await loadAccountLearningWorkspace();
-      studentClassCodeDraft = "";
-      input.value = "";
-      setStudentClassMessage(response.message || `You have joined ${classPreview.name}.`, "success");
-      renderRevisionPage();
-    } catch (error) {
-      input.setAttribute("aria-invalid", "true");
-      setStudentClassMessage(error.message, "error");
-    } finally {
-      submitButton.disabled = false;
-    }
-    return;
-  }
-
-  const classGroup = findClassByInviteCode(normalisedCode);
-  if (!classGroup) {
-    input.setAttribute("aria-invalid", "true");
-    setStudentClassMessage("We could not find a class with that code.", "error");
-    return;
-  }
-
-  if (isAlreadyClassMember(classGroup.id)) {
-    input.setAttribute("aria-invalid", "true");
-    setStudentClassMessage("You have already joined this class.", "error");
-    return;
-  }
-
-  const membership = createClassMembership(classGroup);
-  studentClassCodeDraft = "";
-  input.value = "";
-  setStudentClassMessage(`You have joined ${classGroup.name}.`, "success");
-  recordActivityEvent({ type: "class_joined", classId: membership.classId });
-  renderStudentClassPanel();
-}
-
-function handleStudentClassPanelClick(event) {
-  if (event.target.closest("[data-clear-class-code]")) {
-    studentClassJoinMessage = { text: "", type: "" };
-    studentClassCodeDraft = "";
-    renderStudentClassPanel();
-    return;
-  }
-
-  const pasteButton = event.target.closest("[data-paste-class-code]");
-  if (pasteButton) {
-    const input = elements.studentClassPanel.querySelector("[data-class-code-input]");
-    const pasteRequest = navigator.clipboard?.readText?.();
-    if (!pasteRequest) {
-      setStudentClassMessage("Paste is not available in this browser. Type the code instead.", "error");
-      return;
-    }
-    pasteRequest.then((text) => {
-      input.value = text.trim();
-      input.focus();
-    }).catch(() => {
-      setStudentClassMessage("Paste is not available in this browser. Type the code instead.", "error");
-      renderStudentClassPanel();
-    });
-    return;
-  }
-
-  if (event.target.closest("[data-scroll-revision]")) {
-    document.querySelector(".revision-stage")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    return;
-  }
-
-  const leaveButton = event.target.closest("[data-leave-class]");
-  if (leaveButton) {
-    leaveStudentClass(leaveButton.dataset.leaveClass);
-  }
-}
-
-function handleStudentClassPanelChange(event) {
-  const selector = event.target.closest("[data-student-class-context]");
-  if (!selector) return;
-
-  activeStudentClassId = selector.value || null;
-  if (activeStudentClassId) {
-    localStorage.setItem(ACTIVE_STUDENT_CLASS_KEY, activeStudentClassId);
-  } else {
-    localStorage.removeItem(ACTIVE_STUDENT_CLASS_KEY);
-  }
-  renderStudentClassPanel();
-}
-
-function setStudentClassMessage(text, type = "") {
-  studentClassJoinMessage = { text, type };
-  renderStudentClassPanel();
-}
-
-function normaliseClassCode(value) {
-  return String(value || "")
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .replace(/-+/g, "-");
-}
-
-function isValidNormalisedClassCode(code) {
-  return /^[A-Z0-9]{2,}(?:-[A-Z0-9]{2,})+$/.test(code);
-}
-
-function findClassByInviteCode(code) {
-  const target = normaliseClassCode(code);
-  return classGroups.find((group) => normaliseClassCode(group.inviteCode) === target);
-}
-
-function createClassMembership(classGroup) {
-  const membership = {
-    id: createLocalId("membership"),
-    classId: classGroup.id,
-    userId: currentUser?.id,
-    studentName: currentUser?.name || "Guest student",
-    studentEmail: currentUser?.email || undefined,
-    role: "student",
-    joinedAt: new Date().toISOString(),
-    status: "active",
-  };
-
-  classMemberships = [membership, ...classMemberships];
-  saveClassMemberships();
-  activeStudentClassId = classGroup.id;
-  localStorage.setItem(ACTIVE_STUDENT_CLASS_KEY, activeStudentClassId);
-  return membership;
-}
-
-function saveClassMemberships() {
-  saveLocalArray(CLASS_MEMBERSHIPS_KEY, classMemberships);
-}
-
-function isAlreadyClassMember(classId) {
-  return getStudentClassMemberships().some((membership) => membership.classId === classId);
-}
-
-function getStudentClassMemberships() {
-  const userId = currentUser?.id;
-  return classMemberships.filter((membership) => {
-    const belongsToCurrentUser = userId ? membership.userId === userId : !membership.userId;
-    return membership.role === "student" && membership.status === "active" && belongsToCurrentUser && getClassById(membership.classId);
-  });
-}
-
-function getClassMemberships(classId) {
-  if (!classId) return [];
-  return classMemberships.filter((membership) => membership.classId === classId && membership.role === "student" && membership.status === "active");
-}
-
-function getClassTopicAttempts(topicId, classId) {
-  if (!classId && currentUser?.isTeacher && !isGuestMode) return [];
-  return cardAttempts.filter((attempt) => attempt.topicId === topicId && (!classId || attempt.classId === classId));
-}
-
-function getActiveRevisionClassId() {
-  return getStudentClassMemberships().some((membership) => membership.classId === activeStudentClassId)
-    ? activeStudentClassId
-    : undefined;
-}
-
-function getClassById(classId) {
-  return classGroups.find((group) => group.id === classId);
-}
-
-function getCentreName(centreId) {
-  return centres.find((centre) => centre.id === centreId)?.name || "";
-}
-
-function renderStudentClassCard(membership) {
-  const group = getClassById(membership.classId);
-  if (!group) return "";
-
-  const centreName = getCentreName(group.centreId);
-  return `<article class="student-class-card ${group.id === activeStudentClassId ? "active" : ""}">
-    <div>
-      <span>Class</span>
-      <h4>${escapeHtml(group.name)}</h4>
-      <p>${escapeHtml(group.examBoard)} ${escapeHtml(group.subject)}</p>
-      ${centreName ? `<p>${escapeHtml(centreName)}</p>` : ""}
-      <small>Joined ${formatDate(membership.joinedAt)} · ${escapeHtml(membership.status)}</small>
-    </div>
-    <div class="student-class-card-actions">
-      <span>Joined via teacher code</span>
-      <p>Your teacher can view revision activity and topic confidence for this class.</p>
-      <button type="button" data-scroll-revision>Go to Revision</button>
-      <button type="button" data-leave-class="${escapeHtml(group.id)}">Leave class</button>
-    </div>
-  </article>`;
-}
-
-async function leaveStudentClass(classId) {
-  const group = getClassById(classId);
-  const confirmed = window.confirm("Leave this class? Your personal notes and revision history will stay in your workspace, but your teacher will no longer see new activity for this class.");
-  if (!confirmed) return;
-
-  if (!isGuestMode && currentUser) {
-    try {
-      await api(`/api/classes/${encodeURIComponent(classId)}/members/me`, { method: "DELETE" });
-      await loadAccountLearningWorkspace();
-      if (activeStudentClassId === classId) {
-        activeStudentClassId = classGroups[0]?.id || null;
-      }
-      setStudentClassMessage(group ? `You have left ${group.name}.` : "You have left this class.", "success");
-      renderRevisionPage();
-    } catch (error) {
-      setStudentClassMessage(error.message, "error");
-    }
-    return;
-  }
-
-  classMemberships = classMemberships.map((membership) =>
-    membership.classId === classId && membership.status === "active"
-      ? { ...membership, status: "left", leftAt: new Date().toISOString() }
-      : membership
-  );
-  saveClassMemberships();
-  if (activeStudentClassId === classId) {
-    activeStudentClassId = getStudentClassMemberships()[0]?.classId || null;
-    if (activeStudentClassId) {
-      localStorage.setItem(ACTIVE_STUDENT_CLASS_KEY, activeStudentClassId);
-    } else {
-      localStorage.removeItem(ACTIVE_STUDENT_CLASS_KEY);
-    }
-  }
-  setStudentClassMessage(group ? `You have left ${group.name}.` : "You have left this class.", "success");
-}
-
-function renderTeacherMode() {
-  if (!canUseTeacherMode()) {
-    renderTeacherUpgradePanel();
-    return;
-  }
-
-  if (!classGroups.some((group) => group.id === activeClassId)) {
-    activeClassId = classGroups[0]?.id || null;
-  }
-  if (!centres.some((centre) => centre.id === activeCentreId)) {
-    activeCentreId = centres[0]?.id || null;
-  }
-  if (activeTeacherSection === "topic-insights" || activeTeacherSection === "centre-settings") {
-    activeTeacherSection = activeTeacherSection === "topic-insights" ? "heatmap" : "settings";
-  }
-
-  const teacherSections = [
-    ["dashboard", "Overview"],
-    ["classes", "Classes"],
-    ["students", "Students"],
-    ["assignments", "Assignments"],
-    ["heatmap", "Insights"],
-    ["content", "Content"],
-    ["reports", "Reports"],
-    ["settings", "Settings"],
-  ];
-
-  elements.teacherModePanel.innerHTML = `
-    <header class="teacher-hero">
-      <div>
-        <p class="eyebrow">Teacher workspace</p>
-        <h2>Plan the next useful intervention</h2>
-        <p>Review class evidence, identify misconceptions and set focused OCR Computer Science practice.</p>
-      </div>
-      <div class="teacher-preview-card">
-        <span>${isGuestMode ? "Preview mode" : "Teacher workspace"}</span>
-        <strong>${isGuestMode ? "Create an account to save classes and invite students." : "Class data is saved in your workspace."}</strong>
-      </div>
-    </header>
-    <nav class="teacher-tabs" aria-label="Teacher mode sections">
-      ${teacherSections.map(([section, label]) => {
-        return `<button class="${section === activeTeacherSection ? "active" : ""}" type="button" data-teacher-section="${section}">${label}</button>`;
-      }).join("")}
-    </nav>
-    ${teacherActionMessage.text ? `<p class="teacher-action-message ${escapeHtml(teacherActionMessage.type)}" role="status">${escapeHtml(teacherActionMessage.text)}</p>` : ""}
-    ${renderTeacherSection()}`;
-}
-
-function canUseTeacherMode() {
-  return Boolean(currentUser && !isGuestMode && hasFeature("teacherDashboard"));
-}
-
-function renderTeacherUpgradePanel() {
-  const isSignedIn = Boolean(currentUser) && !isGuestMode;
-  const primaryAction = isSignedIn
-    ? `<button type="button" data-open-teacher-plan>View Teacher plan</button>`
-    : `<button type="button" data-teacher-auth="signup">Create account</button>`;
-  const secondaryAction = isSignedIn
-    ? `<button class="secondary" type="button" data-app-section="revision">Back to student revision</button>`
-    : `<button class="secondary" type="button" data-teacher-auth="login">Log in</button>`;
-
-  elements.teacherModePanel.innerHTML = `
-    <section class="teacher-upgrade-panel" aria-label="Teacher mode locked">
-      <div>
-        <p class="eyebrow">Teacher Mode · Locked</p>
-        <h2>Classroom intelligence is part of the Teacher plan.</h2>
-        <p>Create classes, issue revision tasks, view weak-topic heatmaps, and export intervention reports once a Teacher or Institution plan is active.</p>
-      </div>
-      <div class="teacher-upgrade-actions">
-        ${primaryAction}
-        ${secondaryAction}
-      </div>
-      <div class="teacher-upgrade-grid" aria-label="Teacher plan preview">
-        <article>
-          <span>Classes</span>
-          <strong>Teacher-controlled groups</strong>
-          <p>Create OCR Computer Science classes and manage student joins securely.</p>
-        </article>
-        <article>
-          <span>Assignments</span>
-          <strong>Structured revision tasks</strong>
-          <p>Set deck-based tasks and track completion without opening the full teacher dashboard.</p>
-        </article>
-        <article>
-          <span>Insights</span>
-          <strong>Weak-topic heatmaps</strong>
-          <p>Spot whole-class misconceptions and individual students who need support.</p>
-        </article>
-      </div>
-    </section>`;
-}
-
-function renderTeacherSection() {
-  if (activeTeacherSection === "classes") return renderTeacherClassesSection();
-  if (activeTeacherSection === "assignments") return renderTeacherAssignmentsSection();
-  if (activeTeacherSection === "students") return renderTeacherStudentsSection();
-  if (activeTeacherSection === "heatmap") return renderTeacherHeatmapSection();
-  if (activeTeacherSection === "content") return renderTeacherContentSection();
-  if (activeTeacherSection === "reports") return renderTeacherReportsSection();
-  if (activeTeacherSection === "settings") return renderCentreSettingsSection();
-  return renderTeacherDashboardSection();
-}
-
-function renderTeacherDashboardSection() {
-  const activeClass = getActiveClassGroup();
-  const overview = getTeacherClassOverview(activeClass);
-  const weakTopics = activeClass ? getClassTopicInsights().filter((topic) => topic.confidence.totalAttempts).slice(0, 4) : [];
-  const watchlist = activeClass ? getStudentWatchlist() : [];
-
-  return `<section class="teacher-section">
-    <div class="teacher-section-head">
-      <div>
-        <p class="eyebrow">Dashboard</p>
-        <h3>Who needs help, with what, and what should happen next?</h3>
-      </div>
-      ${activeClass ? renderClassSelector() : ""}
-    </div>
-    ${
-      classGroups.length
-        ? `<div class="teacher-metric-grid">
-            <article><span>Students</span><strong>${overview.students}</strong></article>
-            <article><span>Active this week</span><strong>${overview.activeThisWeek}</strong></article>
-            <article><span>Average confidence</span><strong>${overview.averageConfidenceLabel}</strong></article>
-            <article><span>Cards this week</span><strong>${overview.cardsThisWeek}</strong></article>
-            <article><span>Priority topic</span><strong>${escapeHtml(overview.priorityTopic)}</strong></article>
-            <article><span>Need intervention</span><strong>${overview.interventionCount}</strong></article>
-          </div>`
-        : renderTeacherEmptyState("Create a class to start seeing student revision confidence and activity.", "Create class", "classes")
-    }
-    <div class="teacher-dashboard-grid">
-      <article class="teacher-panel-card">
-        <div class="section-title"><span>Topic weakness summary</span><span>${weakTopics.length || "Empty"}</span></div>
-        ${
-          weakTopics.length
-            ? `<div class="topic-insight-list">${weakTopics.map(renderCompactTopicInsight).join("")}</div>`
-            : `<p class="empty-copy">Topic confidence is shown once students rate flashcards.</p>`
-        }
-      </article>
-      <article class="teacher-panel-card">
-        <div class="section-title"><span>Student watchlist</span><span>${watchlist.length || "Clear"}</span></div>
-        ${watchlist.length ? watchlist.map(renderWatchlistItem).join("") : `<p class="empty-copy">No students need attention yet.</p>`}
-      </article>
-      <article class="teacher-panel-card">
-        <div class="section-title"><span>Recent activity</span><span>${activityEvents.length}</span></div>
-        ${renderRecentActivityList()}
-      </article>
-      <article class="teacher-panel-card">
-        <div class="section-title"><span>Suggested teacher actions</span><span>Next steps</span></div>
-        <div class="teacher-action-list">
-          <button type="button" data-create-assignment>Prepare review assignment</button>
-          <button type="button" data-export-interventions>Export intervention CSV</button>
-          <button type="button" data-teacher-section="heatmap">Open topic heatmap</button>
-          <button type="button" data-teacher-section="assignments">Manage assignments</button>
-          <button type="button" data-teacher-section="classes">Invite students</button>
-        </div>
-      </article>
-    </div>
-  </section>`;
-}
-
-function renderTeacherClassesSection() {
-  return `<section class="teacher-section">
-    <div class="teacher-section-head">
-      <div>
-        <p class="eyebrow">Classes</p>
-        <h3>Create classes and invite students with a join code.</h3>
-      </div>
-      ${renderClassSelector()}
-    </div>
-    <div class="teacher-management-grid">
-      <form class="teacher-form" data-create-class>
-        <h4>Create class</h4>
-        <label for="class-name">Class name</label>
-        <input id="class-name" name="name" type="text" placeholder="12B Computer Science" required />
-        <label for="class-subject">Subject</label>
-        <input id="class-subject" name="subject" type="text" value="Computer Science" required />
-        <label for="class-board">Exam board</label>
-        <input id="class-board" name="examBoard" type="text" value="OCR A-Level" required />
-        <label for="class-year">Year group</label>
-        <input id="class-year" name="yearGroup" type="text" placeholder="Year 12" />
-        <label for="class-description">Description</label>
-        <textarea id="class-description" name="description" placeholder="Optional class notes"></textarea>
-        <button type="submit">Create class</button>
-      </form>
-      <div class="teacher-panel-card">
-        <div class="section-title"><span>Class list</span><span>${classGroups.length}</span></div>
-        ${classGroups.length ? classGroups.map(renderClassCard).join("") : renderInlineEmpty("Create your first class and invite students with a join code.")}
-      </div>
-    </div>
-  </section>`;
-}
-
-function renderTeacherAssignmentsSection() {
-  const activeClass = getActiveClassGroup();
-  const activeAssignments = teacherAssignments
-    .filter((assignment) => !activeClass?.id || assignment.classId === activeClass.id)
-    .sort((a, b) => new Date(a.dueAt || 0) - new Date(b.dueAt || 0));
-
-  return `<section class="teacher-section">
-    <div class="teacher-section-head">
-      <div>
-        <p class="eyebrow">Assignments</p>
-        <h3>Set focused revision tasks and monitor class follow-through.</h3>
-      </div>
-      ${renderClassSelector()}
-    </div>
-    <div class="teacher-management-grid">
-      <form class="teacher-form" data-create-assignment-form>
-        <h4>Create assignment</h4>
-        <label for="assignment-class">Class</label>
-        <select id="assignment-class" name="classId" required>
-          ${classGroups.map((group) => `<option value="${escapeHtml(group.id)}" ${group.id === activeClass?.id ? "selected" : ""}>${escapeHtml(group.name)}</option>`).join("")}
-        </select>
-        <label for="assignment-topic">OCR topic</label>
-        <select id="assignment-topic" name="topicId" required>
-          ${REVISION_TOPICS.map((topic) => `<option value="${escapeHtml(topic.id)}" ${topic.id === activeRevisionTopicId ? "selected" : ""}>${escapeHtml(topic.code)} ${escapeHtml(topic.title)}</option>`).join("")}
-        </select>
-        <label for="assignment-task">Task type</label>
-        <select id="assignment-task" name="taskType">
-          <option value="topic_revision">Flashcards + Quick Practice</option>
-          <option value="adaptive_session">Adaptive revision session</option>
-          <option value="flashcards">Flashcards only</option>
-          <option value="quick_quiz">Quick Practice only</option>
-          <option value="exam_questions">Exam questions</option>
-          <option value="mini_mock">Mini mock</option>
-          <option value="interactive_lab">Interactive lab</option>
-        </select>
-        <div class="teacher-form-row">
-          <label for="assignment-start">Start date
-            <input id="assignment-start" name="startAt" type="date" />
-          </label>
-          <label for="assignment-duration">Estimated minutes
-            <input id="assignment-duration" name="estimatedMinutes" type="number" min="5" max="120" step="5" value="15" />
-          </label>
-        </div>
-        <label for="assignment-due">Due date</label>
-        <input id="assignment-due" name="dueAt" type="date" />
-        <label for="assignment-instructions">Instructions</label>
-        <textarea id="assignment-instructions" name="instructions" placeholder="Example: complete the deck, then score 80% or better in Quick Practice."></textarea>
-        <button type="submit" ${classGroups.length ? "" : "disabled"}>Set assignment</button>
-      </form>
-      <div class="teacher-panel-card">
-        <div class="section-title"><span>Active assignments</span><span>${activeAssignments.length}</span></div>
-        ${activeAssignments.length ? `<div class="teacher-assignment-list">${activeAssignments.map(renderTeacherAssignmentCard).join("")}</div>` : renderInlineEmpty("Assignments will appear here after you create a class task.")}
-      </div>
-    </div>
-  </section>`;
-}
-
-function renderTeacherStudentsSection() {
-  const activeClass = getActiveClassGroup();
-  const students = getClassMemberships(activeClass?.id);
-
-  return `<section class="teacher-section">
-    <div class="teacher-section-head">
-      <div>
-        <p class="eyebrow">Students</p>
-        <h3>Review learner activity, confidence and intervention priority.</h3>
-      </div>
-      ${renderClassSelector()}
-    </div>
-    ${
-      students.length
-        ? `<div class="teacher-table-wrap">
-            <table class="teacher-table">
-              <thead>
-                <tr>
-                  <th scope="col">Student</th>
-                  <th scope="col">Average confidence</th>
-                  <th scope="col">Cards rated</th>
-                  <th scope="col">Last active</th>
-                  <th scope="col">Weakest topic</th>
-                  <th scope="col">Action</th>
-                </tr>
-              </thead>
-              <tbody>${students.map(renderTeacherStudentRow).join("")}</tbody>
-            </table>
-          </div>`
-        : renderTeacherEmptyState("No students have joined this class yet. Share the join code from Classes.", "Open classes", "classes")
-    }
-  </section>`;
-}
-
-function renderTeacherHeatmapSection() {
-  const activeClass = getActiveClassGroup();
-  const students = getClassMemberships(activeClass?.id);
-  const topics = REVISION_TOPICS;
-
-  return `<section class="teacher-section">
-    <div class="teacher-section-head">
-      <div>
-        <p class="eyebrow">Topic Heatmap</p>
-        <h3>Scan class confidence across the OCR specification.</h3>
-      </div>
-      ${renderClassSelector()}
-    </div>
-    ${
-      students.length
-        ? `<div class="topic-heatmap-wrap" role="region" aria-label="Class topic heatmap" tabindex="0">
-            <table class="topic-heatmap">
-              <thead>
-                <tr>
-                  <th scope="col">Student</th>
-                  ${topics.map((topic) => `<th scope="col" title="${escapeHtml(topic.title)}">${escapeHtml(topic.code)}</th>`).join("")}
-                </tr>
-              </thead>
-              <tbody>
-                ${students.map((student) => `<tr>
-                  <th scope="row">${escapeHtml(student.studentName || "Student")}</th>
-                  ${topics.map((topic) => renderTeacherHeatmapCell(student, topic, activeClass?.id)).join("")}
-                </tr>`).join("")}
-              </tbody>
-            </table>
-          </div>
-          <div class="heatmap-legend"><span class="secure">Secure</span><span class="developing">Developing</span><span class="priority">Priority</span><span class="empty">No data</span></div>`
-        : renderTeacherEmptyState("Add students to generate a class heatmap.", "Invite students", "classes")
-    }
-  </section>`;
-}
-
-function renderTeacherReportsSection() {
-  const activeClass = getActiveClassGroup();
-  return `<section class="teacher-section">
-    <div class="teacher-section-head">
-      <div>
-        <p class="eyebrow">Reports</p>
-        <h3>Export intervention and progress evidence for the selected class.</h3>
-      </div>
-      ${renderClassSelector()}
-    </div>
-    <div class="teacher-report-grid">
-      <article class="teacher-panel-card">
-        <span>Interventions</span>
-        <strong>Topic weaknesses CSV</strong>
-        <p>Export low-confidence topics, weak-card counts and suggested teacher actions.</p>
-        <button type="button" data-export-interventions>Export interventions</button>
-      </article>
-      <article class="teacher-panel-card">
-        <span>Assignments</span>
-        <strong>Completion CSV</strong>
-        <p>Export assignment titles, due dates, class names and current completion signals.</p>
-        <button type="button" data-export-report="assignments" ${activeClass ? "" : "disabled"}>Export assignments</button>
-      </article>
-      <article class="teacher-panel-card">
-        <span>Mastery</span>
-        <strong>Topic mastery CSV</strong>
-        <p>Export every OCR topic with class confidence and latest activity.</p>
-        <button type="button" data-export-report="mastery" ${activeClass ? "" : "disabled"}>Export mastery</button>
-      </article>
-    </div>
-  </section>`;
-}
-
-function renderTeacherContentSection() {
-  const weakTopics = getClassTopicInsights().filter((item) => item.confidence.totalAttempts).slice(0, 3);
-  const selected = weakTopics.length ? weakTopics : REVISION_TOPICS.slice(0, 3).map((topic) => ({ topic, confidence: { totalAttempts: 0, percent: 0 } }));
-  return `<section class="teacher-section">
-    <div class="teacher-section-head"><div><p class="eyebrow">Content</p><h3>Build a five-minute retrieval starter from class evidence.</h3><p>Review the selected topics before turning the draft into an assignment.</p></div>${renderClassSelector()}</div>
-    <div class="teacher-content-builder">
-      <article class="teacher-panel-card">
-        <div class="section-title"><span>Suggested starter</span><span>${weakTopics.length ? "Based on class weakness" : "Course starter"}</span></div>
-        <ol>${selected.map((item) => `<li><span>${escapeHtml(item.topic.code)}</span><strong>${escapeHtml(item.topic.title)}</strong><small>${item.confidence.totalAttempts ? `${item.confidence.percent}% current confidence` : "No class evidence yet"}</small></li>`).join("")}</ol>
-        <p>The draft uses published Neat Notes retrieval content. Check suitability against what your class has been taught.</p>
-      </article>
-      <article class="teacher-panel-card teacher-content-actions">
-        <span>Teacher review required</span>
-        <strong>Prepare the highest-priority topic</strong>
-        <p>This opens the assignment builder with the topic selected. Nothing is sent to students until you submit it.</p>
-        <button type="button" data-create-assignment data-topic-id="${escapeHtml(selected[0].topic.id)}">Review assignment draft</button>
-      </article>
-    </div>
-  </section>`;
-}
-
-function renderTopicInsightsSection() {
-  const insights = getClassTopicInsights();
-  const hasData = insights.some((insight) => insight.confidence.totalAttempts);
-
-  return `<section class="teacher-section">
-    <div class="teacher-section-head">
-      <div>
-        <p class="eyebrow">Topic Insights</p>
-        <h3>OCR topic confidence across the selected class.</h3>
-      </div>
-      ${renderClassSelector()}
-    </div>
-    ${
-      hasData
-        ? `<div class="topic-insight-grid">${insights.map(renderTopicInsightCard).join("")}</div>`
-        : renderTeacherEmptyState("Invite students or complete revision sessions to generate topic insights.", "Create class", "classes")
-    }
-  </section>`;
-}
-
-function renderCentreSettingsSection() {
-  const activeCentre = getActiveCentre();
-  return `<section class="teacher-section">
-    <div class="teacher-section-head">
-      <div>
-        <p class="eyebrow">Centre Settings</p>
-        <h3>Create a centre or join an existing centre.</h3>
-      </div>
-      <span class="teacher-mode-note">Institution-ready structure</span>
-    </div>
-    <div class="teacher-management-grid">
-      <form class="teacher-form" data-create-centre>
-        <h4>Create centre</h4>
-        <label for="centre-name">Centre name</label>
-        <input id="centre-name" name="name" type="text" placeholder="Breakell College" required />
-        <label for="centre-type">Centre type</label>
-        <select id="centre-type" name="type">
-          <option value="school">School</option>
-          <option value="college">College</option>
-          <option value="department">Department</option>
-          <option value="trust">Multi-academy trust</option>
-        </select>
-        <button type="submit">Create centre</button>
-      </form>
-      <form class="teacher-form" data-join-centre>
-        <h4>Join with code</h4>
-        <label for="join-centre-code">Centre code</label>
-        <input id="join-centre-code" name="code" type="text" placeholder="NN-CENTRE" required />
-        <button type="submit">Join centre</button>
-      </form>
-      <div class="teacher-panel-card">
-        <div class="section-title"><span>Current centre</span><span>${centres.length}</span></div>
-        ${
-          activeCentre
-            ? `<div class="centre-code-card"><span>${escapeHtml(activeCentre.type || "centre")}</span><strong>${escapeHtml(activeCentre.name)}</strong><code>${escapeHtml(activeCentre.code)}</code><p>${classGroups.filter((group) => group.centreId === activeCentre.id).length} associated classes</p></div>`
-            : renderInlineEmpty("Continue without a centre, or create one when school or department rollout begins.")
-        }
-      </div>
-    </div>
-  </section>`;
-}
-
-function renderClassSelector() {
-  if (!classGroups.length) return "";
-
-  return `<label class="class-selector">
-    <span>Class</span>
-    <select data-class-selector>
-      ${classGroups.map((group) => `<option value="${escapeHtml(group.id)}" ${group.id === activeClassId ? "selected" : ""}>${escapeHtml(group.name)}</option>`).join("")}
-    </select>
-  </label>`;
-}
-
-function renderTeacherEmptyState(message, actionLabel, section) {
-  return `<div class="teacher-empty-state">
-    <strong>${escapeHtml(message)}</strong>
-    <button type="button" data-teacher-section="${escapeHtml(section)}">${escapeHtml(actionLabel)}</button>
-  </div>`;
-}
-
-function renderInlineEmpty(message) {
-  return `<p class="empty-copy">${escapeHtml(message)}</p>`;
-}
-
-function getActiveClassGroup() {
-  return classGroups.find((group) => group.id === activeClassId) || classGroups[0] || null;
-}
-
-function getActiveCentre() {
-  return centres.find((centre) => centre.id === activeCentreId) || centres[0] || null;
-}
-
-function getTeacherClassOverview(activeClass) {
-  const activeClassMemberships = getClassMemberships(activeClass?.id);
-  const weeklyEvents = getRecentActivityEvents(7).filter((event) => !activeClass?.id || event.classId === activeClass.id);
-  const ratedEvents = weeklyEvents.filter((event) => event.type === "card_rated");
-  const confidenceValues = REVISION_TOPICS.map((topic) => calculateTopicConfidence(getClassTopicAttempts(topic.id, activeClass?.id))).filter((confidence) => confidence.totalAttempts);
-  const averageConfidence = confidenceValues.length
-    ? Math.round(confidenceValues.reduce((sum, confidence) => sum + confidence.percent, 0) / confidenceValues.length)
-    : null;
-  const weakest = getClassTopicInsights().find((topic) => topic.confidence.totalAttempts);
-
-  return {
-    students: activeClassMemberships.length,
-    activeThisWeek: new Set(weeklyEvents.map((event) => event.userId || "guest")).size,
-    averageConfidenceLabel: averageConfidence === null ? "No data" : `${averageConfidence}%`,
-    cardsThisWeek: ratedEvents.length,
-    priorityTopic: weakest ? `${weakest.topic.code} ${weakest.topic.title}` : "No data yet",
-    interventionCount: getStudentWatchlist().length,
-  };
-}
-
-function getRecentActivityEvents(days) {
-  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-  return activityEvents.filter((event) => new Date(event.createdAt).getTime() >= cutoff);
-}
-
-function getClassTopicInsights() {
-  const selectedClassId = getActiveClassGroup()?.id;
-  return REVISION_TOPICS.map((topic) => {
-    const topicAttempts = getClassTopicAttempts(topic.id, selectedClassId);
-    const confidence = calculateTopicConfidence(topicAttempts);
-    const weakCards = identifyWeakCards(topic.id, topicAttempts);
-    return {
-      topic,
-      confidence,
-      studentsBelowThreshold: confidence.totalAttempts && confidence.percent < 60 ? 1 : 0,
-      weakCards,
-      lastRevised: getLastTopicActivity(topic.id),
-      suggestedAction: confidence.totalAttempts
-        ? confidence.percent < 60
-          ? "Assign review mission"
-          : "Maintain practice"
-        : "Await student ratings",
-    };
-  }).sort((a, b) => {
-    if (!a.confidence.totalAttempts && b.confidence.totalAttempts) return 1;
-    if (a.confidence.totalAttempts && !b.confidence.totalAttempts) return -1;
-    return a.confidence.percent - b.confidence.percent;
-  });
-}
-
-function getLastTopicActivity(topicId) {
-  const event = activityEvents.find((activity) => activity.topicId === topicId);
-  return event ? formatDate(event.createdAt) : "Not revised";
-}
-
-function getStudentWatchlist() {
-  const selectedClassId = getActiveClassGroup()?.id;
-  const localConfidenceValues = REVISION_TOPICS.map((topic) => ({
-    topic,
-    confidence: calculateTopicConfidence(getClassTopicAttempts(topic.id, selectedClassId)),
-  })).filter((entry) => entry.confidence.totalAttempts);
-  const lowConfidence = localConfidenceValues.sort((a, b) => a.confidence.percent - b.confidence.percent)[0];
-  const repeatedNeedPractice = cardAttempts.filter((attempt) => attempt.confidence === "needs_practice").length;
-
-  if (!lowConfidence || lowConfidence.confidence.percent >= 50 || !repeatedNeedPractice) {
-    return [];
-  }
-
-  return [{
-    name: currentUser?.name || "Local preview learner",
-    lastAccessed: activityEvents[0]?.createdAt ? formatDate(activityEvents[0].createdAt) : "Today",
-    averageConfidence: `${lowConfidence.confidence.percent}%`,
-    weakestTopic: `${lowConfidence.topic.code} ${lowConfidence.topic.title}`,
-    suggestedAction: "Review weak cards",
-  }];
-}
-
-function renderCompactTopicInsight(insight) {
-  return `<div class="compact-topic-insight ${escapeHtml(insight.confidence.statusClass)}">
-    <span>${escapeHtml(insight.topic.code)}</span>
-    <strong>${escapeHtml(insight.topic.title)}</strong>
-    <em>${insight.confidence.totalAttempts ? `${insight.confidence.percent}% · ${escapeHtml(insight.confidence.band)}` : "No confidence data"}</em>
-  </div>`;
-}
-
-function renderTopicInsightCard(insight) {
-  return `<article class="topic-insight-card ${escapeHtml(insight.confidence.statusClass)}">
-    <div>
-      <span>${escapeHtml(insight.topic.code)}</span>
-      <h4>${escapeHtml(insight.topic.title)}</h4>
-    </div>
-    <strong>${insight.confidence.totalAttempts ? `${insight.confidence.percent}%` : "No data"}</strong>
-    <p>${escapeHtml(insight.confidence.band)}</p>
-    <ul>
-      <li>${insight.studentsBelowThreshold} students below threshold</li>
-      <li>${insight.weakCards.length} cards most often marked Need practice</li>
-      <li>Last revised: ${escapeHtml(insight.lastRevised)}</li>
-    </ul>
-    <button type="button" data-create-assignment data-topic-id="${escapeHtml(insight.topic.id)}">${escapeHtml(insight.suggestedAction)}</button>
-  </article>`;
-}
-
-function renderWatchlistItem(student) {
-  return `<div class="watchlist-item">
-    <strong>${escapeHtml(student.name)}</strong>
-    <span>Last accessed: ${escapeHtml(student.lastAccessed)}</span>
-    <span>Average confidence: ${escapeHtml(student.averageConfidence)}</span>
-    <span>Weakest topic: ${escapeHtml(student.weakestTopic)}</span>
-    <button type="button" data-create-assignment>${escapeHtml(student.suggestedAction)}</button>
-  </div>`;
-}
-
-function renderRecentActivityList() {
-  if (!activityEvents.length) {
-    return `<p class="empty-copy">Activity is shown when students rate cards, complete decks, join classes, or create notes.</p>`;
-  }
-
-  return `<div class="activity-list">${activityEvents.slice(0, 6).map((event) => {
-    const topic = event.topicId ? getQuizTopicById(event.topicId) : null;
-    return `<div class="activity-item">
-      <span>${escapeHtml(formatActivityType(event.type))}</span>
-      <strong>${topic ? `${escapeHtml(topic.code)} ${escapeHtml(topic.title)}` : "Workspace activity"}</strong>
-      <small>${escapeHtml(formatDate(event.createdAt))}</small>
-    </div>`;
-  }).join("")}</div>`;
-}
 
 function formatActivityType(type) {
   return String(type || "")
@@ -4954,595 +3676,10 @@ function formatActivityType(type) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-function renderClassCard(group) {
-  const studentCount = getClassMemberships(group.id).length;
-  return `<article class="class-card ${group.id === activeClassId ? "active" : ""}">
-    <div>
-      <span>${escapeHtml(group.subject)} · ${escapeHtml(group.examBoard)}</span>
-      <h4>${escapeHtml(group.name)}</h4>
-      <p>${escapeHtml(group.yearGroup || "Year group not set")} · ${studentCount} joined student${studentCount === 1 ? "" : "s"}</p>
-    </div>
-    <div class="invite-code-card">
-      <span>Join code</span>
-      <code>${escapeHtml(group.inviteCode)}</code>
-      <button type="button" data-copy-code="${escapeHtml(group.inviteCode)}">Copy code</button>
-      <button type="button" data-regenerate-code="${escapeHtml(group.id)}">Regenerate</button>
-    </div>
-    <p>Students can join this class using this code.</p>
-    <div class="class-card-actions">
-      <button type="button" data-teacher-section="students">View students</button>
-      <button type="button" data-teacher-section="assignments">Set assignment</button>
-      <button type="button" data-archive-class="${escapeHtml(group.id)}">${group.archivedAt ? "Archived" : "Archive"}</button>
-    </div>
-  </article>`;
-}
-
-function renderTeacherAssignmentCard(assignment) {
-  const topic = getQuizTopicById(assignment.topicId);
-  const group = getClassById(assignment.classId);
-  const completion = getAssignmentCompletionSummary(assignment);
-  return `<article class="teacher-assignment-card ${escapeHtml(assignment.status || "active")}">
-    <div>
-      <span>${escapeHtml(assignment.taskType || "assignment")}</span>
-      <strong>${escapeHtml(assignment.title || `${topic?.code || ""} ${topic?.title || "Revision assignment"}`)}</strong>
-      <p>${escapeHtml(assignment.instructions || "Complete the assigned revision task.")}</p>
-    </div>
-    <div class="assignment-meta-grid">
-      <span>Class: ${escapeHtml(group?.name || "No class")}</span>
-      <span>Topic: ${topic ? `${escapeHtml(topic.code)} ${escapeHtml(topic.title)}` : "Unknown"}</span>
-      <span>Due: ${assignment.dueAt ? escapeHtml(formatDate(assignment.dueAt)) : "No due date"}</span>
-      <span>${completion.completed}/${completion.total} showing progress</span>
-    </div>
-  </article>`;
-}
-
-function getAssignmentCompletionSummary(assignment) {
-  if (Number.isFinite(Number(assignment.studentCount)) && Number.isFinite(Number(assignment.completedCount))) {
-    return {
-      total: Number(assignment.studentCount),
-      completed: Number(assignment.completedCount),
-    };
-  }
-
-  const students = getClassMemberships(assignment.classId);
-  const completed = students.filter((student) => {
-    const attempts = cardAttempts.filter((attempt) =>
-      attempt.userId === student.userId &&
-      attempt.classId === assignment.classId &&
-      attempt.topicId === assignment.topicId
-    );
-    return attempts.length >= 3 || calculateTopicConfidence(attempts).percent >= 70;
-  }).length;
-
-  return {
-    total: students.length,
-    completed,
-  };
-}
-
-function renderTeacherStudentRow(student) {
-  const activeClass = getActiveClassGroup();
-  const attempts = cardAttempts.filter((attempt) => attempt.userId === student.userId && attempt.classId === activeClass?.id);
-  const confidence = calculateTopicConfidence(attempts);
-  const weakest = getWeakestTopicForStudent(student, activeClass?.id);
-  const lastAttempt = attempts.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-
-  return `<tr>
-    <td><strong>${escapeHtml(student.studentName || "Student")}</strong><span>${escapeHtml(student.studentEmail || "No email")}</span></td>
-    <td>${confidence.totalAttempts ? `${confidence.percent}% · ${escapeHtml(confidence.band)}` : "No data"}</td>
-    <td>${confidence.totalAttempts}</td>
-    <td>${lastAttempt ? escapeHtml(formatDate(lastAttempt.createdAt)) : "Not active yet"}</td>
-    <td>${weakest ? `${escapeHtml(weakest.topic.code)} ${escapeHtml(weakest.topic.title)}` : "None yet"}</td>
-    <td><button type="button" data-remove-student="${escapeHtml(student.userId || student.id)}">Remove</button></td>
-  </tr>`;
-}
-
-function getWeakestTopicForStudent(student, classId) {
-  return REVISION_TOPICS.map((topic) => {
-    const serverConfidence = serverStudentTopicConfidence.get(`${student.userId}:${topic.id}`);
-    const attempts = cardAttempts.filter((attempt) =>
-      attempt.userId === student.userId &&
-      attempt.classId === classId &&
-      attempt.topicId === topic.id
-    );
-    return {
-      topic,
-      confidence: serverConfidence || calculateTopicConfidence(attempts),
-    };
-  })
-    .filter((entry) => entry.confidence.totalAttempts)
-    .sort((a, b) => a.confidence.percent - b.confidence.percent)[0] || null;
-}
-
-function renderTeacherHeatmapCell(student, topic, classId) {
-  const attempts = cardAttempts.filter((attempt) =>
-    attempt.userId === student.userId &&
-    attempt.classId === classId &&
-    attempt.topicId === topic.id
-  );
-  const confidence = serverStudentTopicConfidence.get(`${student.userId}:${topic.id}`) || calculateTopicConfidence(attempts);
-  const heatClass = !confidence.totalAttempts
-    ? "empty"
-    : confidence.percent >= 75
-      ? "secure"
-      : confidence.percent >= 45
-        ? "developing"
-        : "priority";
-
-  return `<td class="${heatClass}" title="${escapeHtml(student.studentName || "Student")} · ${escapeHtml(topic.code)} ${escapeHtml(topic.title)} · ${confidence.totalAttempts ? `${confidence.percent}% confidence` : "No data"}">
-    ${confidence.totalAttempts ? `${confidence.percent}%` : "—"}
-  </td>`;
-}
-
-function prepareTeacherAssignment(topicId = "") {
-  const topic = getQuizTopicById(topicId) || getRecommendedRevisionTopic() || getActiveRevisionTopic();
-  activeRevisionTopicId = topic.id;
-  activeTeacherSection = classGroups.length ? "assignments" : "classes";
-  renderTeacherMode();
-  window.setTimeout(() => {
-    elements.teacherModePanel.querySelector(".teacher-section")?.insertAdjacentHTML(
-      "afterbegin",
-      `<div class="teacher-assignment-draft" role="status">
-        <strong>Review assignment prepared</strong>
-        <p>${escapeHtml(topic.code)} ${escapeHtml(topic.title)} is selected. ${classGroups.length ? "Complete the assignment form to set the task for your class." : "Create a class first, then set this as a revision task."}</p>
-      </div>`
-    );
-  }, 0);
-  trackEvent("teacher_assignment_prepared", { topicId: topic.id });
-}
-
-function exportInterventionCsv() {
-  const insights = getClassTopicInsights();
-  const rows = [
-    ["Topic code", "Topic title", "Confidence", "Band", "Weak cards", "Last revised", "Suggested action"],
-    ...insights.map((insight) => [
-      insight.topic.code,
-      insight.topic.title,
-      insight.confidence.totalAttempts ? `${insight.confidence.percent}%` : "No data",
-      insight.confidence.band,
-      String(insight.weakCards.length),
-      insight.lastRevised,
-      insight.suggestedAction,
-    ]),
-  ];
-  const activeClass = getActiveClassGroup();
-  downloadCsv(rows, `${slugify(activeClass?.name || "neat-notes-interventions")}-interventions.csv`);
-  trackEvent("teacher_interventions_exported", { classId: activeClass?.id || "none" });
-}
-
-function exportAssignmentsCsv() {
-  const activeClass = getActiveClassGroup();
-  const assignments = teacherAssignments.filter((assignment) => !activeClass?.id || assignment.classId === activeClass.id);
-  const rows = [
-    ["Class", "Topic code", "Topic title", "Task type", "Due", "Status", "Students showing progress", "Students total", "Instructions"],
-    ...assignments.map((assignment) => {
-      const topic = getQuizTopicById(assignment.topicId);
-      const group = getClassById(assignment.classId);
-      const completion = getAssignmentCompletionSummary(assignment);
-      return [
-        group?.name || "",
-        topic?.code || "",
-        topic?.title || "",
-        assignment.taskType || "",
-        assignment.dueAt ? formatDate(assignment.dueAt) : "",
-        assignment.status || "active",
-        String(completion.completed),
-        String(completion.total),
-        assignment.instructions || "",
-      ];
-    }),
-  ];
-  downloadCsv(rows, `${slugify(activeClass?.name || "neat-notes-assignments")}-assignments.csv`);
-  trackEvent("teacher_assignments_exported", { classId: activeClass?.id || "none" });
-}
-
-function exportMasteryCsv() {
-  const activeClass = getActiveClassGroup();
-  const rows = [
-    ["Topic code", "Topic title", "Class confidence", "Band", "Attempts", "Weak cards", "Last activity", "Suggested action"],
-    ...getClassTopicInsights().map((insight) => [
-      insight.topic.code,
-      insight.topic.title,
-      insight.confidence.totalAttempts ? `${insight.confidence.percent}%` : "No data",
-      insight.confidence.band,
-      String(insight.confidence.totalAttempts),
-      String(insight.weakCards.length),
-      insight.lastRevised,
-      insight.suggestedAction,
-    ]),
-  ];
-  downloadCsv(rows, `${slugify(activeClass?.name || "neat-notes-mastery")}-topic-mastery.csv`);
-  trackEvent("teacher_mastery_exported", { classId: activeClass?.id || "none" });
-}
-
-function downloadCsv(rows, filename) {
-  const csv = rows.map((row) => row.map(csvEscape).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
-function csvEscape(value) {
-  return `"${String(value ?? "").replaceAll('"', '""')}"`;
-}
-
-async function handleTeacherModeClick(event) {
-  const teacherPlanButton = event.target.closest("[data-open-teacher-plan]");
-  if (teacherPlanButton) {
-    openPlansModal();
-    return;
-  }
-
-  const teacherAuthButton = event.target.closest("[data-teacher-auth]");
-  if (teacherAuthButton) {
-    openAuthModal(teacherAuthButton.dataset.teacherAuth);
-    return;
-  }
-
-  const appSectionButton = event.target.closest("[data-app-section]");
-  if (appSectionButton) {
-    setAppSection(appSectionButton.dataset.appSection);
-    return;
-  }
-
-  if (!canUseTeacherMode()) return;
-
-  if (event.target.closest("[data-export-interventions]")) {
-    exportInterventionCsv();
-    return;
-  }
-
-  const reportButton = event.target.closest("[data-export-report]");
-  if (reportButton) {
-    if (reportButton.dataset.exportReport === "assignments") {
-      exportAssignmentsCsv();
-    } else if (reportButton.dataset.exportReport === "mastery") {
-      exportMasteryCsv();
-    }
-    return;
-  }
-
-  const assignmentButton = event.target.closest("[data-create-assignment]");
-  if (assignmentButton) {
-    prepareTeacherAssignment(assignmentButton.dataset.topicId);
-    return;
-  }
-
-  const sectionButton = event.target.closest("[data-teacher-section]");
-  if (sectionButton) {
-    activeTeacherSection = sectionButton.dataset.teacherSection;
-    renderTeacherMode();
-    return;
-  }
-
-  const regenerateButton = event.target.closest("[data-regenerate-code]");
-  if (regenerateButton) {
-    await regenerateClassCode(regenerateButton.dataset.regenerateCode);
-    return;
-  }
-
-  const archiveButton = event.target.closest("[data-archive-class]");
-  if (archiveButton) {
-    await archiveClassGroup(archiveButton.dataset.archiveClass);
-    return;
-  }
-
-  const removeStudentButton = event.target.closest("[data-remove-student]");
-  if (removeStudentButton) {
-    await removeClassStudent(removeStudentButton.dataset.removeStudent);
-    return;
-  }
-
-  const copyButton = event.target.closest("[data-copy-code]");
-  if (copyButton) {
-    navigator.clipboard?.writeText(copyButton.dataset.copyCode).then(() => {
-      copyButton.textContent = "Copied";
-    }).catch(() => {
-      copyButton.textContent = "Copy unavailable";
-    });
-  }
-}
-
-async function handleTeacherModeSubmit(event) {
-  const classForm = event.target.closest("[data-create-class]");
-  const assignmentForm = event.target.closest("[data-create-assignment-form]");
-  const centreForm = event.target.closest("[data-create-centre]");
-  const joinCentreForm = event.target.closest("[data-join-centre]");
-  if (!classForm && !assignmentForm && !centreForm && !joinCentreForm) return;
-  if (!canUseTeacherMode()) {
-    event.preventDefault();
-    openPlansModal();
-    return;
-  }
-
-  event.preventDefault();
-  teacherActionMessage = { text: "", type: "" };
-
-  const form = classForm || assignmentForm || centreForm || joinCentreForm;
-  const submitButton = form.querySelector('button[type="submit"]');
-  const originalLabel = submitButton?.textContent;
-  if (submitButton) {
-    submitButton.disabled = true;
-    submitButton.textContent = "Saving...";
-  }
-
-  try {
-    if (classForm) {
-      await createClassGroup(new FormData(classForm));
-    } else if (assignmentForm) {
-      await createTeacherAssignment(new FormData(assignmentForm));
-    } else if (centreForm) {
-      await createCentre(new FormData(centreForm));
-    } else {
-      await joinCentre(new FormData(joinCentreForm));
-    }
-  } catch (error) {
-    teacherActionMessage = { text: error.message, type: "error" };
-    renderTeacherMode();
-  } finally {
-    if (submitButton?.isConnected) {
-      submitButton.disabled = false;
-      submitButton.textContent = originalLabel;
-    }
-  }
-}
-
-async function handleTeacherModeChange(event) {
-  const selector = event.target.closest("[data-class-selector]");
-  if (!selector) return;
-
-  activeClassId = selector.value;
-  teacherActionMessage = { text: "", type: "" };
-  if (!isGuestMode && currentUser?.isTeacher && activeClassId) {
-    try {
-      await loadTeacherClassEvidence(activeClassId);
-    } catch (error) {
-      teacherActionMessage = { text: error.message, type: "error" };
-    }
-  }
-  renderTeacherMode();
-}
-
-async function createClassGroup(form) {
-  if (!isGuestMode && currentUser) {
-    const response = await api("/api/classes", {
-      method: "POST",
-      body: {
-        centreId: activeCentreId || null,
-        name: String(form.get("name") || "").trim(),
-        subject: String(form.get("subject") || "Computer Science").trim(),
-        examBoard: String(form.get("examBoard") || "OCR A-Level").trim(),
-        yearGroup: String(form.get("yearGroup") || "").trim(),
-        description: String(form.get("description") || "").trim(),
-      },
-    });
-    activeClassId = response.class.id;
-    await loadAccountLearningWorkspace();
-    teacherActionMessage = { text: `${response.class.name} created. Share its join code when you are ready.`, type: "success" };
-    renderTeacherMode();
-    return;
-  }
-
-  const now = new Date().toISOString();
-  const group = {
-    id: createLocalId("class"),
-    centreId: activeCentreId || undefined,
-    name: String(form.get("name") || "").trim(),
-    subject: String(form.get("subject") || "Computer Science").trim(),
-    examBoard: String(form.get("examBoard") || "OCR A-Level").trim(),
-    yearGroup: String(form.get("yearGroup") || "").trim(),
-    description: String(form.get("description") || "").trim(),
-    inviteCode: createInviteCode("NN"),
-    students: [],
-    createdAt: now,
-  };
-
-  if (!group.name || !group.subject || !group.examBoard) return;
-
-  classGroups = [group, ...classGroups];
-  activeClassId = group.id;
-  saveLocalArray(CLASS_GROUPS_KEY, classGroups);
-  recordActivityEvent({ type: "class_joined", classId: group.id });
-  renderTeacherMode();
-}
-
-async function createTeacherAssignment(form) {
-  const classId = String(form.get("classId") || activeClassId || "").trim();
-  const topicId = String(form.get("topicId") || activeRevisionTopicId || "").trim();
-  const topic = getQuizTopicById(topicId);
-  if (!classId || !topic) return;
-
-  if (!isGuestMode && currentUser) {
-    const response = await api(`/api/classes/${encodeURIComponent(classId)}/assignments`, {
-      method: "POST",
-      body: {
-        topicId,
-        taskType: String(form.get("taskType") || "topic_revision"),
-        instructions: String(form.get("instructions") || "").trim(),
-        startAt: String(form.get("startAt") || "").trim() || null,
-        dueAt: String(form.get("dueAt") || "").trim() || null,
-        estimatedMinutes: Number(form.get("estimatedMinutes") || 15),
-      },
-    });
-    activeClassId = classId;
-    activeRevisionTopicId = topicId;
-    await loadAccountLearningWorkspace();
-    teacherActionMessage = { text: `${response.assignment.title} assigned successfully.`, type: "success" };
-    trackEvent("teacher_assignment_created", { classId, topicId, taskType: response.assignment.taskType });
-    renderTeacherMode();
-    return;
-  }
-
-  const dueValue = String(form.get("dueAt") || "").trim();
-  const assignment = {
-    id: createLocalId("assignment"),
-    classId,
-    topicId,
-    title: `${topic.code} ${topic.title}`,
-    taskType: String(form.get("taskType") || "flashcards_quiz"),
-    instructions: String(form.get("instructions") || "").trim() || "Complete the flashcards, then use Quick Practice to check your understanding.",
-    dueAt: dueValue ? new Date(`${dueValue}T16:00:00`).toISOString() : "",
-    status: "active",
-    createdAt: new Date().toISOString(),
-  };
-
-  teacherAssignments = [assignment, ...teacherAssignments].slice(0, 300);
-  saveLocalArray(TEACHER_ASSIGNMENTS_KEY, teacherAssignments);
-  activeClassId = classId;
-  activeRevisionTopicId = topicId;
-  recordActivityEvent({ type: "assignment_created", classId, topicId });
-  trackEvent("teacher_assignment_created", { classId, topicId, taskType: assignment.taskType });
-  renderTeacherMode();
-}
-
-async function regenerateClassCode(classId) {
-  if (!isGuestMode && currentUser) {
-    try {
-      const response = await api(`/api/classes/${encodeURIComponent(classId)}/join-code/regenerate`, { method: "POST" });
-      await loadAccountLearningWorkspace();
-      teacherActionMessage = { text: `New join code created: ${response.joinCode}`, type: "success" };
-      renderTeacherMode();
-    } catch (error) {
-      teacherActionMessage = { text: error.message, type: "error" };
-      renderTeacherMode();
-    }
-    return;
-  }
-
-  classGroups = classGroups.map((group) =>
-    group.id === classId
-      ? { ...group, inviteCode: createInviteCode("NN"), updatedAt: new Date().toISOString() }
-      : group
-  );
-  saveLocalArray(CLASS_GROUPS_KEY, classGroups);
-  renderTeacherMode();
-}
-
-async function archiveClassGroup(classId) {
-  const group = getClassById(classId);
-  if (!group || group.archivedAt) return;
-  const confirmed = window.confirm(`Archive ${group.name}? Students are not deleted, but the class is marked as inactive.`);
-  if (!confirmed) return;
-
-  if (!isGuestMode && currentUser) {
-    try {
-      const response = await api(`/api/classes/${encodeURIComponent(classId)}/archive`, { method: "PATCH" });
-      await loadAccountLearningWorkspace();
-      teacherActionMessage = { text: response.message, type: "success" };
-      renderTeacherMode();
-    } catch (error) {
-      teacherActionMessage = { text: error.message, type: "error" };
-      renderTeacherMode();
-    }
-    return;
-  }
-
-  classGroups = classGroups.map((item) =>
-    item.id === classId ? { ...item, archivedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : item
-  );
-  saveLocalArray(CLASS_GROUPS_KEY, classGroups);
-  renderTeacherMode();
-}
-
-async function removeClassStudent(studentId) {
-  const membership = classMemberships.find((item) => item.userId === studentId || item.id === studentId);
-  if (!membership) return;
-  const confirmed = window.confirm(`Remove ${membership.studentName || "this student"} from the class?`);
-  if (!confirmed) return;
-
-  if (!isGuestMode && currentUser) {
-    try {
-      const response = await api(`/api/classes/${encodeURIComponent(membership.classId)}/members/${encodeURIComponent(membership.userId)}`, { method: "DELETE" });
-      await loadTeacherClassEvidence(membership.classId);
-      teacherActionMessage = { text: response.message, type: "success" };
-      renderTeacherMode();
-    } catch (error) {
-      teacherActionMessage = { text: error.message, type: "error" };
-      renderTeacherMode();
-    }
-    return;
-  }
-
-  classMemberships = classMemberships.map((item) =>
-    item.id === membership.id ? { ...item, status: "removed", removedAt: new Date().toISOString() } : item
-  );
-  saveClassMemberships();
-  renderTeacherMode();
-}
-
-async function createCentre(form) {
-  if (!isGuestMode && currentUser) {
-    const response = await api("/api/centres", {
-      method: "POST",
-      body: { name: String(form.get("name") || "").trim(), type: String(form.get("type") || "school") },
-    });
-    activeCentreId = response.centre.id;
-    await loadAccountLearningWorkspace();
-    teacherActionMessage = { text: `${response.centre.name} created.`, type: "success" };
-    renderTeacherMode();
-    return;
-  }
-
-  const centre = {
-    id: createLocalId("centre"),
-    name: String(form.get("name") || "").trim(),
-    type: String(form.get("type") || "other"),
-    code: createInviteCode("CENTRE"),
-    createdAt: new Date().toISOString(),
-  };
-
-  if (!centre.name) return;
-
-  centres = [centre, ...centres];
-  activeCentreId = centre.id;
-  saveLocalArray(CENTRES_KEY, centres);
-  renderTeacherMode();
-}
-
-async function joinCentre(form) {
-  const code = String(form.get("code") || "").trim().toUpperCase();
-  if (!code) return;
-
-  if (!isGuestMode && currentUser) {
-    const response = await api("/api/centres/join", { method: "POST", body: { code } });
-    activeCentreId = response.centre.id;
-    await loadAccountLearningWorkspace();
-    teacherActionMessage = { text: `Joined ${response.centre.name}.`, type: "success" };
-    renderTeacherMode();
-    return;
-  }
-
-  const existing = centres.find((centre) => centre.code.toUpperCase() === code);
-  const centre = existing || {
-    id: createLocalId("centre"),
-    name: "Joined centre",
-    type: "other",
-    code,
-    createdAt: new Date().toISOString(),
-  };
-
-  if (!existing) {
-    centres = [centre, ...centres];
-    saveLocalArray(CENTRES_KEY, centres);
-  }
-
-  activeCentreId = centre.id;
-  renderTeacherMode();
-}
-
-function createInviteCode(prefix) {
-  return `${prefix}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
-}
-
 function renderRevisionPage() {
   if (!getComponentTopics().some((topic) => topic.id === activeRevisionTopicId)) activeRevisionTopicId = getComponentTopics()[0]?.id;
   renderComponentContext();
   let topic = getActiveRevisionTopic();
-  renderLearningMode();
   renderPracticeMode();
 
   if (!topic) {
@@ -5550,11 +3687,6 @@ function renderRevisionPage() {
     elements.revisionCardGrid.innerHTML = `<section class="exam-empty-state"><h3>Reconnect to load your course</h3><p>Account-protected revision content is not cached for offline access. Your local notes remain on this device.</p><button type="button" data-reload-content>Try again</button></section>`;
     elements.revisionCardGrid.querySelector("[data-reload-content]").addEventListener("click", () => location.reload());
     document.querySelector("#component-content-status").textContent = "A connection is needed to load revision content.";
-    return;
-  }
-
-  if (activeLearningMode === "teacher") {
-    renderTeacherMode();
     return;
   }
 
@@ -5571,7 +3703,6 @@ function renderRevisionPage() {
   renderRevisionDashboard(topic);
   renderStudentDashboard(topic);
   renderMistakeJournal();
-  renderStudentClassPanel();
   elements.revisionTopicCode.textContent = topic.code;
   elements.revisionTopicTitle.textContent = topic.title;
   elements.revisionTopicSummary.textContent = topic.summary;
@@ -5590,7 +3721,7 @@ function renderRevisionPage() {
 
   if (!access.canAccess) {
     elements.revisionProgressPercent.textContent = "0%";
-    elements.revisionProgressLabel.textContent = access.canClaim ? "Choose free deck" : "Pro required";
+    elements.revisionProgressLabel.textContent = topic.contentAvailable === false ? "In review" : access.canClaim ? "Choose free deck" : "Pro required";
     elements.revisionProgressRing.style.strokeDashoffset = "283";
     elements.revisionCardGrid.innerHTML = renderRevisionAccessPanel(topic, access);
     return;
@@ -5913,9 +4044,6 @@ function renderStudentDashboard(topic) {
   const openMistakes = mistakeJournal.filter((entry) => !entry.correctedAt);
   const recentNote = [...notes].sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))[0];
   const recentQuiz = getMostRecentQuizProgress();
-  const activeAssignments = teacherAssignments
-    .filter((assignment) => assignment.status === "active" && assignment.userStatus !== "complete")
-    .slice(0, 2);
   const sessionPreview = session.items.slice(0, 4);
   const examCountdown = getNearestExamCountdown();
 
@@ -5954,14 +4082,6 @@ function renderStudentDashboard(topic) {
         <div class="section-title"><span>Continue</span><span>${streak} day streak</span></div>
         <p><strong>${recentQuiz ? `${escapeHtml(recentQuiz.topic.code)} Quick Practice` : recentNote ? escapeHtml(recentNote.title || createTitle(recentNote.body)) : "Start your first activity"}</strong><br>${today.cards} retrieval activities completed today.</p>
         <button type="button" data-student-action="${recentQuiz ? "quick" : recentNote ? "note" : "cards"}">${recentQuiz ? "Continue practice" : recentNote ? "Open note" : "Choose a topic"}</button>
-      </section>
-      <section ${activeAssignments.length ? "" : "hidden"}>
-        <div class="section-title"><span>Legacy class assignments</span><span>${activeAssignments.length}</span></div>
-        ${activeAssignments.length ? `<p><strong>${escapeHtml(activeAssignments[0].title)}</strong><br>${escapeHtml(activeAssignments[0].instructions || "Teacher-set revision")}</p>
-          <div class="assignment-home-actions">
-            <button type="button" data-assignment-start="${escapeHtml(activeAssignments[0].id)}">${activeAssignments[0].userStatus === "started" ? "Continue assignment" : "Start assignment"}</button>
-            ${activeAssignments[0].userStatus === "started" ? `<button class="secondary" type="button" data-assignment-complete="${escapeHtml(activeAssignments[0].id)}">Mark complete</button>` : ""}
-          </div>` : `<p>No teacher assignments are waiting. Independent revision stays separate.</p>`}
       </section>
       <section>
         <div class="section-title"><span>Mistake repair</span><span>${openMistakes.length}</span></div>
@@ -6006,24 +4126,11 @@ function getMostRecentQuizProgress() {
 }
 
 async function handleStudentDashboardClick(event) {
-  const assignmentStart = event.target.closest("[data-assignment-start]");
-  if (assignmentStart) {
-    await openStudentAssignment(assignmentStart.dataset.assignmentStart);
-    return;
-  }
-
-  const assignmentComplete = event.target.closest("[data-assignment-complete]");
-  if (assignmentComplete) {
-    await updateStudentAssignmentStatus(assignmentComplete.dataset.assignmentComplete, "complete");
-    return;
-  }
-
   const sessionButton = event.target.closest("[data-session-duration]");
   if (sessionButton) {
     startAdaptiveRevisionSession(Number(sessionButton.dataset.sessionDuration) || 15);
     return;
   }
-
   const button = event.target.closest("[data-student-action]");
   if (!button) return;
 
@@ -6075,64 +4182,11 @@ async function handleStudentDashboardClick(event) {
     return;
   }
 
-  if (action === "teacher") {
-    setAppSection("teacher");
-    return;
-  }
-
   if (action === "exam-settings") {
     openSettingsModal("revision");
   }
 }
 
-async function updateStudentAssignmentStatus(assignmentId, status) {
-  if (isGuestMode || !currentUser) return;
-  try {
-    await api(`/api/assignments/${encodeURIComponent(assignmentId)}/status`, {
-      method: "PATCH",
-      body: { status },
-    });
-    await loadAccountLearningWorkspace();
-    renderRevisionPage();
-  } catch (error) {
-    studentClassJoinMessage = { text: error.message, type: "error" };
-    renderStudentClassPanel();
-  }
-}
-
-async function openStudentAssignment(assignmentId) {
-  const assignment = teacherAssignments.find((item) => item.id === assignmentId);
-  if (!assignment) return;
-  await updateStudentAssignmentStatus(assignmentId, "started");
-  if (assignment.topicId && getQuizTopicById(assignment.topicId)) {
-    activeRevisionTopicId = assignment.topicId;
-  }
-
-  if (["quick_quiz", "exam_questions", "mini_mock", "interactive_lab"].includes(assignment.taskType)) {
-    setAppSection("practice");
-    if (assignment.taskType === "quick_quiz") {
-      activePracticeMode = "quick";
-      await startNeatQuiz(activeRevisionTopicId);
-    } else if (assignment.taskType === "mini_mock") {
-      activePracticeMode = "mock";
-      await loadMiniMock();
-    } else if (assignment.taskType === "interactive_lab") {
-      activePracticeMode = "labs";
-      await loadCsLabs(true);
-    } else {
-      activePracticeMode = "exam";
-      await loadExamPracticeQuestion();
-    }
-    renderPracticeMode();
-    elements.quickPracticeSection.scrollIntoView({ behavior: "smooth", block: "start" });
-    return;
-  }
-
-  setAppSection("revise");
-  startRevisionSession(activeRevisionTopicId);
-  renderRevisionPage();
-  document.querySelector(".revision-stage")?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
 
 async function handleMasteryMapClick(event) {
   const button = event.target.closest("[data-jump-topic]");
@@ -7367,7 +5421,6 @@ function renderPlan() {
     elements.studyPackButton.disabled = true;
     elements.exportPdfButton.disabled = true;
     elements.historyButton.disabled = true;
-    elements.dashboardButton.hidden = true;
     return;
   }
 
@@ -7376,12 +5429,11 @@ function renderPlan() {
   const freeDeck = getSelectedFreeRevisionTopicId();
   const planSuffix = !hasFeature("fullRevisionLibrary") && freeDeck ? " · 1 deck" : "";
   elements.userPlanLabel.textContent = `${currentUser.planName || plan.name || "Free"}${planSuffix}`;
-  elements.workspaceKind.disabled = !hasFeature("classroomSpaces");
+  elements.workspaceKind.disabled = false;
   elements.instantCardsButton.disabled = !selectedId;
   elements.studyPackButton.disabled = !selectedId || !hasFeature("studyPack");
   elements.exportPdfButton.disabled = !selectedId || !hasFeature("pdfExport");
   elements.historyButton.disabled = !selectedId || !hasFeature("versionHistory");
-  elements.dashboardButton.hidden = !hasFeature("teacherDashboard");
 }
 
 function renderWorkspaces() {
@@ -7807,7 +5859,7 @@ async function exportSelectedPdf() {
   if (!note) return;
 
   if (!hasFeature("pdfExport")) {
-    showInsightsMessage("PDF export is part of Pro and Teacher plans.", "error");
+    showInsightsMessage("PDF export is part of Pro.", "error");
     return;
   }
 
@@ -8188,36 +6240,6 @@ async function showVersionHistory() {
   }
 }
 
-async function showTeacherDashboard() {
-  if (!activeWorkspaceId) return;
-
-  try {
-    const response = await api(`/api/workspaces/${activeWorkspaceId}/dashboard`);
-    elements.insightsPanel.hidden = false;
-    elements.insightsPanel.innerHTML = `
-      <div class="section-title">
-        <span>Teacher dashboard</span>
-        <span>${escapeHtml(response.workspace.kind)}</span>
-      </div>
-      <div class="dashboard-grid">
-        <strong>${response.summary.note_count || 0}<span>notes</span></strong>
-        <strong>${response.summary.active_authors || 0}<span>authors</span></strong>
-        <strong>${response.contributors.length}<span>members</span></strong>
-      </div>
-      ${response.contributors
-        .map(
-          (person) => `<article>
-            <strong>${escapeHtml(person.name)}</strong>
-            <span>${escapeHtml(person.email)}</span>
-            <p>${person.note_count || 0} notes${person.last_activity ? ` · last active ${formatDate(person.last_activity)}` : ""}</p>
-          </article>`,
-        )
-        .join("")}
-    `;
-  } catch (error) {
-    showInsightsMessage(error.message, "error");
-  }
-}
 
 function showInsightsMessage(message, type = "") {
   revealStudyOutput();

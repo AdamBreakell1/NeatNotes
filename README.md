@@ -1,5 +1,9 @@
 # Neat Notes
 
+## Student-only direction
+
+The current local increment removes classroom workflows from the product. Start with the [student-only brief](docs/STUDENT_ONLY_BRIEF.md) and [checkpoint](docs/STUDENT_RELAUNCH.md) for research, naming findings, retained-data safeguards and release decisions. The rebrand is not yet selected, and Component 2 still requires recorded human academic approval. Do not push or deploy this increment without approval; older documentation of a classroom offering is historical, not the current product direction.
+
 Neat Notes is a BreakellSystems OCR A-Level Computer Science revision and notes platform. The current app is a vanilla frontend served by an Express backend with SQLite persistence.
 
 ## Student Relaunch Checkpoint

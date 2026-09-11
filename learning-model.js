@@ -191,10 +191,9 @@
       .sort((a, b) => a.retrievability - b.retrievability || String(a.conceptId).localeCompare(String(b.conceptId)));
   }
 
-  function buildSession({ items = [], durationMinutes = 15, now = new Date(), teacherPriorities = [] } = {}) {
+  function buildSession({ items = [], durationMinutes = 15, now = new Date() } = {}) {
     const allowedMinutes = clamp(durationMinutes, 5, 60);
     const itemBudget = Math.max(4, Math.round(allowedMinutes * 0.7));
-    const priorities = new Set(teacherPriorities);
     const ranked = items
       .map((item) => {
         const mastery = item.mastery || calculateMastery(item.evidence || [], now);
@@ -202,17 +201,14 @@
         const weakness = 100 - mastery.score;
         const misconceptionBoost = mastery.confidenceMismatch || item.misconceptionId ? 45 : 0;
         const dueBoost = due ? 30 : 0;
-        const teacherBoost = priorities.has(item.conceptId) ? 25 : 0;
-        const priority = weakness + misconceptionBoost + dueBoost + teacherBoost;
+        const priority = weakness + misconceptionBoost + dueBoost;
         const reason = misconceptionBoost
           ? "Recent answers suggest a misconception needs repairing."
-          : teacherBoost
-            ? "Your teacher has marked this as a priority."
-            : due
-              ? "This concept is due for adaptive spaced review."
-              : mastery.score < 55
-                ? "Recent evidence is fragile."
-                : "This adds older-topic retrieval to the session.";
+          : due
+            ? "This concept is due for adaptive spaced review."
+            : mastery.score < 55
+              ? "Recent evidence is fragile."
+              : "This adds older-topic retrieval to the session.";
         return { ...item, mastery, due, priority, reason };
       })
       .sort((a, b) => b.priority - a.priority);

@@ -1,7 +1,7 @@
 {
   "name": "notes-app",
   "version": "1.0.0",
-  "description": "A database-backed collaborative note taking app with email verification and Google OAuth hooks.",
+  "description": "A student-focused OCR A-Level Computer Science revision workspace with retrieval practice, personal notes and progress tracking.",
   "main": "server.js",
   "engines": {
     "node": ">=24.0.0"

@@ -1,5 +1,24 @@
 # Student relaunch checkpoint
 
+## Current checkpoint: 11 September 2026
+
+Branch: `codex/student-only-product`, from `2903927`. The latest request explicitly prohibits push/deployment; it supersedes earlier rollout permission for this increment. Work directly in this checkout; do not repeat GitHub setup or the September 8 mapping work.
+
+- Product direction is now student-only. Read `STUDENT_ONLY_BRIEF.md` for current competitor/academic evidence, naming/domain findings, the target loop and priorities. Earlier classroom-compatibility descriptions below are historical.
+- Removed teacher navigation, mode switching, class/join-code/assignment/centre UI, demo classroom seeding, dashboard panels and their frontend data loading. Old browser mode preferences are ignored without deleting browser records. Removed teacher priority boosts from session ranking.
+- Retired class/centre/assignment/workspace-dashboard routes with authenticated 410 responses across methods. No SQL tables/records were dropped, and no live data or provider configuration was changed. New classroom workspaces and class-scoped revision requests are rejected. Student resource access for legacy paid contracts survives through the existing Stripe identifiers; public accounts show the student plan rather than internal legacy labels.
+- Personal deck history now includes the learner's own historic class-tagged attempts; it never includes another learner's records. Old roles and archival profile/membership records are preserved for authorised exports, not exposed as active product workflows. Existing collaborative note ownership remains unchanged.
+- C2 is already structurally integrated: eight topics, 115 cards, 16 written prompts, eight applied tasks. There are **zero academic approvals**. No content was unlocked. The component notice now counts pending packs and distinguishes local drafts from publication; the review state is not labelled as a Pro purchase requirement.
+- Naming: RecallStride is the provisional recommendation. Verisign `.com` RDAP returned 404/no record for `recallstride.com` at 18:12:34 UTC on 11 September; RecallCircuit and ReviseLoop `.com` names are registered. Registrar availability and trademark/confusion checks are incomplete, so no brand replacement or purchase occurred.
+- Final verification: 49 unit/API tests passed; 42 JavaScript syntax checks passed; content validation passed for 24 topics/431 concepts; 33 disposable Brave browser check groups passed, including obsolete-mode preferences, no retired API calls, account login, paywalls, C2 local preview, resume and 320/390/768/1280 layouts. Browser JavaScript error list is empty and `git diff --check` is clean. Desktop/mobile Today screenshots were visually reviewed. Restore coverage now confirms startup leaves historical class join codes and owned attempts unchanged.
+- Remaining decisions: naming clearance/selection; real human C2 academic review; approved retained-contract/export handling before deploying the retired endpoints. Continue with reviewed C1 distractors/content gaps and the signup-return/repair-loop priorities; do not claim the full relaunch, rebrand or commercial readiness is complete.
+
+The local retirement is a deliberate breaking API change, not a production migration. Dormant schema and unused legacy styles remain; archival export helpers still support access to retained records. None restore the retired routes. Never delete production data to make the repository appear new.
+
+Checkpoint commit: `Refocus the product on personal student revision`, on `codex/student-only-product`. Local only; no push or Render deployment. Resume with the P1 content and return-to-task items in `STUDENT_ONLY_BRIEF.md`, not another classroom-removal pass. No credentials, runtime databases or ignored browser artefacts belong in the commit.
+
+## Historical release records
+
 Baseline: `96410c0`, 7 September 2026. Work branch: `codex/student-centric-relaunch`; promoted to `main` with explicit user approval.
 The original brief did not authorise deployment. On 7 September 2026 the user explicitly requested deployment to the existing Render service. This authorises the guarded application release, not publication of unreviewed content, live financial transactions, destructive data operations or unrelated provider changes.
 

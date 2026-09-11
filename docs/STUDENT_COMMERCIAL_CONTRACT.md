@@ -2,6 +2,8 @@
 
 7 September 2026. Implementation facts and proposals, not approved legal terms.
 
+**Superseded direction, 11 September:** the [student-only brief](STUDENT_ONLY_BRIEF.md) retires classroom UI and endpoints in the local branch. This document records earlier compatibility assumptions, not a promise to continue those workflows. Legacy billing identifiers, records and student resource access remain intact; deployment of the retirement still needs an approved obligations/export plan. No production contract or price was changed.
+
 ## Public offering
 
 `product-config.js` owns the backend plan catalogue, brand identity and public plan IDs. Only Free and Pro can start a new checkout. Current Pro price remains GBP 3.99/month; no price or live Stripe object was changed.

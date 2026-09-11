@@ -13,7 +13,6 @@ const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "neat-notes-integration-")
 let serverProcess;
 let cookie = "";
 let verificationUrl = "";
-let teacherCookie = "";
 let secondStudentCookie = "";
 
 before(async () => {
@@ -134,7 +133,7 @@ test("student account verifies, logs in and cannot elevate its role", async () =
   assert.equal(invalidIdentityResponse.status, 400);
 });
 
-test("free account cannot bypass deck or teacher entitlements", async () => {
+test("free account cannot bypass deck entitlements or access retired routes", async () => {
   const decksResponse = await fetch(`${baseUrl}/api/revision/decks`, { headers: { Cookie: cookie } });
   const { decks } = await decksResponse.json();
   assert.equal(decksResponse.status, 200);
@@ -162,7 +161,7 @@ test("free account cannot bypass deck or teacher entitlements", async () => {
     headers: { "Content-Type": "application/json", Cookie: cookie },
     body: JSON.stringify({ name: "Unauthorised class" }),
   });
-  assert.equal(classResponse.status, 403);
+  assert.equal(classResponse.status, 410);
 });
 
 test("mutation origin checks accept the deployed host and reject foreign sites", async () => {
@@ -247,105 +246,64 @@ async function createVerifiedAccount({ name, email, password }) {
   return loginResponse.headers.get("set-cookie").split(";")[0];
 }
 
-test("teacher class, assignment and student completion journey remains permission-bound", async () => {
-  teacherCookie = await createVerifiedAccount({
-    name: "Integration Teacher",
-    email: "teacher@example.test",
-    password: "TeacherPass123",
+test("retired group routes cannot expose or mutate retained records; legacy billing keeps student access", async () => {
+  const legacyCookie = await createVerifiedAccount({
+    name: "Legacy Account", email: "legacy@example.test", password: "LegacyPass123",
   });
   secondStudentCookie = await createVerifiedAccount({
-    name: "Second Student",
-    email: "second-student@example.test",
-    password: "StudentPass123",
+    name: "Second Student", email: "second-student@example.test", password: "StudentPass123",
   });
-
-  const upgradeResponse = await fetch(`${baseUrl}/api/billing/mock-upgrade`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Cookie: teacherCookie },
+  const upgrade = await fetch(`${baseUrl}/api/billing/mock-upgrade`, {
+    method: "POST", headers: { "Content-Type": "application/json", Cookie: legacyCookie },
     body: JSON.stringify({ plan: "teacher" }),
   });
-  assert.equal(upgradeResponse.status, 200);
+  assert.equal(upgrade.status, 200);
+  const profile = await fetch(`${baseUrl}/api/profile`, { headers: { Cookie: legacyCookie } }).then((r) => r.json());
+  assert.equal(profile.user.plan, "pro");
+  assert.equal(profile.user.role, "student");
+  assert.equal(profile.user.entitlements.features.fullRevisionLibrary, true);
+  assert.equal("isTeacher" in profile.user, false);
+  assert.equal("teacherProfile" in profile, false);
+  assert.equal("teacherDashboard" in profile.user.entitlements.features, false);
 
-  const classResponse = await fetch(`${baseUrl}/api/classes`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Cookie: teacherCookie },
-    body: JSON.stringify({ name: "Integration Class", yearGroup: "Year 12" }),
-  });
-  const classPayload = await classResponse.json();
-  assert.equal(classResponse.status, 201);
-  assert.match(classPayload.class.joinCode, /^NN-[A-Z2-9]{5}-[A-Z2-9]{5}$/);
+  const db = new DatabaseSync(path.join(tempDir, "integration.sqlite"));
+  try {
+    db.prepare("INSERT INTO class_groups (id, teacher_id, name, subject, exam_board, join_code, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("retained-class", profile.user.id, "Historical record", "Computer Science", "OCR", "NN-ABCDE", "2026-01-01", "2026-01-01");
+    const before = db.prepare("SELECT * FROM class_groups WHERE id = ?").get("retained-class");
+    const card = db.prepare("SELECT id, deck_id FROM flashcards WHERE deck_id = 'cs-1-1-1' ORDER BY position LIMIT 1").get();
+    db.prepare("INSERT INTO flashcard_attempts (id, user_id, class_id, deck_id, card_id, confidence, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("retained-attempt", profile.user.id, "retained-class", card.deck_id, card.id, "confident", "flashcard", "2026-01-01T12:00:00Z");
+    const paths = ["/api/classes", "/api/classes/join", "/api/classes/retained-class/students", "/api/classes/retained-class/insights",
+      "/api/classes/retained-class/join-code/regenerate", "/api/classes/retained-class/assignments", "/api/centres",
+      "/api/centres/join", "/api/assignments", "/api/assignments/retained/status", "/api/workspaces/retained/dashboard"];
+    for (const accountCookie of [cookie, legacyCookie]) {
+      for (const endpoint of paths) {
+        for (const method of ["GET", "POST", "PATCH", "DELETE"]) {
+          const response = await fetch(baseUrl + endpoint, {
+            method, headers: { "Content-Type": "application/json", Cookie: accountCookie },
+            ...(method === "GET" ? {} : { body: JSON.stringify({ code: "RETAINED", status: "complete" }) }),
+          });
+          assert.equal(response.status, 410, `${method} ${endpoint}`);
+        }
+      }
+    }
+    assert.deepEqual(db.prepare("SELECT * FROM class_groups WHERE id = ?").get("retained-class"), before);
+    const personalDeck = await fetch(`${baseUrl}/api/revision/decks/cs-1-1-1`, { headers: { Cookie: legacyCookie } }).then((r) => r.json());
+    assert.equal(personalDeck.deck.cards.find((item) => item.id === card.id).latestAttempt.id, "retained-attempt");
+    const otherDeck = await fetch(`${baseUrl}/api/revision/decks/cs-1-1-1`, { headers: { Cookie: cookie } }).then((r) => r.json());
+    assert.ok(otherDeck.deck.cards.every((item) => item.latestAttempt?.id !== "retained-attempt"));
+    const activityResponse = await fetch(`${baseUrl}/api/revision/activity`, { headers: { Cookie: legacyCookie } });
+    assert.equal(activityResponse.status, 200);
+  } finally { db.close(); }
 
-  const classId = classPayload.class.id;
-  const joinCode = classPayload.class.joinCode;
-  const previewResponse = await fetch(`${baseUrl}/api/classes/preview`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Cookie: secondStudentCookie },
-    body: JSON.stringify({ code: joinCode }),
+  const contextual = await fetch(`${baseUrl}/api/revision/decks?classId=retained-class`, { headers: { Cookie: legacyCookie } });
+  assert.equal(contextual.status, 400);
+  const createClassroom = await fetch(`${baseUrl}/api/workspaces`, {
+    method: "POST", headers: { "Content-Type": "application/json", Cookie: legacyCookie },
+    body: JSON.stringify({ name: "Unsupported workspace", kind: "classroom" }),
   });
-  assert.equal(previewResponse.status, 200);
-
-  const joinResponse = await fetch(`${baseUrl}/api/classes/join`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Cookie: secondStudentCookie },
-    body: JSON.stringify({ code: joinCode }),
-  });
-  assert.equal(joinResponse.status, 201);
-
-  const assignmentResponse = await fetch(`${baseUrl}/api/classes/${classId}/assignments`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Cookie: teacherCookie },
-    body: JSON.stringify({ topicId: "cs-1-1-1", title: "Processor retrieval", taskType: "topic_revision" }),
-  });
-  const assignmentPayload = await assignmentResponse.json();
-  assert.equal(assignmentResponse.status, 201);
-
-  const studentAssignmentsResponse = await fetch(`${baseUrl}/api/assignments`, {
-    headers: { Cookie: secondStudentCookie },
-  });
-  const studentAssignments = await studentAssignmentsResponse.json();
-  assert.equal(studentAssignmentsResponse.status, 200);
-  assert.equal(studentAssignments.assignments.length, 1);
-
-  const completionResponse = await fetch(`${baseUrl}/api/assignments/${assignmentPayload.assignment.id}/status`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Cookie: secondStudentCookie },
-    body: JSON.stringify({ status: "complete" }),
-  });
-  assert.equal(completionResponse.status, 200);
-
-  const insightsResponse = await fetch(`${baseUrl}/api/classes/${classId}/insights`, {
-    headers: { Cookie: teacherCookie },
-  });
-  const insights = await insightsResponse.json();
-  assert.equal(insightsResponse.status, 200);
-  assert.equal(insights.students.length, 1);
-  assert.equal(insights.dashboard.summary.students, 1);
-
-  const teacherAssignmentsResponse = await fetch(`${baseUrl}/api/assignments`, {
-    headers: { Cookie: teacherCookie },
-  });
-  const teacherAssignments = await teacherAssignmentsResponse.json();
-  assert.equal(teacherAssignmentsResponse.status, 200);
-  assert.equal(teacherAssignments.assignments[0].completedCount, 1);
-
-  const forbiddenInsights = await fetch(`${baseUrl}/api/classes/${classId}/insights`, {
-    headers: { Cookie: cookie },
-  });
-  assert.ok([402, 403].includes(forbiddenInsights.status));
-
-  const archiveResponse = await fetch(`${baseUrl}/api/classes/${classId}/archive`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Cookie: teacherCookie },
-    body: JSON.stringify({}),
-  });
-  assert.equal(archiveResponse.status, 200);
-
-  const archivedCompletionResponse = await fetch(`${baseUrl}/api/assignments/${assignmentPayload.assignment.id}/status`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Cookie: secondStudentCookie },
-    body: JSON.stringify({ status: "started" }),
-  });
-  assert.equal(archivedCompletionResponse.status, 404);
+  assert.equal(createClassroom.status, 400);
 });
 
 test("downgrade locks paid resources but preserves personal notes and account export", async () => {
@@ -405,6 +363,8 @@ test("an isolated SQLite backup restores accounts, evidence and curriculum throu
   const backupPath = path.join(tempDir, "restore.sqlite");
   const expectedUsers = source.prepare("SELECT count(*) AS count FROM users").get().count;
   const expectedEvidence = source.prepare("SELECT count(*) AS count FROM learning_evidence").get().count;
+  const expectedClass = source.prepare("SELECT * FROM class_groups WHERE id = ?").get("retained-class");
+  const expectedAttempt = source.prepare("SELECT * FROM flashcard_attempts WHERE id = ?").get("retained-attempt");
   source.prepare("VACUUM INTO ?").run(backupPath);
   source.close();
   const restored = new DatabaseSync(backupPath);
@@ -430,6 +390,13 @@ test("an isolated SQLite backup restores accounts, evidence and curriculum throu
     assert.equal((await session.json()).user.name, "Ada Student");
     const decks = await fetch(`${restoreUrl}/api/revision/decks`, { headers: { Cookie: cookie } }).then((r) => r.json());
     assert.equal(decks.decks.length, 24);
+    const archive = new DatabaseSync(backupPath, { readOnly: true });
+    try {
+      assert.deepEqual(archive.prepare("SELECT * FROM class_groups WHERE id = ?").get("retained-class"), expectedClass);
+      assert.deepEqual(archive.prepare("SELECT * FROM flashcard_attempts WHERE id = ?").get("retained-attempt"), expectedAttempt);
+    } finally {
+      archive.close();
+    }
   } finally {
     child.kill("SIGTERM");
     if (child.exitCode === null) await once(child, "exit");

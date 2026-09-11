@@ -50,10 +50,16 @@ async function dismissLaunch(page) {
     }
     browser = await chromium.launch({ headless: true, executablePath: process.env.NEAT_BROWSER_EXECUTABLE || undefined });
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
+    await context.addInitScript(() => localStorage.setItem("neat-notes-learning-mode", "teacher"));
     const page = await context.newPage();
     page.on("pageerror", (error) => errors.push(error.message));
+    page.on("request", (request) => {
+      if (/\/api\/(classes|centres|assignments)(?:\/|$|\?)/.test(request.url())) errors.push(`Retired workflow requested: ${request.url()}`);
+    });
     await page.goto(base);
     await dismissLaunch(page);
+    assert.equal(await page.locator('[data-app-section="teacher"], #teacher-mode-panel, #student-class-panel, #landing-schools').count(), 0);
+    evidence.push("Student-only shell omits retired workflows and ignores old learning-mode preferences");
     await screenshot(page, "landing-desktop");
     await page.getByRole("button", { name: "Try a revision session", exact: true }).click();
     await page.locator(".focused-retrieval-card").waitFor();
