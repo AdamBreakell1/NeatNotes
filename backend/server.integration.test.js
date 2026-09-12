@@ -307,6 +307,18 @@ test("retired group routes cannot expose or mutate retained records; legacy bill
     assert.ok(otherDeck.deck.cards.every((item) => item.latestAttempt?.id !== "retained-attempt"));
     const activityResponse = await fetch(`${baseUrl}/api/revision/activity`, { headers: { Cookie: legacyCookie } });
     assert.equal(activityResponse.status, 200);
+    const archivedExport = await fetch(`${baseUrl}/api/account/export`, { headers: { Cookie: legacyCookie } }).then((r) => r.json());
+    assert.equal(archivedExport.archivedClasses[0].id, "retained-class");
+    assert.equal("join_code" in archivedExport.archivedClasses[0], false);
+    assert.ok(archivedExport.flashcardAttempts.some((attempt) => attempt.id === "retained-attempt"));
+    const unrelatedExport = await fetch(`${baseUrl}/api/account/export`, { headers: { Cookie: cookie } }).then((r) => r.json());
+    assert.equal(unrelatedExport.archivedClasses.length, 0);
+    assert.ok(unrelatedExport.flashcardAttempts.every((attempt) => attempt.id !== "retained-attempt"));
+    db.prepare("UPDATE users SET subscription_status = 'canceled' WHERE id = ?").run(profile.user.id);
+    const deletion = await fetch(`${baseUrl}/api/account`, { method: "DELETE", headers: { Cookie: legacyCookie, "Content-Type": "application/json" }, body: JSON.stringify({ confirmation: "DELETE MY ACCOUNT", password: "LegacyPass123" }) });
+    assert.equal(deletion.status, 409);
+    assert.match((await deletion.json()).error, /archived classroom records/);
+    assert.ok(db.prepare("SELECT id FROM class_groups WHERE id = 'retained-class'").get());
   } finally { db.close(); }
 
   const contextual = await fetch(`${baseUrl}/api/revision/decks?classId=retained-class`, { headers: { Cookie: legacyCookie } });
@@ -415,7 +427,7 @@ test("an isolated SQLite backup restores accounts, evidence and curriculum throu
   }
 });
 
-test("production-mode delivery blocks draft C2 even for Pro and disables mock billing", async () => {
+test("production delivery releases authorized C2, preserves C1 draft gates and disables mock billing", async () => {
   const snapshot = path.join(tempDir, "production-mode.sqlite");
   const source = new DatabaseSync(path.join(tempDir, "integration.sqlite"), { readOnly: true });
   source.prepare("VACUUM INTO ?").run(snapshot);
@@ -443,13 +455,32 @@ test("production-mode delivery blocks draft C2 even for Pro and disables mock bi
     assert.equal(repairs.lessons.length, 0);
     assert.equal(repairs.pendingCount, 1);
     assert.equal((await fetch(`${url}/api/revision/repairs/repair-address-data/check`, { method: "POST", headers, body: JSON.stringify({ variant: 0, response: "64" }) })).status, 404);
-    assert.equal((await fetch(`${url}/api/revision/decks/cs-2-1-1`, { headers })).status, 402);
+    const c2Deck = await fetch(`${url}/api/revision/decks/cs-2-1-1`, { headers });
+    assert.equal(c2Deck.status, 200);
+    assert.ok((await c2Deck.json()).deck.cards.length > 0);
+    let deliveredCards = 0;
+    let deliveredQuestions = 0;
+    for (const code of ["2-1-1", "2-1-2", "2-1-3", "2-1-4", "2-1-5", "2-2-1", "2-2-2", "2-3-1"]) {
+      const response = await fetch(`${url}/api/revision/decks/cs-${code}`, { headers });
+      assert.equal(response.status, 200);
+      const payload = await response.json();
+      deliveredCards += payload.deck.cards.length;
+      assert.ok(payload.deck.cards.some((card) => card.quiz?.options.length === 4));
+      const written = await fetch(`${url}/api/exam/questions?topicId=cs-${code}`, { headers }).then((r) => r.json());
+      deliveredQuestions += written.questions.length;
+    }
+    assert.equal(deliveredCards, 115);
+    assert.equal(deliveredQuestions, 16);
     const questions = await fetch(`${url}/api/exam/questions?topicId=cs-2-1-1`, { headers }).then((r) => r.json());
-    assert.equal(questions.questions.length, 0);
+    assert.equal(questions.questions.length, 2);
     const labs = await fetch(`${url}/api/labs`, { headers }).then((r) => r.json());
-    assert.equal(labs.labs.some((lab) => lab.topicId.startsWith("cs-2-")), false);
-    assert.equal((await fetch(`${url}/ocr-h446/2.1.1`)).status, 404);
-    assert.equal((await fetch(`${url}/api/revision/free-deck`, { method: "POST", headers, body: JSON.stringify({ deckId: "cs-2-1-1" }) })).status, 409);
+    assert.equal(labs.labs.filter((lab) => lab.topicId.startsWith("cs-2-")).length, 8);
+    assert.equal((await fetch(`${url}/ocr-h446/2.1.1`)).status, 200);
+    const freeHeaders = { Cookie: secondStudentCookie, "Content-Type": "application/json" };
+    assert.equal((await fetch(`${url}/api/revision/free-deck`, { method: "POST", headers: freeHeaders, body: JSON.stringify({ deckId: "cs-2-1-1" }) })).status, 200);
+    assert.equal((await fetch(`${url}/api/revision/decks/cs-2-1-1`, { headers: freeHeaders })).status, 200);
+    assert.equal((await fetch(`${url}/api/revision/decks/cs-2-1-2`, { headers: freeHeaders })).status, 402);
+    assert.equal((await fetch(`${url}/api/revision/free-deck`, { method: "POST", headers: freeHeaders, body: JSON.stringify({ deckId: "cs-2-1-2" }) })).status, 402);
     assert.equal((await fetch(`${url}/api/billing/mock-upgrade`, { method: "POST", headers, body: JSON.stringify({ plan: "pro" }) })).status, 403);
   } finally {
     child.kill("SIGTERM");

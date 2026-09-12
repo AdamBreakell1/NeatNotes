@@ -98,41 +98,41 @@ Legacy C1 MCQs choose other available flashcard answers at runtime; they have no
 | 1.5.2[7] | Personal-information analysis | published_unreviewed | 2 | 2 | 0 | 0 |  |
 | 1.5.2[8] | Piracy and offensive communications | published_unreviewed | 2 | 2 | 0 | 0 |  |
 | 1.5.2[9] | Cultural aspects of interface design | published_unreviewed | 2 | 2 | 0 | 0 |  |
-| 2.1.1(a) | Nature of abstraction | draft | 2 | 2 | 0 | 0 |  |
-| 2.1.1(b) | Need for abstraction | draft | 2 | 0 | 0 | 0 |  |
-| 2.1.1(c) | Model versus reality | draft | 2 | 1 | 1 | 0 |  |
-| 2.1.1(d) | Devise an abstract model | draft | 2 | 0 | 1 | 1 |  |
-| 2.1.2(a) | Inputs and outputs | draft | 1 | 0 | 0 | 0 |  |
-| 2.1.2(b) | Preconditions | draft | 3 | 2 | 1 | 0 |  |
-| 2.1.2(c) | Caching | draft | 4 | 1 | 1 | 1 |  |
-| 2.1.2(d) | Reusable components | draft | 2 | 0 | 0 | 0 |  |
-| 2.1.3(a) | Identify problem components | draft | 2 | 1 | 1 | 0 |  |
-| 2.1.3(b) | Identify solution components | draft | 2 | 1 | 0 | 0 |  |
-| 2.1.3(c) | Order solution steps | draft | 2 | 1 | 0 | 1 |  |
-| 2.1.3(d) | Identify sub-procedures | draft | 2 | 0 | 1 | 0 |  |
-| 2.1.4(a) | Identify decisions | draft | 2 | 1 | 0 | 0 |  |
-| 2.1.4(b) | Determine logical conditions | draft | 4 | 2 | 1 | 1 |  |
-| 2.1.4(c) | Effect of decisions on flow | draft | 2 | 0 | 1 | 0 |  |
-| 2.1.5(a) | Identify concurrent parts | draft | 4 | 2 | 0 | 0 |  |
-| 2.1.5(b) | Benefits and trade-offs of concurrency | draft | 4 | 1 | 2 | 1 |  |
-| 2.2.1(a) | Programming constructs | draft | 3 | 1 | 0 | 0 |  |
-| 2.2.1(b) | Recursion and iteration | draft | 4 | 1 | 1 | 1 |  |
-| 2.2.1(c) | Global and local scope | draft | 2 | 0 | 0 | 0 |  |
-| 2.2.1(d) | Modularity and parameters | draft | 4 | 1 | 0 | 0 |  |
-| 2.2.1(e) | IDE facilities | draft | 2 | 0 | 0 | 0 |  |
-| 2.2.1(f) | Object-oriented techniques | draft | 5 | 0 | 1 | 0 |  |
-| 2.2.2(a) | Computationally solvable problems | draft | 2 | 0 | 0 | 0 |  |
-| 2.2.2(b) | Problem recognition | draft | 1 | 0 | 0 | 0 |  |
-| 2.2.2(c) | Decomposition | draft | 1 | 0 | 0 | 0 |  |
-| 2.2.2(d) | Divide and conquer | draft | 2 | 1 | 0 | 0 |  |
-| 2.2.2(e) | Abstraction | draft | 1 | 0 | 0 | 0 |  |
-| 2.2.2(f) | Problem-solving techniques and methods | draft | 9 | 2 | 2 | 1 |  |
-| 2.3.1(a) | Design and analyse algorithms | draft | 3 | 0 | 1 | 1 |  |
-| 2.3.1(b) | Time and space suitability | draft | 2 | 0 | 0 | 0 |  |
-| 2.3.1(c) | Big O growth | draft | 3 | 2 | 0 | 0 |  |
-| 2.3.1(d) | Compare algorithms | draft | 5 | 0 | 1 | 0 |  |
-| 2.3.1(e) | Data structures and traversals | draft | 10 | 1 | 0 | 0 |  |
-| 2.3.1(f) | Standard searching, sorting and pathfinding algorithms | draft | 14 | 0 | 0 | 0 |  |
+| 2.1.1(a) | Nature of abstraction | published_unreviewed | 2 | 2 | 0 | 0 |  |
+| 2.1.1(b) | Need for abstraction | published_unreviewed | 2 | 0 | 0 | 0 |  |
+| 2.1.1(c) | Model versus reality | published_unreviewed | 2 | 1 | 1 | 0 |  |
+| 2.1.1(d) | Devise an abstract model | published_unreviewed | 2 | 0 | 1 | 1 |  |
+| 2.1.2(a) | Inputs and outputs | published_unreviewed | 1 | 0 | 0 | 0 |  |
+| 2.1.2(b) | Preconditions | published_unreviewed | 3 | 2 | 1 | 0 |  |
+| 2.1.2(c) | Caching | published_unreviewed | 4 | 1 | 1 | 1 |  |
+| 2.1.2(d) | Reusable components | published_unreviewed | 2 | 0 | 0 | 0 |  |
+| 2.1.3(a) | Identify problem components | published_unreviewed | 2 | 1 | 1 | 0 |  |
+| 2.1.3(b) | Identify solution components | published_unreviewed | 2 | 1 | 0 | 0 |  |
+| 2.1.3(c) | Order solution steps | published_unreviewed | 2 | 1 | 0 | 1 |  |
+| 2.1.3(d) | Identify sub-procedures | published_unreviewed | 2 | 0 | 1 | 0 |  |
+| 2.1.4(a) | Identify decisions | published_unreviewed | 2 | 1 | 0 | 0 |  |
+| 2.1.4(b) | Determine logical conditions | published_unreviewed | 4 | 2 | 1 | 1 |  |
+| 2.1.4(c) | Effect of decisions on flow | published_unreviewed | 2 | 0 | 1 | 0 |  |
+| 2.1.5(a) | Identify concurrent parts | published_unreviewed | 4 | 2 | 0 | 0 |  |
+| 2.1.5(b) | Benefits and trade-offs of concurrency | published_unreviewed | 4 | 1 | 2 | 1 |  |
+| 2.2.1(a) | Programming constructs | published_unreviewed | 3 | 1 | 0 | 0 |  |
+| 2.2.1(b) | Recursion and iteration | published_unreviewed | 4 | 1 | 1 | 1 |  |
+| 2.2.1(c) | Global and local scope | published_unreviewed | 2 | 0 | 0 | 0 |  |
+| 2.2.1(d) | Modularity and parameters | published_unreviewed | 4 | 1 | 0 | 0 |  |
+| 2.2.1(e) | IDE facilities | published_unreviewed | 2 | 0 | 0 | 0 |  |
+| 2.2.1(f) | Object-oriented techniques | published_unreviewed | 5 | 0 | 1 | 0 |  |
+| 2.2.2(a) | Computationally solvable problems | published_unreviewed | 2 | 0 | 0 | 0 |  |
+| 2.2.2(b) | Problem recognition | published_unreviewed | 1 | 0 | 0 | 0 |  |
+| 2.2.2(c) | Decomposition | published_unreviewed | 1 | 0 | 0 | 0 |  |
+| 2.2.2(d) | Divide and conquer | published_unreviewed | 2 | 1 | 0 | 0 |  |
+| 2.2.2(e) | Abstraction | published_unreviewed | 1 | 0 | 0 | 0 |  |
+| 2.2.2(f) | Problem-solving techniques and methods | published_unreviewed | 9 | 2 | 2 | 1 |  |
+| 2.3.1(a) | Design and analyse algorithms | published_unreviewed | 3 | 0 | 1 | 1 |  |
+| 2.3.1(b) | Time and space suitability | published_unreviewed | 2 | 0 | 0 | 0 |  |
+| 2.3.1(c) | Big O growth | published_unreviewed | 3 | 2 | 0 | 0 |  |
+| 2.3.1(d) | Compare algorithms | published_unreviewed | 5 | 0 | 1 | 0 |  |
+| 2.3.1(e) | Data structures and traversals | published_unreviewed | 10 | 1 | 0 | 0 |  |
+| 2.3.1(f) | Standard searching, sorting and pathfinding algorithms | published_unreviewed | 14 | 0 | 0 | 0 |  |
 
 ## Supplementary material
 

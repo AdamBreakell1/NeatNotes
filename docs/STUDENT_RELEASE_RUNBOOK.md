@@ -1,5 +1,11 @@
 # Student relaunch: release and rollback
 
+## 12 September release override
+
+Deployment to the existing Render service and publication of all prepared C2 material are explicitly owner-authorised. C2 version-specific publication records are separate from independent academic approval. C1 authored MCQs/repairs remain gated. The current release removes classroom endpoints (authenticated 410) without dropping historic records. Account export includes owned archival material and personal attempts; deletion blocks owned archival groups/centres. Legacy paid subscriptions retain student access and billed prices, with an explanatory account-settings notice. No customer cancellations or refunds are performed.
+
+The schema also adds `auth_continuations` for account-bound, expiring return-to-task. Recovery evidence and exact rollout/rollback revisions are in `STUDENT_RELAUNCH.md`. Older classroom-workflow and C2-release instructions below are historical, not instructions to restore retired UI or re-lock owner-authorised C2.
+
 7 September 2026. Current decision: **NO-GO for an unrestricted production relaunch**. Engineering validation is local; academic, legal, provider and real-device gates below remain open. The user subsequently explicitly authorised deployment to the existing Render service. Deploy only the guarded engineering release, preserving C2 review restrictions and existing provider settings. This permission does not establish academic approval or completion of the remaining launch gates.
 
 ## Boundary and inventory

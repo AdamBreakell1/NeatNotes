@@ -973,6 +973,13 @@ app.get("/api/account/export", requireUser, (req, res) => {
     classMemberships: db.prepare(`
       SELECT class_id, role, status, joined_at, left_at FROM class_memberships WHERE user_id = ?
     `).all(req.user.id),
+    archivedClasses: db.prepare(`SELECT id, centre_id, name, subject, exam_board, year_group, description,
+      archived_at, created_at, updated_at FROM class_groups WHERE teacher_id = ?`).all(req.user.id),
+    archivedAssignments: db.prepare(`SELECT id, class_id, deck_id, title, instructions, task_type,
+      start_at, due_at, estimated_minutes, status, created_at, updated_at
+      FROM class_assignments WHERE created_by = ?`).all(req.user.id),
+    assignmentCompletions: db.prepare("SELECT * FROM assignment_completions WHERE user_id = ?").all(req.user.id),
+    flashcardAttempts: db.prepare("SELECT * FROM flashcard_attempts WHERE user_id = ? ORDER BY created_at").all(req.user.id),
   };
   writeAuditLog(req.user.id, "account_data_exported", "user", req.user.id);
   res.setHeader("Content-Disposition", `attachment; filename="neat-notes-account-export-${new Date().toISOString().slice(0, 10)}.json"`);
@@ -997,6 +1004,9 @@ app.delete("/api/account", requireUser, (req, res) => {
 
   const sharedOwnership = db.prepare(`SELECT 1 FROM workspaces JOIN workspace_members ON workspace_members.workspace_id = workspaces.id WHERE workspaces.owner_id = ? AND workspace_members.user_id != ? LIMIT 1`).get(req.user.id, req.user.id);
   if (sharedOwnership) return res.status(409).json({ error: "This account owns shared work. Contact support to arrange ownership and exports before deletion, so other members' notes are not lost." });
+  const archivedOwnership = db.prepare(`SELECT 1 FROM class_groups WHERE teacher_id = ?
+    UNION ALL SELECT 1 FROM centres WHERE created_by = ? LIMIT 1`).get(req.user.id, req.user.id);
+  if (archivedOwnership) return res.status(409).json({ error: "This account owns archived classroom records. Export your account data and contact support to arrange retention or ownership before deletion. Other people's records will not be deleted automatically." });
 
   const userId = req.user.id;
   db.prepare("DELETE FROM users WHERE id = ?").run(userId);
@@ -3506,6 +3516,7 @@ function publicUser(user) {
     freeRevisionDeckId: user.free_revision_deck_id || null,
     freeRevisionDeckLimit: FREE_REVISION_DECK_LIMIT,
     billingPortalReady: Boolean(user.stripe_customer_id && stripe),
+    legacyContract: Boolean(plan.legacyOnly),
     entitlements: publicPlan,
     emailVerified: Boolean(user.email_verified),
   };

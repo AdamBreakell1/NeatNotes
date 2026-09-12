@@ -237,7 +237,8 @@ async function dismissLaunch(page) {
     await navigate(page, "revise");
     await page.locator('[data-component="h446-02"]').first().click();
     await page.locator(".focused-retrieval-card").waitFor();
-    assert.match(await page.locator("#component-content-status").innerText(), /review pending/i);
+    assert.match(await page.locator("#component-content-status").innerText(), /8 topic packs/);
+    assert.doesNotMatch(await page.locator("#component-content-status").innerText(), /review pending/i);
     await page.locator("#component-topic-select").selectOption("cs-2-3-1");
     assert.match(await page.locator("#revision-topic-title").innerText(), /Algorithms/);
     await screenshot(page, "component2-desktop");
@@ -312,7 +313,7 @@ async function dismissLaunch(page) {
     assert.match(await page.locator(".deck-summary-panel").innerText(), /Session complete/i);
     await page.getByRole("button", { name: "Back to Today", exact: true }).click();
     evidence.push("Adaptive preview equals ordered delivery; refresh resumes the next card; bounded session completes and returns to Today");
-    evidence.push("Local Pro editorial preview: 8 ordered C2 topics; focused quiz and guided written feedback work");
+    evidence.push("Pro Component 2: 8 ordered released topics; focused quiz and guided written feedback work");
 
     for (const width of [1280, 768, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
@@ -403,8 +404,10 @@ async function dismissLaunch(page) {
     assert.match(await page.locator(".recall-position").innerText(), /Question 1 of 1/);
     await page.locator("[data-recall-pause]").click();
     await page.locator('[data-component="h446-02"]').first().click();
-    assert.equal(await page.locator("[data-start-current-quiz]").isDisabled(), true);
-    evidence.push("Production C1 fallback: recall before reveal, own reflection, reload resume, bounded finish and revisit; no mastery evidence writes; C2 stays gated");
+    assert.equal(await page.locator("[data-start-current-quiz]").isDisabled(), false);
+    await page.locator("[data-start-current-quiz]").click();
+    assert.ok(await page.locator("[data-quiz-option]").count() > 0);
+    evidence.push("Production C1 fallback: recall before reveal, own reflection, reload resume, bounded finish and revisit; no mastery evidence writes; authorized C2 quiz opens");
     assert.deepEqual(errors, [], `Browser errors: ${errors.join("; ")}`);
     fs.writeFileSync(path.join(output, "results.json"), JSON.stringify({ passed: true, evidence, errors }, null, 2));
     console.log(JSON.stringify({ passed: true, checks: evidence.length, output }, null, 2));

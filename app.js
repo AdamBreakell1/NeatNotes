@@ -1844,6 +1844,7 @@ function renderSettingsAccountPanel() {
 
   const isSignedIn = Boolean(currentUser) && !isGuestMode;
   const planName = getCurrentPlanLabel();
+  document.querySelector("#settings-legacy-contract").hidden = !isSignedIn || !currentUser?.legacyContract;
   const avatarId = getActiveProfileAvatarId();
   elements.settingsAvatarId.value = avatarId;
   renderProfileAvatar(elements.settingsProfileAvatar);

@@ -1,6 +1,21 @@
 # Student relaunch checkpoint
 
-## Current checkpoint: released practice and resume, 12 September 2026
+## Current release: student-only and Component 2, 12 September 2026
+
+This section supersedes the historical no-deploy and C2-lock instructions below. The user explicitly authorised commit, push and deployment to the EXISTING https://neatnotes.onrender.com/ site, and confirmed: "Component 2 content all needs to be shipped onto live as its ready."
+
+- All eight prepared C2 packs are authorised for publication: 115 cards, 16 guided written prompts and eight applied tasks. `content-review.json.publicationAuthorizations` records the content owner's permission for each exact topic/version. Academic, C1 quiz and repair approval arrays remain empty. This is not an invented independent academic review or a full-specification-coverage claim.
+- Read the C2 cards, written rubrics and applied answers; checked topic/objective mapping against the OCR H446 specification and validated stable IDs/references. Corrected the train-change graph task to retain station AND service state, with zero-cost same-service travel and one-cost transfers. All prepared C2 activities are released through the existing topic gate, while plan checks and quarantine remain enforced.
+- Published component/concept metadata follows the release records; no stale academic lock in component selection. Free accounts can select one C2 deck; additional decks remain paid. C1 authored MCQs and repair drafts remain independently gated. Existing C1 recall practice remains usable.
+- Retired classroom routes stay authenticated 410. Account export now includes the owner's archived classes/assignments and their own attempts/completions, without other learners' answers or join codes. Account deletion cannot cascade through owned historic classroom/centre records. Legacy paid student access and subscription pricing are preserved; account settings explains retirement and routes to Billing/Contact/export.
+- Verification: 62 unit/API tests, 49 JavaScript syntax files, 42 disposable Brave browser groups; 24 topics/431 concepts and 119 objective rows. Production-mode tests deliver all C2 packs, enforce Free one-deck limits and preserve separate C1 draft gates. No browser JS errors. Responsive checks include 320/390/768/1280 widths.
+- Render recovery: daily snapshot displayed 12 September 2026 at 12:56 AM, `/var/data`, 1 GB. Fresh non-destructive `VACUUM INTO` backup at `/var/data/backups/before-student-release-2026-09-12T14-46-56-146Z.sqlite`, 651264 bytes, integrity `ok`, zero foreign-key errors. Aggregate inspection found zero historic class groups/assignments. No live data was deleted, no snapshot restored, no provider configuration changed. A production restore was not performed.
+- Application rollback target before this release: `2ec7b6ae0790343c65cffd889449c0c1e177ac65`. New `auth_continuations` table is additive; reverting application code does not require destroying it or replacing the database.
+- Remaining caveats: independent content depth/review, real-provider email/Stripe sandbox lifecycle, manual device/screen-reader and legal/naming clearance. RecallStride is provisional on the existing domain; no domain purchase, DNS change or claim of trademark clearance. Existing account-note offline saving is not promised; local practice drafts are browser/account scoped, not cross-device sync.
+
+Deployment commit and live evidence will be recorded after Render serves the new revision. Do not repeat the relaunch implementation or treat earlier C2 draft-only checkpoints as the current release decision.
+
+## Previous checkpoint: released practice and resume, 12 September 2026
 
 Branch: `codex/student-only-product`, continuing from `56db0bc`. No push, Render deployment, purchases or live provider changes. Read `STUDENT_PRACTICE_AUDIT.md` for the current journey audit and resume contract. This checkpoint supersedes the previous empty production Quick Practice flow and non-resumable repairs.
 

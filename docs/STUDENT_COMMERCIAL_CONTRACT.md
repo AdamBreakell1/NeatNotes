@@ -1,5 +1,7 @@
 # Student relaunch: commercial and legacy contract
 
+**Release decision, 12 September:** the user now explicitly authorises the student-only retirement and deployment. Existing paid student access, billed prices and provider IDs are retained. Account settings explains retirement and links to existing Billing/Contact pathways. Owned historical classes/assignments and personal attempts/completions are exportable; deletion blocks owned archived groups/centres to prevent cascading data loss. Production aggregate inspection found zero class groups/assignments before rollout. No cancellation, refund, new price or customer email is part of this release. C2 publication is separately owner-authorised without claiming independent academic approval. See the current checkpoint for backup and deployment evidence; earlier workflow assumptions below are historical.
+
 7 September 2026. Implementation facts and proposals, not approved legal terms.
 
 **Superseded direction, 11 September:** the [student-only brief](STUDENT_ONLY_BRIEF.md) retires classroom UI and endpoints in the local branch. This document records earlier compatibility assumptions, not a promise to continue those workflows. Legacy billing identifiers, records and student resource access remain intact; deployment of the retirement still needs an approved obligations/export plan. No production contract or price was changed.

@@ -81,6 +81,9 @@
       ...SPECIFICATION,
       components: SPECIFICATION.components.map((component) => ({
         ...component,
+        contentStatus: topics.some((topic) => topic.componentId === component.id)
+          ? topics.filter((topic) => topic.componentId === component.id).every((topic) => topic.reviewStatus !== "review_pending") ? "published" : "review_pending"
+          : component.contentStatus,
         sections: [...sections.values()].filter((section) => section.componentId === component.id),
       })),
     };

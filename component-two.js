@@ -1,7 +1,7 @@
 "use strict";
 
 // Original study activities informed by the owner's Component 2 teaching pack.
-// Publication requires a recorded academic review; local builds show a review preview.
+// Version-specific release permission is recorded separately in content-review.json.
 const VERSION = "h446-c2-2026-09-07.1";
 function topic(code, title, summary, rows, prerequisites = []) {
   return {
