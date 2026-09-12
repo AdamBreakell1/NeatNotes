@@ -60,7 +60,7 @@ function isRepairReleased(item, review, production = process.env.NODE_ENV === "p
 }
 function publicRepair(item, variant = 0) {
   const { checks, ...publicFields } = item;
-  return { ...publicFields, variant, prompt: checks[variant].prompt };
+  return { ...publicFields, variant, prompt: checks[variant].prompt, practicePrompts: checks.map((item) => item.prompt) };
 }
 function assessRepair(item, value, variant = 0) {
   const target = item.checks[variant];

@@ -117,6 +117,12 @@ let csLabState = null;
 let activePasswordResetToken = "";
 let authReturnTask = null;
 let repairState = null;
+let recallPracticeState = null;
+const practiceDraftStore = window.PracticeDrafts.createStore({
+  getItem: (key) => localStorage.getItem(key),
+  setItem: (key, value) => localStorage.setItem(key, value),
+  removeItem: (key) => localStorage.removeItem(key),
+});
 
 const REVISION_TOPICS = window.REVISION_TOPICS || [];
 const NEAT_QUESTIONS = window.NEAT_QUESTIONS || [];
@@ -141,6 +147,7 @@ function renderComponentContext() {
 
 function changeComponent(componentId) {
   repairState = null;
+  recallPracticeState = null;
   practiceRequestId += 1;
   activeComponentId = componentId === "h446-02" ? "h446-02" : "h446-01";
   localStorage.setItem("neat-active-component", activeComponentId);
@@ -477,6 +484,15 @@ elements.neatQuestionsCurrentLink.addEventListener("click", startActiveTopicQuiz
 elements.neatQuestionsGrid.addEventListener("click", handleNeatQuestionsClick);
 elements.neatQuizPanel.addEventListener("click", handleNeatQuizPanelClick);
 elements.practiceModeBar.addEventListener("click", handlePracticeModeChange);
+elements.practiceModeBar.addEventListener("keydown", (event) => {
+  const tabs = [...elements.practiceModeBar.querySelectorAll("[data-practice-mode]")];
+  const index = tabs.indexOf(event.target);
+  if (index < 0 || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  tabs[next].focus();
+  tabs[next].click();
+});
 elements.examLoadQuestionButton.addEventListener("click", () => {
   if (activePracticeMode === "mock") loadMiniMock({ restart: true });
   else if (activePracticeMode === "labs") loadCsLabs(true);
@@ -510,6 +526,7 @@ window.addEventListener("online", () => {
 });
 document.querySelector("#component-topic-select").addEventListener("change", (event) => {
   repairState = null;
+  recallPracticeState = null;
   activeRevisionTopicId = event.target.value;
   activeAdaptiveSession = null;
   revisionReviewMode = null;
@@ -633,6 +650,7 @@ function handlePracticeModeChange(event) {
 
 function renderPracticeMode() {
   if (!elements.practiceModeBar) return;
+  updatePracticeFocus();
   const inPractice = activeAppSection === "practice";
   elements.practiceModeBar.hidden = !inPractice;
   if (!inPractice) {
@@ -659,6 +677,7 @@ function renderPracticeMode() {
     const active = button.dataset.practiceMode === activePracticeMode;
     button.classList.toggle("active", active);
     button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
   });
 }
 
@@ -690,7 +709,7 @@ function renderDailyStudyPanel() {
   const progress = Math.min(100, Math.round((today.cards / DAILY_REVIEW_GOAL) * 100));
   const remaining = Math.max(0, DAILY_REVIEW_GOAL - today.cards);
 
-  elements.dailyGoalCount.textContent = `${today.cards} / ${DAILY_REVIEW_GOAL}`;
+  elements.dailyGoalCount.textContent = today.cards >= DAILY_REVIEW_GOAL ? `${today.cards} reviewed · goal met` : `${today.cards} / ${DAILY_REVIEW_GOAL}`;
   elements.dailyGoalBar.style.width = `${progress}%`;
   elements.dailyStreakLabel.textContent = `${streak} day${streak === 1 ? "" : "s"} streak`;
 
@@ -762,6 +781,7 @@ function learningStorageKey(key) {
 
 function selectAccountLearningState() {
   repairState = null;
+  recallPracticeState = null;
   cardAttempts = loadLocalArray(CARD_ATTEMPTS_KEY).filter((attempt) => !String(attempt.source).startsWith("demo"));
   activityEvents = loadLocalArray(ACTIVITY_EVENTS_KEY);
   reviewSchedules = loadLocalObject(REVIEW_SCHEDULES_KEY);
@@ -1960,8 +1980,15 @@ async function deleteAccount() {
   const password = window.prompt("Enter your current password. Google-only accounts must have signed in again within the last 15 minutes and can leave this blank.") || "";
   elements.deleteAccountButton.disabled = true;
   try {
+    const ownerId = currentUser.id;
     await api("/api/account", { method: "DELETE", body: { confirmation, password } });
-    localStorage.clear();
+    try {
+      const ownedKeys = window.PracticeDrafts.accountStorageKeys(Object.keys(localStorage), ownerId,
+        [CARD_ATTEMPTS_KEY, ACTIVITY_EVENTS_KEY, REVIEW_SCHEDULES_KEY, MISTAKE_JOURNAL_KEY, STUDY_HISTORY_KEY, REVISION_BADGES_KEY, NEAT_QUIZ_PROGRESS_KEY]);
+      ownedKeys.forEach((key) => localStorage.removeItem(key));
+      delete appSettings.profileAvatars[ownerId];
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(appSettings));
+    } catch { /* Server deletion succeeded even if browser storage is unavailable. */ }
     window.location.assign("/");
   } catch (error) {
     elements.settingsMessage.textContent = error.message;
@@ -2047,7 +2074,8 @@ function getLegalPageContent(page) {
       html: `<p>RecallStride uses account details, notes and revision activity to provide the workspace, save progress and support enquiries.</p>
         <ul>
           <li>Contact enquiries are routed to the RecallStride support inbox.</li>
-          <li>Student workspace data is used to run notes, revision and class features.</li>
+          <li>Student workspace data is used to run personal notes and revision features.</li>
+          <li>Recall and worked-example drafts are saved for your account in this browser, not synced to other devices. They stop resuming after 30 days without an update and are removed when next checked.</li>
           <li>Payment processing is handled securely by Stripe when subscriptions are enabled.</li>
         </ul>
         <p>This is a summary of how your personal revision workspace handles data.</p>`,
@@ -2063,7 +2091,7 @@ function getLegalPageContent(page) {
     },
     cookies: {
       title: "Cookie Policy",
-      html: `<p>RecallStride uses essential cookies and local browser storage to keep users signed in, remember preferences and save local guest progress.</p>
+      html: `<p>RecallStride uses essential cookies and local browser storage to keep users signed in, remember preferences and save local guest progress and account-scoped practice drafts.</p>
         <p>Analytics and marketing cookies should only be added with clear consent controls.</p>`,
     },
     "data-protection": {
@@ -3052,7 +3080,7 @@ async function addCollaborator(event) {
 
   if (isGuestMode) {
     elements.shareEmail.value = "";
-    renderMembers("Create an account to invite collaborators and share class spaces.");
+    renderMembers("Create an account to share notes with collaborators.");
     return;
   }
 
@@ -4051,9 +4079,9 @@ function renderRevisionDashboard(topic) {
   const session = getAdaptiveSessionPlan(15);
   const recommended = session.items[0];
 
-  elements.revisionTodayStat.textContent = `${today.cards}/${DAILY_REVIEW_GOAL}`;
+  elements.revisionTodayStat.textContent = today.cards >= DAILY_REVIEW_GOAL ? String(today.cards) : `${today.cards}/${DAILY_REVIEW_GOAL}`;
   elements.revisionTodayCopy.textContent =
-    today.cards >= DAILY_REVIEW_GOAL ? "Today’s retrieval complete" : `${Math.max(0, DAILY_REVIEW_GOAL - today.cards)} activities to today’s goal`;
+    today.cards >= DAILY_REVIEW_GOAL ? "Reviewed today · goal met" : `${Math.max(0, DAILY_REVIEW_GOAL - today.cards)} activities to today’s goal`;
   elements.revisionMasteryStat.textContent = `${startedItems.length}/${learningItems.length}`;
   elements.revisionMasteryCopy.textContent = "Concepts with learning evidence";
 
@@ -4075,6 +4103,7 @@ function renderStudentDashboard(topic) {
   const openMistakes = mistakeJournal.filter((entry) => !entry.correctedAt);
   const recentNote = [...notes].sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))[0];
   const recentQuiz = getMostRecentQuizProgress();
+  const savedPractice = getLatestPracticeDraft();
   const sessionPreview = session.items.slice(0, 4);
   const examCountdown = getNearestExamCountdown();
 
@@ -4111,8 +4140,8 @@ function renderStudentDashboard(topic) {
       </section>
       <section>
         <div class="section-title"><span>Continue</span><span>${streak} day streak</span></div>
-        <p><strong>${recentQuiz ? `${escapeHtml(recentQuiz.topic.code)} Quick Practice` : recentNote ? escapeHtml(recentNote.title || createTitle(recentNote.body)) : "Start your first activity"}</strong><br>${today.cards} retrieval activities completed today.</p>
-        <button type="button" data-student-action="${recentQuiz ? "quick" : recentNote ? "note" : "cards"}">${recentQuiz ? "Continue practice" : recentNote ? "Open note" : "Choose a topic"}</button>
+        <p><strong>${savedPractice ? `${escapeHtml(savedPractice.topic.code)} ${savedPractice.kind === "repair" ? "worked example" : "recall practice"}` : recentQuiz ? `${escapeHtml(recentQuiz.topic.code)} Quick Practice` : recentNote ? escapeHtml(recentNote.title || createTitle(recentNote.body)) : "Start your first activity"}</strong><br>${savedPractice ? "Your place is saved on this device." : `${today.cards} retrieval activities completed today.`}</p>
+        <button type="button" data-student-action="${savedPractice ? "saved-practice" : recentQuiz ? "quick" : recentNote ? "note" : "cards"}">${savedPractice ? "Resume saved practice" : recentQuiz ? "Continue practice" : recentNote ? "Open note" : "Choose a topic"}</button>
       </section>
       <section>
         <div class="section-title"><span>Mistake repair</span><span>${openMistakes.length}</span></div>
@@ -4166,6 +4195,17 @@ async function handleStudentDashboardClick(event) {
   if (!button) return;
 
   const action = button.dataset.studentAction;
+  if (action === "saved-practice") {
+    const saved = getLatestPracticeDraft();
+    if (!saved) return;
+    changeComponent(saved.topic.componentId);
+    activeRevisionTopicId = saved.topic.id;
+    activePracticeMode = "quick";
+    setAppSection("practice");
+    if (saved.kind === "repair") await openRepairLessons();
+    else startRecallPractice(saved.topic, 10);
+    return;
+  }
   if (action === "continue") {
     await continueRevisionJourney();
     return;
@@ -4246,10 +4286,10 @@ function renderNeatQuestions() {
   const catalog = getNeatQuizCatalog();
   const totalQuestions = catalog.reduce((sum, quiz) => sum + quiz.questionCount, 0);
 
-  elements.neatQuestionsCount.textContent = `${catalog.length} topic packs · ${totalQuestions} questions`;
+  elements.neatQuestionsCount.textContent = `${catalog.length} topic packs · ${totalQuestions ? "recall and quiz practice" : "recall practice"}`;
   elements.neatQuestionsCurrentLink.textContent = "Start quick practice";
   elements.neatQuestionsCurrentLink.hidden = !activeTopic;
-  elements.neatQuestionsCurrentLink.disabled = !activeTopic?.quizCount;
+  elements.neatQuestionsCurrentLink.disabled = activeTopic?.contentAvailable === false;
 
   elements.neatQuestionsGrid.innerHTML = catalog.map((quiz) => {
     const isActive = quiz.topic.id === activeTopic?.id;
@@ -4270,7 +4310,6 @@ function renderNeatQuestions() {
     const activeLabel = isActive ? `<span class="question-current">Current topic</span>` : "";
     const runningLabel = isRunning ? `<span class="question-variant">In progress</span>` : "";
     const inReview = quiz.topic.contentAvailable === false;
-    const quizInReview = inReview || quiz.questionCount === 0;
     const lockLabel = inReview ? `<span class="question-variant">In review</span>` : locked
       ? `<span class="question-variant pro">Pro library</span>`
       : access.canClaim
@@ -4281,7 +4320,7 @@ function renderNeatQuestions() {
             ? `<span class="question-variant pro">Pro quiz</span>`
             : "";
     const openLabel = access.canClaim ? "Choose deck" : locked ? "Preview plan" : "Flashcards";
-    const actionLabel = access.canClaim ? "Choose + practise" : quizLocked ? "Unlock Pro" : isRunning ? "Continue" : quizProgress.attempts ? "Retry quiz" : "Start quiz";
+    const actionLabel = access.canClaim ? "Choose + practise" : quizLocked ? "Unlock Pro" : isRunning ? "Continue" : !quiz.questionCount ? "Recall practice" : quizProgress.attempts ? "Retry quiz" : "Start quiz";
     const lockedNote = locked
       ? `<div class="topic-lock-note" aria-label="Locked topic">
           <strong>Locked</strong>
@@ -4296,7 +4335,7 @@ function renderNeatQuestions() {
       </div>
       <div class="neat-question-card-copy">
         <strong>${escapeHtml(quiz.topic.title)}</strong>
-        <span>${quiz.questionCount} ${escapeHtml(sourceLabel)} · ${topicCardCount} cards</span>
+        <span>${inReview ? `${topicCardCount} draft cards · awaiting review` : quiz.questionCount ? `${quiz.questionCount} ${escapeHtml(sourceLabel)} · ${topicCardCount} cards` : `${topicCardCount} recall prompts · self-assessed`}</span>
       </div>
       ${lockedNote}
       <div class="topic-card-meter" aria-label="${topicPercent}% flashcard progress">
@@ -4304,11 +4343,11 @@ function renderNeatQuestions() {
       </div>
       <div class="topic-card-meta">
         <span>${topicPercent}% deck progress</span>
-        <span>${escapeHtml(progressLabel)}</span>
+        <span>${escapeHtml(quiz.questionCount ? progressLabel : "Self-assessed · no quiz score")}</span>
       </div>
       <div class="topic-card-actions">
         <button type="button" data-topic-id="${escapeHtml(quiz.topic.id)}" ${inReview ? "disabled" : ""}>${inReview ? "Awaiting review" : openLabel}</button>
-        <button type="button" data-start-quiz="${escapeHtml(quiz.topic.id)}" ${quizInReview ? "disabled" : ""}>${quizInReview ? "Quiz in review" : actionLabel}</button>
+        <button type="button" data-start-quiz="${escapeHtml(quiz.topic.id)}" ${inReview ? "disabled" : ""}>${inReview ? "Awaiting review" : actionLabel}</button>
       </div>
     </article>`;
   }).join("");
@@ -4339,7 +4378,11 @@ function getNeatQuizProgressLabel(topicId) {
 }
 
 function renderNeatQuizPanel() {
+  if (repairState && repairState.topicId !== activeRevisionTopicId) repairState = null;
+  if (recallPracticeState && recallPracticeState.topicId !== activeRevisionTopicId) recallPracticeState = null;
+  updatePracticeFocus();
   if (repairState) { elements.quickPracticeSection.classList.add("quiz-active"); renderRepairLesson(); return; }
+  if (recallPracticeState) { elements.quickPracticeSection.classList.add("quiz-active"); renderRecallPractice(); return; }
   elements.quickPracticeSection.classList.toggle("quiz-active", Boolean(neatQuizState.questions.length && !neatQuizState.completed));
   const topic = getQuizTopicById(neatQuizState.quizId);
 
@@ -4347,11 +4390,15 @@ function renderNeatQuizPanel() {
     const activeTopic = getActiveRevisionTopic();
     const activeQuestionCount = activeTopic?.quizCount ?? getRevisionTopicCardCount(activeTopic);
     const access = getRevisionTopicAccessState(activeTopic?.id);
-    const quizInReview = !activeQuestionCount;
-    const resumable = activeTopic && restoreQuizSession(activeTopic, buildNativeQuizQuestions(activeTopic));
+    const inReview = activeTopic?.contentAvailable === false;
+    const recallMode = !activeQuestionCount && !inReview;
+    const recallDraft = activeTopic && window.PracticeDrafts.restoreRecall(practiceDraftStore.read(currentUser?.id, "recall", activeTopic.id), getTopicCards(activeTopic));
+    const resumable = activeTopic && (recallMode
+      ? recallDraft && recallDraft.index < recallDraft.cards.length
+      : restoreQuizSession(activeTopic, buildNativeQuizQuestions(activeTopic)));
     const actionLabel = access.canClaim ? "Choose free deck" : access.locked ? "Unlock Pro" : resumable ? "Continue quick practice" : "Start quick practice";
     const description = access.canAccess
-      ? "Answer one question at a time with instant marking, corrections and streak tracking."
+      ? recallMode ? "Recall an answer, compare it with the explanation, then decide what to revisit. This is self-assessment, not an automatically marked quiz." : "Answer one question at a time with instant marking, corrections and streak tracking."
       : access.canClaim
         ? "Choose this as your one free deck to unlock flashcards and Quick Practice."
         : "Upgrade to Pro to practise this deck and all released OCR Computer Science packs.";
@@ -4359,11 +4406,11 @@ function renderNeatQuizPanel() {
       <div>
         <p class="eyebrow">Quick Practice</p>
         <h4>Practise ${escapeHtml(activeTopic?.code || "this topic")} one question at a time.</h4>
-        <p>${escapeHtml(quizInReview ? "These authored questions are awaiting academic review. You can continue using the released flashcards; upgrading does not bypass review." : description)}</p>
+        <p>${escapeHtml(inReview ? "This topic is awaiting academic review. Choose a released topic to practise; upgrading does not bypass review." : description)}</p>
       </div>
-      <button type="button" data-start-current-quiz ${quizInReview ? "disabled" : ""}>${escapeHtml(quizInReview ? "Questions in review" : actionLabel)}</button>
-      ${currentUser && access.canAccess ? `<button type="button" data-open-repair>Worked examples</button>` : ""}
-      <span class="quick-practice-note">${activeQuestionCount} questions in this topic pack${access.locked ? " · Pro" : ""}</span>
+      <button type="button" data-start-current-quiz ${inReview ? "disabled" : ""}>${escapeHtml(inReview ? "Topic in review" : actionLabel)}</button>
+      ${currentUser && access.canAccess ? `<button type="button" data-open-repair>${practiceDraftStore.read(currentUser.id, "repair", activeTopic.id) ? "Resume worked example" : "Worked examples"}</button>` : ""}
+      <span class="quick-practice-note">${recallMode ? "Released flashcards · self-assessed recall" : `${activeQuestionCount} quiz checks`}${access.locked ? " · Pro" : ""}</span>
     </div>`;
     return;
   }
@@ -4405,6 +4452,7 @@ function renderNeatQuizPanel() {
     </div>
     ${feedback}
     <div class="neat-quiz-controls">
+      <button type="button" data-quiz-pause>Pause</button>
       <button type="button" data-quiz-restart>Restart</button>
       <button type="button" data-quiz-next ${neatQuizState.answered ? "" : "disabled"}>${nextLabel}</button>
     </div>
@@ -4488,18 +4536,50 @@ async function handleNeatQuestionsClick(event) {
 }
 
 async function handleNeatQuizPanelClick(event) {
+  if (event.target.closest("[data-quiz-pause]")) { neatQuizState = createEmptyNeatQuizState(); renderNeatQuizPanel(); return; }
+  if (event.target.closest("[data-recall-pause]")) { recallPracticeState = null; renderNeatQuizPanel(); return; }
+  if (event.target.closest("[data-recall-reveal]") && recallPracticeState) {
+    recallPracticeState.revealed = true;
+    saveRecallPractice();
+    renderRecallPractice();
+    elements.neatQuizPanel.querySelector(".recall-comparison")?.focus();
+    return;
+  }
+  const rating = event.target.closest("[data-recall-rating]")?.dataset.recallRating;
+  if (["revisit", "recalled"].includes(rating) && recallPracticeState?.revealed && recallPracticeState.index < recallPracticeState.cards.length) {
+    recallPracticeState.ratings.push(rating);
+    recallPracticeState.index++;
+    recallPracticeState.revealed = false;
+    recallPracticeState.answer = "";
+    saveRecallPractice();
+    renderRecallPractice();
+    elements.neatQuizPanel.querySelector("h4")?.focus();
+    return;
+  }
+  if (event.target.closest("[data-recall-retry]") && recallPracticeState) {
+    const cards = recallPracticeState.cards.filter((_, index) => recallPracticeState.ratings[index] === "revisit");
+    if (cards.length) { recallPracticeState = { ...recallPracticeState, cards, index: 0, ratings: [], revealed: false, answer: "" }; saveRecallPractice(); renderRecallPractice(); }
+    return;
+  }
   if (event.target.closest("[data-open-repair]")) { await openRepairLessons(); return; }
+  if (event.target.closest("[data-repair-reload]")) { await openRepairLessons(); return; }
   if (event.target.closest("[data-close-repair]")) { repairState = null; renderNeatQuizPanel(); return; }
+  if (event.target.closest("[data-repair-picker]") && repairState) { repairState.current = null; renderRepairLesson(); return; }
   const lessonButton = event.target.closest("[data-repair-id]");
   if (lessonButton && repairState) {
     repairState.current = repairState.lessons.find((item) => item.id === lessonButton.dataset.repairId);
     repairState.step = 0;
     repairState.result = null;
+    repairState.answer = "";
+    repairState.checked = false;
+    repairState.submitError = "";
+    saveRepairDraft();
     renderRepairLesson();
     return;
   }
   if (event.target.closest("[data-repair-step]") && repairState?.current) {
     repairState.step = Math.min(repairState.step + 1, repairState.current.steps.length);
+    saveRepairDraft();
     renderRepairLesson();
     elements.neatQuizPanel.querySelector("[data-repair-step], #repair-response")?.focus();
     return;
@@ -4507,6 +4587,10 @@ async function handleNeatQuizPanelClick(event) {
   if (event.target.closest("[data-repair-next]") && repairState?.result?.next) {
     repairState.current = repairState.result.next;
     repairState.result = null;
+    repairState.answer = "";
+    repairState.checked = false;
+    repairState.submitError = "";
+    saveRepairDraft();
     renderRepairLesson();
     elements.neatQuizPanel.querySelector("#repair-response")?.focus();
     return;
@@ -4547,19 +4631,90 @@ async function startActiveTopicQuiz() {
   await startNeatQuiz(getActiveRevisionTopic()?.id);
 }
 
+function startRecallPractice(topic, length, restart = false) {
+  const saved = !restart && window.PracticeDrafts.restoreRecall(practiceDraftStore.read(currentUser?.id, "recall", topic.id), getTopicCards(topic));
+  const bank = getTopicCards(topic);
+  const offset = saved ? (bank.findIndex((card) => card.id === saved.cards.at(-1)?.id) + 1) % bank.length : 0;
+  recallPracticeState = { topicId: topic.id, ...(saved && saved.index < saved.cards.length ? saved : {
+    cards: [...bank.slice(offset), ...bank.slice(0, offset)].slice(0, Math.min(20, length)), index: 0, ratings: [], revealed: false, answer: "",
+  }) };
+  neatQuizState = createEmptyNeatQuizState();
+  saveRecallPractice();
+  renderRevisionPage();
+  elements.neatQuizPanel.querySelector("h4")?.focus({ preventScroll: true });
+}
+
+function updatePracticeFocus() {
+  const active = repairState || recallPracticeState || (neatQuizState.questions.length && !neatQuizState.completed);
+  elements.appView.classList.toggle("practice-focused", Boolean(active && activeAppSection === "practice" && activePracticeMode === "quick"));
+}
+
+function saveRecallPractice() {
+  const state = recallPracticeState;
+  if (!state) return;
+  const { cards, ...draft } = state;
+  state.saved = practiceDraftStore.save(currentUser?.id, "recall", state.topicId, {
+    ...draft, updatedAt: Date.now(), ids: cards.map((card) => card.id), signature: window.PracticeDrafts.recallSignature(cards),
+  });
+}
+
+function renderRecallPractice() {
+  const state = recallPracticeState;
+  const topic = getQuizTopicById(state?.topicId);
+  if (!state || !topic) return;
+  if (!canAccessRevisionTopic(topic.id) || topic.contentAvailable === false) { recallPracticeState = null; renderNeatQuizPanel(); return; }
+  const card = state.cards[state.index];
+  const revisit = state.ratings.filter((rating) => rating === "revisit").length;
+  elements.neatQuizPanel.innerHTML = `<article class="recall-player">
+    <header><div><p class="eyebrow">${escapeHtml(topic.code)} · ${escapeHtml(topic.title)}</p><h4 tabindex="-1">${card ? escapeHtml(card.front) : "A short session, completed"}</h4></div><button type="button" data-recall-pause>${card ? "Pause" : "Back to practice"}</button></header>
+    <p class="recall-position">${card ? `Question ${state.index + 1} of ${state.cards.length}` : `${state.cards.length} questions reviewed`} · Self-assessed, not scored</p>
+    ${card ? `<label for="recall-response">Recall the answer before revealing it. Write it here or say it to yourself.</label><textarea id="recall-response" rows="3" maxlength="2000" ${state.revealed ? "readonly" : ""} placeholder="Your answer (optional)">${escapeHtml(state.answer)}</textarea>
+      ${state.revealed ? `<section class="recall-comparison" tabindex="-1" aria-label="Compare your answer"><h5>Compare with the explanation</h5><p>${escapeHtml(card.back)}</p><p>How well did you recall the key ideas? This choice is your reflection, not a verified result.</p><div class="recall-actions"><button type="button" data-recall-rating="revisit">Needs another look</button><button type="button" data-recall-rating="recalled">I recalled the key ideas</button></div></section>` : `<button type="button" data-recall-reveal>Reveal and compare</button>`}` : `<p>You chose to revisit ${revisit} ${revisit === 1 ? "question" : "questions"}. These reflections do not change quiz accuracy, correct-answer streaks or mastery.</p><div class="recall-actions">${revisit ? `<button type="button" data-recall-retry>Revisit those questions</button>` : ""}<button type="button" data-quiz-today>Back to Today</button></div>`}
+    <p class="practice-save-note" role="status">${currentUser ? state.saved ? "Place and response saved in this browser for your account. Connect after reloading to check access and resume." : "Browser saving is unavailable. Keep this page open to retain your place." : "Demo responses stay in this session and are not copied into an account."}</p>
+  </article>`;
+  elements.neatQuizPanel.querySelector("#recall-response")?.addEventListener("input", (event) => {
+    state.answer = event.target.value;
+    saveRecallPractice();
+  });
+}
+
+function saveRepairDraft() {
+  const state = repairState;
+  if (!state?.current) return;
+  state.saved = practiceDraftStore.save(currentUser?.id, "repair", activeRevisionTopicId, {
+    lessonId: state.current.id, contentVersion: state.current.contentVersion, variant: state.current.variant,
+    step: state.step, answer: state.answer || "", checked: state.checked === true,
+    finished: state.result?.next === null, updatedAt: Date.now(),
+  });
+}
+
+function getLatestPracticeDraft() {
+  if (!currentUser || isGuestMode) return null;
+  return REVISION_TOPICS.filter((topic) => topic.contentAvailable !== false && canAccessRevisionTopic(topic.id)).flatMap((topic) =>
+    ["recall", "repair"].map((kind) => ({ topic, kind, draft: practiceDraftStore.read(currentUser.id, kind, topic.id) })))
+    .filter(({ kind, draft, topic }) => draft && !draft.finished && (kind !== "recall" || (() => {
+      const restored = window.PracticeDrafts.restoreRecall(draft, getTopicCards(topic));
+      return restored && restored.index < restored.cards.length;
+    })()))
+    .sort((a, b) => (Number(b.draft.updatedAt) || 0) - (Number(a.draft.updatedAt) || 0))[0] || null;
+}
+
 async function openRepairLessons() {
   const userId = currentUser?.id;
   const topicId = activeRevisionTopicId;
-  const requestState = { loading: true, lessons: [], current: null, step: 0, result: null };
+  const requestState = { topicId, loading: true, lessons: [], current: null, step: 0, result: null, answer: "", checked: false };
   repairState = requestState;
   renderNeatQuizPanel();
   try {
     const response = await api(`/api/revision/repairs?topicId=${encodeURIComponent(topicId)}`);
     if (repairState !== requestState || currentUser?.id !== userId || activeRevisionTopicId !== topicId) return;
-    repairState = { ...repairState, ...response, loading: false };
+    const saved = practiceDraftStore.read(userId, "repair", topicId);
+    const restored = window.PracticeDrafts.restoreRepair(saved, response.lessons);
+    repairState = { ...repairState, ...response, ...restored, saved: Boolean(restored), loading: false,
+      resumeNotice: restored ? "Your place and response are restored. Check your answer again to show feedback." : saved ? "The saved example has changed or is no longer available. Choose a current example." : "" };
   } catch (error) {
     if (repairState !== requestState || currentUser?.id !== userId || activeRevisionTopicId !== topicId) return;
-    repairState = { ...repairState, loading: false, error: error.message };
+    repairState = { ...repairState, loading: false, error: navigator.onLine ? error.message : "You are offline. Your saved place is still in this browser. Reconnect to check access and resume the current example." };
   }
   renderRepairLesson();
 }
@@ -4569,11 +4724,32 @@ function renderRepairLesson() {
   if (!state) return;
   const item = state.current;
   const step = item?.steps[state.step];
+  let body;
+  if (state.loading) body = '<p role="status">Loading examples...</p>';
+  else if (state.error) body = `<p role="alert">${escapeHtml(state.error)}</p><button type="button" data-repair-reload>Retry and resume</button>`;
+  else if (!item) body = `<div class="repair-picker">${state.lessons.length
+    ? state.lessons.map((lesson) => `<button type="button" data-repair-id="${escapeHtml(lesson.id)}">${escapeHtml(lesson.title)}<span>${lesson.steps.length} steps, then a related question</span></button>`).join("")
+    : `<p>${state.pendingCount ? "Worked examples for this topic are awaiting academic review. A subscription does not bypass review." : "No worked example is ready for this topic yet. Review the explanation, then revisit the concept in Revise."}</p>`}</div>`;
+  else if (step) body = `<p class="repair-step-count">Step ${state.step + 1} of ${item.steps.length}</p><h5>${escapeHtml(step.title)}</h5><p class="repair-step-copy">${escapeHtml(step.body)}</p><button type="button" data-repair-step>${state.step + 1 === item.steps.length ? "Try a related question" : "Next step"}</button>`;
+  else if (state.result) body = `<div class="repair-result" role="status"><h5>${state.result.assessment.correct ? "Correct application" : "Check the reasoning"}</h5><p>${escapeHtml(state.result.assessment.explanation)}</p>${!state.result.assessment.correct ? `<p>Expected answer: <strong>${escapeHtml(state.result.assessment.answer)}</strong></p>` : ""}<p class="repair-notice">${escapeHtml(state.result.assessment.notice)} Revisit this idea in a later session without the example.</p>${state.result.next ? '<button type="button" data-repair-next>Try a different question</button>' : '<button type="button" data-close-repair>Return to practice</button>'}</div>`;
+  else body = `<form id="repair-answer-form"><label for="repair-response">${escapeHtml(item.prompt)}</label><input id="repair-response" name="response" autocomplete="off" maxlength="80" value="${escapeHtml(state.answer || "")}" required><button type="submit" ${state.submitting ? "disabled" : ""}>${state.submitting ? "Checking..." : "Check answer"}</button><p data-repair-status role="status">${escapeHtml(state.submitError || (state.checked ? "Your last response is saved. Check it again to restore feedback." : ""))}</p></form>`;
   elements.neatQuizPanel.innerHTML = `<article class="repair-player">
     <header><div><p class="eyebrow">Understand, then apply</p><h4>${escapeHtml(item?.title || "Worked examples")}</h4></div><button type="button" data-close-repair>Back to practice</button></header>
-    ${state.loading ? `<p role="status">Loading examples...</p>` : state.error ? `<p role="alert">${escapeHtml(state.error)}</p>` : !item ? `<div class="repair-picker">${state.lessons.length ? state.lessons.map((lesson) => `<button type="button" data-repair-id="${escapeHtml(lesson.id)}">${escapeHtml(lesson.title)}<span>3 steps, then a related question</span></button>`).join("") : `<p>${state.pendingCount ? "Worked examples for this topic are awaiting academic review. A subscription does not bypass review." : "No worked example is ready for this topic yet. Review the correction, then revisit the missed concept in Revise."}</p>`}</div>` : step ? `<p class="repair-step-count">Step ${state.step + 1} of ${item.steps.length}</p><h5>${escapeHtml(step.title)}</h5><p class="repair-step-copy">${escapeHtml(step.body)}</p><button type="button" data-repair-step>${state.step + 1 === item.steps.length ? "Try a related question" : "Next step"}</button>` : state.result ? `<div class="repair-result" role="status"><h5>${state.result.assessment.correct ? "Correct application" : "Check the reasoning"}</h5><p>${escapeHtml(state.result.assessment.explanation)}</p>${!state.result.assessment.correct ? `<p>Expected answer: <strong>${escapeHtml(state.result.assessment.answer)}</strong></p>` : ""}<p class="repair-notice">${escapeHtml(state.result.assessment.notice)} Revisit this idea in a later session without the example.</p>${state.result.next ? `<button type="button" data-repair-next>Try a different question</button>` : `<button type="button" data-close-repair>Return to practice</button>`}</div>` : `<form id="repair-answer-form"><label for="repair-response">${escapeHtml(item.prompt)}</label><input id="repair-response" name="response" autocomplete="off" maxlength="80" required><button type="submit">Check answer</button><p data-repair-status role="status"></p></form>`}
+    ${state.resumeNotice ? `<p class="practice-save-note" role="status">${escapeHtml(state.resumeNotice)}</p>` : ""}
+    ${body}
+    ${item ? `<footer><button type="button" data-repair-picker>Other examples</button><p class="practice-save-note" data-repair-save-status role="status">${state.saved ? "Place and response saved in this browser for your account." : "Browser saving is unavailable. Keep this page open to retain your place."}</p></footer>` : ""}
   </article>`;
   elements.neatQuizPanel.querySelector("#repair-answer-form")?.addEventListener("submit", submitRepairAnswer);
+  elements.neatQuizPanel.querySelector("#repair-response")?.addEventListener("input", (event) => {
+    state.answer = event.target.value;
+    state.checked = false;
+    state.resumeNotice = "";
+    state.submitError = "";
+    saveRepairDraft();
+    elements.neatQuizPanel.querySelector("[data-repair-save-status]").textContent = state.saved
+      ? "Response saved in this browser for your account."
+      : "Browser saving is unavailable. Keep this page open to retain your response.";
+  });
 }
 
 async function submitRepairAnswer(event) {
@@ -4582,6 +4758,9 @@ async function submitRepairAnswer(event) {
   const item = state?.current;
   if (!item || state.submitting) return;
   state.submitting = true;
+  state.submitError = "";
+  state.answer = String(new FormData(event.target).get("response") || "");
+  saveRepairDraft();
   const button = event.target.querySelector("button");
   button.disabled = true;
   button.textContent = "Checking...";
@@ -4589,13 +4768,16 @@ async function submitRepairAnswer(event) {
     const response = await api(`/api/revision/repairs/${encodeURIComponent(item.id)}/check`, { method: "POST", body: { variant: item.variant, response: new FormData(event.target).get("response") } });
     if (repairState !== state) return;
     state.result = response;
-    renderRepairLesson();
+    state.checked = true;
+    state.resumeNotice = "";
+    saveRepairDraft();
   } catch (error) {
     if (repairState !== state) return;
-    event.target.querySelector("[data-repair-status]").textContent = error.message;
-    button.disabled = false;
-    button.textContent = "Check answer";
-  } finally { state.submitting = false; }
+    state.submitError = navigator.onLine ? error.message : "You are offline. Your response is saved in this browser. Reconnect, then check it again.";
+  } finally {
+    state.submitting = false;
+    if (repairState === state) renderRepairLesson();
+  }
 }
 
 async function loadExamPracticeQuestion({ next = false } = {}) {
@@ -4970,6 +5152,7 @@ async function submitCsLab(event) {
 
 async function startNeatQuiz(topicId, options = {}) {
   repairState = null;
+  recallPracticeState = null;
   const topic = getQuizTopicById(topicId) || getActiveRevisionTopic();
   if (!topic) return;
   if (!canAccessRevisionTopic(topic.id)) {
@@ -4990,7 +5173,11 @@ async function startNeatQuiz(topicId, options = {}) {
   activeRevisionTopicId = topic.id;
   const length = Number(document.querySelector("#practice-length")?.value) || 10;
   const bank = buildNativeQuizQuestions(topic);
-  if (!bank.length) { renderNeatQuestions(); return; }
+  if (!bank.length) {
+    if (topic.contentAvailable !== false && getTopicCards(topic).length) startRecallPractice(topic, length, options.restart);
+    else renderNeatQuestions();
+    return;
+  }
   const saved = !options.restart && restoreQuizSession(topic, bank);
   if (saved) { neatQuizState = saved; renderRevisionPage(); return; }
   const offset = ((neatQuizProgress[topic.id]?.attempts || 0) * length) % (bank.length || 1);
@@ -5449,7 +5636,7 @@ function renderMembers(error = "") {
 
   if (isGuestMode) {
     elements.shareForm.classList.add("locked");
-    elements.memberList.innerHTML = `<p class="status-message">Create an account to invite collaborators and share class spaces.</p>`;
+    elements.memberList.innerHTML = `<p class="status-message">Create an account to share notes with collaborators.</p>`;
     return;
   }
 

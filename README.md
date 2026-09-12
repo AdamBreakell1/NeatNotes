@@ -2,7 +2,7 @@
 
 ## Student-only direction
 
-The current local increment removes classroom workflows and introduces authored quizzes, worked-example repairs and account return-to-task. Read the [learning increment](docs/STUDENT_LEARNING_INCREMENT.md), [student-only brief](docs/STUDENT_ONLY_BRIEF.md) and [checkpoint](docs/STUDENT_RELAUNCH.md). RecallStride is the selected provisional local brand; trademark screening is incomplete. New quizzes, repairs and Component 2 require recorded human academic review. Do not push or deploy this increment without approval; older classroom and release documentation is historical.
+The current local increment removes classroom workflows and introduces authored quizzes, worked-example repairs and account return-to-task. Quick Practice offers self-assessed recall from released flashcards while authored questions await review, with account-isolated local draft resume. Read the [practice journey audit](docs/STUDENT_PRACTICE_AUDIT.md), [learning increment](docs/STUDENT_LEARNING_INCREMENT.md), [student-only brief](docs/STUDENT_ONLY_BRIEF.md) and [checkpoint](docs/STUDENT_RELAUNCH.md). RecallStride is the selected provisional local brand; trademark screening is incomplete. New quizzes, repairs and Component 2 require recorded human academic review. Do not push or deploy this increment without approval; older classroom and release documentation is historical.
 
 RecallStride is a BreakellSystems OCR A-Level Computer Science revision and notes platform. The current app is a vanilla frontend served by an Express backend with SQLite persistence. Existing Neat Notes account identifiers, storage keys, support inbox and provider configuration remain compatible.
 

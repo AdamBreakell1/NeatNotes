@@ -2,6 +2,8 @@
 
 11 September 2026. Continuation from local commit `711f495` on `codex/student-only-product`. No push, deployment, domain purchase or live provider change.
 
+Subsequent implementation: [student practice and journey audit](STUDENT_PRACTICE_AUDIT.md). Production Quick Practice now offers released recall when MCQs are pending. Worked-example and recall drafts now resume on this device for the owning account. The trade-offs below describe the earlier authored-content increment.
+
 ## Implemented
 
 - **Account return path:** signup stores a validated, account-bound section/topic/practice-mode destination for 24 hours. Verification in another browser still returns that account to the intended context after login. No redirect URL, guest answer, guest note or payment choice is stored. Acknowledgement clears it. Free-deck selection and paywalls remain explicit.
@@ -13,7 +15,7 @@
 
 ## Deliberate product trade-offs
 
-The earlier C1 quiz generator offered nominally 316 derived questions, but did not provide academically useful incorrect options. There are now 48 authored drafts, not 316 reviewed MCQs. Until these drafts are reviewed, **production C1 Quick Practice is withheld**, with a clear academic-review message rather than a payment prompt. Existing released C1 flashcards, written practice and labs remain usable. Do not deploy this branch as an unrestricted relaunch before resolving that content gate.
+The earlier C1 quiz generator offered nominally 316 derived questions, but did not provide academically useful incorrect options. There are now 48 authored drafts, not 316 reviewed MCQs. Until these drafts are reviewed, **production C1 authored MCQs are withheld**. Quick Practice now supplies self-assessed recall from released flashcards instead of an empty gated flow. Existing released C1 flashcards, written practice and labs remain usable. Do not describe draft material as academically approved.
 
 The eight C1 objective gaps are addressed with initial worked-example drafts, not declared complete. Binary floating-point examples cover exact positive arithmetic; they do not cover signed arithmetic, finite-precision rounding or the full objective depth. Utility/device scenarios and algorithm traces require broader practice before a completeness claim. The published coverage matrix is intentionally unchanged.
 
@@ -41,4 +43,4 @@ The repair panel uses the existing surface, text, border and accent tokens, one 
 - Review packs: `npm run review:content -- --component h446-01`; output remains ignored under `.resource-review/review-packs/h446-01/`. Blank reviewer fields remain blank.
 - Remaining dependencies: human academic review/corrections of all new banks, deeper objective coverage, manual trademark security check and professional clearance where appropriate, approved legacy-contract handling, real provider/device/accessibility checks and explicit deployment permission. No actual email delivery, payment or production restore was performed in this increment.
 
-The lesson player's current step and typed repair answer are not persisted across reload. Normal quiz, written, timed and adaptive drafts retain their existing resume behaviour. Repair completion is not a long-term learning record; later unassisted retrieval remains the appropriate evidence source.
+The subsequent practice increment persists the lesson player's current step and typed repair answer locally, with account isolation and content-version checks. Normal quiz, written, timed and adaptive drafts retain their existing resume behaviour. Repair completion is not a long-term learning record; later unassisted retrieval remains the appropriate evidence source.

@@ -1795,6 +1795,7 @@ function registerPublicAssetRoutes() {
     ["/theme-init.js", "application/javascript"],
     ["/learning-model.js", "application/javascript"],
     ["/revision-session.js", "application/javascript"],
+    ["/practice-drafts.js", "application/javascript"],
     ["/ocr-content.js", "application/javascript"],
     ["/service-worker.js", "application/javascript"],
     ["/manifest.webmanifest", "application/manifest+json"],

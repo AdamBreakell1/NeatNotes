@@ -13,7 +13,7 @@ const output = path.join(root, "test-results/student-relaunch");
 fs.mkdirSync(output, { recursive: true });
 const port = 5200 + Math.floor(Math.random() * 400);
 const base = `http://127.0.0.1:${port}`;
-const server = spawn(process.execPath, [path.join(root, "server.js")], {
+let server = spawn(process.execPath, [path.join(root, "server.js")], {
   cwd: root, stdio: ["ignore", "pipe", "pipe"],
   env: { ...process.env, PORT: String(port), BASE_URL: base, CORS_ORIGIN: base, DATABASE_PATH: path.join(temp, "fixture.sqlite"), NODE_ENV: "development", ALLOW_MOCK_BILLING: "true", AUTH_RATE_LIMIT: "100", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" },
 });
@@ -66,6 +66,8 @@ async function dismissLaunch(page) {
     await page.goto(base);
     await dismissLaunch(page);
     assert.equal(await page.locator('[data-app-section="teacher"], #teacher-mode-panel, #student-class-panel, #landing-schools').count(), 0);
+    assert.match(await page.title(), /RecallStride/);
+    assert.doesNotMatch(await page.locator("body").innerText(), /Neat Notes|Teacher dashboard|Create class|Join class/i);
     evidence.push("Student-only shell omits retired workflows and ignores old learning-mode preferences");
     await screenshot(page, "landing-desktop");
     await page.getByRole("button", { name: "Try a revision session", exact: true }).click();
@@ -126,12 +128,45 @@ async function dismissLaunch(page) {
     await page.locator("[data-open-repair]").click();
     await page.locator('[data-repair-id="repair-address-data"]').click();
     assert.equal(await page.locator("#repair-response").count(), 0);
-    for (let step = 0; step < 3; step++) await page.locator("[data-repair-step]").click();
+    await page.locator("[data-repair-step]").click();
+    await page.reload();
+    await dismissLaunch(page);
+    await navigate(page, "practice");
+    await page.locator("[data-open-repair]").click();
+    assert.match(await page.locator(".repair-step-count").innerText(), /Step 2 of 3/);
+    for (let step = 0; step < 2; step++) await page.locator("[data-repair-step]").click();
     await page.locator("#repair-response").fill("17");
+    await navigate(page, "notes");
+    await navigate(page, "practice");
+    assert.equal(await page.locator("#repair-response").inputValue(), "17");
+    await page.reload();
+    await dismissLaunch(page);
+    await navigate(page, "practice");
+    await page.locator("[data-open-repair]").click();
+    assert.equal(await page.locator("#repair-response").inputValue(), "17");
+    await page.locator("[data-close-repair]").click();
+    await context.setOffline(true);
+    await page.locator("[data-open-repair]").click();
+    await page.getByText("You are offline.", { exact: false }).waitFor();
+    await context.setOffline(false);
+    await page.locator("[data-repair-reload]").click();
+    assert.equal(await page.locator("#repair-response").inputValue(), "17");
+    await context.setOffline(true);
+    await page.locator("#repair-answer-form button").click();
+    await page.getByText("You are offline. Your response is saved", { exact: false }).waitFor();
+    assert.equal(await page.locator("#repair-response").inputValue(), "17");
+    await context.setOffline(false);
+    evidence.push("Worked example draft survives navigation/reload and offline retry without submitting or losing its answer");
     await page.locator("#repair-answer-form button").click();
     assert.match(await page.locator(".repair-result").innerText(), /Expected answer: 64/);
     await page.locator("[data-repair-next]").click();
     await page.locator("#repair-response").fill("93");
+    await page.reload();
+    await dismissLaunch(page);
+    await navigate(page, "practice");
+    await page.locator("[data-open-repair]").click();
+    assert.match(await page.locator('#repair-answer-form label').innerText(), /value received by the MDR/);
+    assert.equal(await page.locator("#repair-response").inputValue(), "93");
     await page.locator("#repair-answer-form button").click();
     assert.match(await page.locator(".repair-result").innerText(), /Correct application/);
     assert.match(await page.locator(".repair-result").innerText(), /not an exam mark/);
@@ -141,6 +176,54 @@ async function dismissLaunch(page) {
     await page.locator("[data-close-repair]").first().click();
     await page.setViewportSize({ width: 1280, height: 900 });
     evidence.push("Worked repair: progressive steps, wrong-answer correction, different retry and truthful feedback");
+    await context.request.post(`${base}/api/auth/login`, { data: { email: "return@example.test", password: "ReturnPass123" } });
+    await context.request.post(`${base}/api/revision/free-deck`, { data: { deckId: "cs-1-1-1" } });
+    await page.reload();
+    await dismissLaunch(page);
+    if (await page.locator("#onboarding-modal").isVisible()) await page.getByRole("button", { name: "Set up later" }).click();
+    await navigate(page, "practice");
+    await page.locator("[data-open-repair]").click();
+    await page.locator('[data-repair-id="repair-address-data"]').waitFor();
+    assert.equal(await page.locator("#repair-response").count(), 0);
+    assert.equal(await page.locator('[data-repair-id="repair-address-data"]').count(), 1);
+    await context.request.post(`${base}/api/auth/login`, { data: { email: "browser@example.test", password: "BrowserPass123" } });
+    await page.reload();
+    await dismissLaunch(page);
+    await navigate(page, "practice");
+    await page.locator("[data-open-repair]").click();
+    assert.equal(await page.locator("#repair-response").inputValue(), "93");
+    await page.locator("[data-close-repair]").click();
+    evidence.push("Switching accounts in the same browser cannot restore another student's repair draft; original owner can resume");
+    const originalDraft = await page.evaluate(() => {
+      const key = Object.keys(localStorage).find((key) => key.startsWith("neat-practice-draft:") && key.endsWith(":repair:cs-1-1-1"));
+      const value = localStorage.getItem(key);
+      const stale = JSON.parse(value);
+      stale.data.contentVersion = "superseded-fixture-version";
+      localStorage.setItem(key, JSON.stringify(stale));
+      return { key, value };
+    });
+    await page.locator("[data-open-repair]").click();
+    await page.locator('[data-repair-id="repair-address-data"]').waitFor();
+    assert.equal(await page.locator("#repair-response").count(), 0);
+    assert.match(await page.locator(".repair-player").innerText(), /changed or is no longer available/);
+    await page.locator("[data-close-repair]").click();
+    await page.evaluate(({ key, value }) => localStorage.setItem(key, value), originalDraft);
+    evidence.push("Changed lesson version does not restore a stale response or step and explains why");
+    await navigate(page, "notes");
+    await page.locator("#new-note-button").click();
+    await page.locator("#note-body").fill("# Browser retrieval note\n\n- The MAR holds the address.\n- The MDR holds the transferred data.");
+    await page.getByText("All changes synced", { exact: true }).waitFor();
+    await page.reload();
+    await dismissLaunch(page);
+    await navigate(page, "notes");
+    assert.match(await page.locator("#note-body").inputValue(), /The MAR holds the address/);
+    await navigate(page, "practice");
+    await page.locator('[data-practice-mode="quick"]').focus();
+    await page.keyboard.press("ArrowRight");
+    assert.equal(await page.locator('[data-practice-mode="exam"]').getAttribute("aria-selected"), "true");
+    await page.keyboard.press("Home");
+    assert.equal(await page.locator('[data-practice-mode="quick"]').getAttribute("aria-selected"), "true");
+    evidence.push("Account note edits persist through reload; practice tabs support arrow/Home keyboard navigation");
     await navigate(page, "revise");
     await page.locator('[data-component="h446-02"]').first().click();
     assert.equal(await page.locator("#component-topic-select option").count(), 8);
@@ -266,6 +349,62 @@ async function dismissLaunch(page) {
     await publicTopic.close();
     assert.match(await page.evaluate(async () => (await (await caches.match("/")).text())), /id="app-view"/);
     evidence.push("Offline cache contains shell assets only; public topic navigation cannot replace the app fallback");
+
+    // Restart only this disposable fixture in production to exercise the actual publication gate.
+    server.kill("SIGTERM");
+    if (server.exitCode === null) await once(server, "exit");
+    server = spawn(process.execPath, [path.join(root, "server.js")], {
+      cwd: root, stdio: ["ignore", "pipe", "pipe"],
+      env: { ...process.env, PORT: String(port), BASE_URL: base, CORS_ORIGIN: base, DATABASE_PATH: path.join(temp, "fixture.sqlite"), NODE_ENV: "production", ALLOW_MOCK_BILLING: "false", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" },
+    });
+    server.stdout.on("data", (chunk) => { logs += chunk; });
+    server.stderr.on("data", (chunk) => { logs += chunk; });
+    for (let count = 0; ; count++) {
+      if (server.exitCode !== null || count > 100) throw new Error(`Production fixture failed: ${logs}`);
+      try { if ((await fetch(`${base}/api/health`)).ok) break; } catch {}
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    await page.reload();
+    await dismissLaunch(page);
+    await navigate(page, "practice");
+    await page.locator('[data-component="h446-01"]').first().click();
+    await page.locator("#component-topic-select").selectOption("cs-1-1-1");
+    await page.locator('[data-practice-mode="quick"]').click();
+    await page.locator("#practice-length").selectOption("5");
+    const { DatabaseSync } = require("node:sqlite");
+    const evidenceDb = new DatabaseSync(path.join(temp, "fixture.sqlite"), { readOnly: true });
+    const countEvidence = () => evidenceDb.prepare("SELECT COUNT(*) AS total FROM learning_evidence").get().total;
+    const beforeRecall = countEvidence();
+    await page.locator("[data-start-current-quiz]").click();
+    await page.locator("#recall-response").fill("My own recall attempt");
+    assert.equal(await page.locator("[data-recall-rating]").count(), 0);
+    await page.locator("[data-recall-reveal]").click();
+    assert.match(await page.locator(".recall-comparison").innerText(), /not a verified result/);
+    await page.locator('[data-recall-rating="revisit"]').click();
+    await page.locator("#recall-response").fill("A saved second answer");
+    await page.reload();
+    await dismissLaunch(page);
+    await navigate(page, "home");
+    await page.locator(".today-tools summary").click();
+    await page.locator('[data-student-action="saved-practice"]').click();
+    assert.match(await page.locator(".recall-position").innerText(), /Question 2 of 5/);
+    assert.equal(await page.locator("#recall-response").inputValue(), "A saved second answer");
+    await checkWidth(page, "Production recall on mobile");
+    await screenshot(page, "recall-mobile");
+    await page.screenshot({ path: path.join(output, "recall-mobile-viewport.png"), fullPage: false });
+    for (let index = 0; index < 4; index++) {
+      await page.locator("[data-recall-reveal]").click();
+      await page.locator('[data-recall-rating="recalled"]').click();
+    }
+    assert.match(await page.locator(".recall-player").innerText(), /do not change quiz accuracy/);
+    assert.equal(countEvidence(), beforeRecall);
+    evidenceDb.close();
+    await page.locator("[data-recall-retry]").click();
+    assert.match(await page.locator(".recall-position").innerText(), /Question 1 of 1/);
+    await page.locator("[data-recall-pause]").click();
+    await page.locator('[data-component="h446-02"]').first().click();
+    assert.equal(await page.locator("[data-start-current-quiz]").isDisabled(), true);
+    evidence.push("Production C1 fallback: recall before reveal, own reflection, reload resume, bounded finish and revisit; no mastery evidence writes; C2 stays gated");
     assert.deepEqual(errors, [], `Browser errors: ${errors.join("; ")}`);
     fs.writeFileSync(path.join(output, "results.json"), JSON.stringify({ passed: true, evidence, errors }, null, 2));
     console.log(JSON.stringify({ passed: true, checks: evidence.length, output }, null, 2));

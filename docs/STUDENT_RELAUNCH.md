@@ -1,6 +1,18 @@
 # Student relaunch checkpoint
 
-## Current checkpoint: learning increment, 11 September 2026
+## Current checkpoint: released practice and resume, 12 September 2026
+
+Branch: `codex/student-only-product`, continuing from `56db0bc`. No push, Render deployment, purchases or live provider changes. Read `STUDENT_PRACTICE_AUDIT.md` for the current journey audit and resume contract. This checkpoint supersedes the previous empty production Quick Practice flow and non-resumable repairs.
+
+- Production C1 Quick Practice now offers short recall/reveal/self-assessment sessions using already released flashcards when authored MCQs are withheld. It includes pause, resume, a bounded finish, targeted revisit and rotation through the deck. Self-reflections do not write mastery evidence or change quiz scores/streaks. Authored MCQs, repair drafts and C2 still require genuine academic approvals.
+- Recall and worked-example drafts save per account/topic on this browser. Worked steps, transfer-question variant and typed answers survive navigation/reload. Current access and content version are checked before restoration. Offline failures retain responses and offer an explicit retry, never automatic answer submission or protected-content caching. Drafts expire from resume after 30 days; guest responses are not imported.
+- Today links to unfinished local practice. Active sessions collapse repeated headings/selectors; Pause restores navigation. Practice tabs have arrow/Home/End support, long prompts use sentence case, and completed daily goals avoid overrun fractions. Account deletion no longer wipes another user's browser drafts or guest notes. Remaining class-related public copy was removed.
+- Verified: 61 unit/API tests, 49 JavaScript syntax checks, content validation for 24 topics/431 concepts, and 42 disposable Brave browser check groups with no JavaScript errors. The browser fixture restarts in production mode and checks that recall writes no learning evidence and C2 stays gated. Coverage includes account switching, stale lesson versions, offline load/check retries, Today resume, note edits/reload, keyboard tabs, and 320/390/768/1280 layouts. Mobile focused recall and desktop Today screenshots reviewed. `git diff --check` clean.
+- Next release dependencies: real academic review/corrections and deeper coverage, trademark/confusion clearance, approved handling of retained historic subscription obligations, live-provider sandbox email/billing checks, real-device/screen-reader/student usability checks and explicit deployment permission. RecallStride remains a local provisional brand. No new aesthetic decision is required. Local-only drafts are intentionally not cross-device sync.
+
+Local checkpoint commit subject: `Restore released quick practice and isolated draft resume`. Do not repeat GitHub setup, classroom removal or the authored-bank work. Ignored browser evidence remains under `test-results/student-relaunch/`; review packs remain under `.resource-review/` and contain no fabricated approvals.
+
+## Previous checkpoint: learning increment, 11 September 2026
 
 Branch: `codex/student-only-product`, continuing from `711f495`. Local implementation only: no push, Render deployment, domain purchase or live provider changes. Read `STUDENT_LEARNING_INCREMENT.md` for the current implementation and release caveats before resuming. The preceding student-only retirement is complete locally; do not repeat it.
 
