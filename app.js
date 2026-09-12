@@ -13,7 +13,7 @@ const REVIEW_SCHEDULES_KEY = "neat-notes-review-schedules";
 const MISTAKE_JOURNAL_KEY = "neat-notes-mistake-journal";
 const DAILY_REVIEW_GOAL = 10;
 const DEFAULT_GUEST_REVISION_DECK_ID = "cs-1-1-1";
-const MIN_LAUNCH_OVERLAY_MS = 2100;
+const MIN_LAUNCH_OVERLAY_MS = 250;
 const launchOverlayStartedAt = performance.now();
 const TOPBAR_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
   hour: "2-digit",
@@ -3828,9 +3828,14 @@ function renderRevisionPage() {
       const card = topicCards[cardIndex];
       const cardKey = getRevisionCardKey(topic, card);
       const isFlipped = flippedRevisionCards.has(cardKey);
+      const sessionTotal = activeAdaptiveSession && !activeAdaptiveSession.completedAt ? activeAdaptiveSession.items.length : deckTotal;
+      const sessionDone = activeAdaptiveSession && !activeAdaptiveSession.completedAt ? activeAdaptiveSession.completedConceptIds.length : completedCount;
       return `<article class="focused-retrieval-card" aria-label="Revision activity">
         <div class="retrieval-meta"><span>${escapeHtml(card.category)}</span><span>${activeAdaptiveSession && !activeAdaptiveSession.completedAt ? `${activeAdaptiveSession.completedConceptIds.length + 1} of ${activeAdaptiveSession.items.length} in session` : `${completedCount + 1} of ${deckTotal}`}</span></div>
+        <progress class="session-progress-track" max="${sessionTotal}" value="${sessionDone}" aria-label="Activities completed in this session">${sessionDone} of ${sessionTotal}</progress>
+        <ol class="retrieval-steps" aria-label="Activity steps"><li ${!isFlipped ? 'aria-current="step"' : 'class="step-done"'}>1 · Recall</li><li ${isFlipped ? 'aria-current="step"' : ''}>2 · Check &amp; rate</li><li>3 · Next card</li></ol>
         <h3>${escapeHtml(card.front)}</h3>
+        <p class="retrieval-guidance">${isFlipped ? "How much did you remember before revealing? Choose a rating to continue." : "Say it aloud or work it out in your head. Reveal when you’re ready to check."}</p>
         ${isFlipped ? `<section class="retrieval-answer"><h4>Reasoning guide</h4><p>${escapeHtml(card.back)}</p></section><div class="confidence-controls" role="group" aria-label="How well did you recall this before revealing?">
           <button type="button" data-card-confidence="again" data-card-id="${escapeHtml(cardKey)}">Again</button>
           <button type="button" data-card-confidence="good" data-card-id="${escapeHtml(cardKey)}">Good</button>
@@ -4111,10 +4116,10 @@ function renderStudentDashboard(topic) {
   elements.studentDashboardPanel.innerHTML = `
     <section class="today-session" aria-labelledby="today-session-title">
       <div class="today-session-copy">
-        <p class="eyebrow">Recommended session</p>
-        <h3 id="today-session-title">${session.items.length ? `${session.resuming ? "Pick up where you left off" : "Make time for a little progress"}` : "Choose your first topic"}</h3>
+        <p class="eyebrow">Your next step · Recommended session</p>
+        <h3 id="today-session-title">${session.items.length ? `${session.resuming ? "Pick up where you left off" : "Your 15-minute recall session"}` : "Choose your first topic"}</h3>
         <p class="today-session-size">${session.items.length ? `About 15 minutes · ${session.items.length} retrieval activities` : "Your free deck includes retrieval, feedback and practice."}</p>
-        <p>${recommended ? escapeHtml(recommended.reason) : "Choose your free OCR deck to create a revision plan."}</p>
+        <p>${recommended ? `Start with ${escapeHtml(recommended.code)} ${escapeHtml(recommended.topicTitle)}.` : "Choose your free OCR deck to create a revision plan."}</p>
         <div class="today-session-actions">
           <button type="button" data-session-duration="15">${session.resuming ? "Resume revision" : session.items.length ? "Start revision" : "Choose a deck"}</button>
           <details class="session-duration-menu">
@@ -4126,6 +4131,11 @@ function renderStudentDashboard(topic) {
           </details>
         </div>
       </div>
+      <ol class="study-loop" aria-label="Your revision routine">
+        <li><span>01</span><strong>Recall</strong><small>Try each answer from memory.</small></li>
+        <li><span>02</span><strong>Check</strong><small>Reveal the reasoning. Rate your recall.</small></li>
+        <li><span>03</span><strong>Return</strong><small>Your ratings shape the next review.</small></li>
+      </ol>
       <details class="today-preview"><summary>Preview this session</summary><ol class="today-session-list" aria-label="Session preview">
         ${sessionPreview.length ? sessionPreview.map((item) => `<li>
           <span>${escapeHtml(item.code)} · ${escapeHtml(item.category)}</span>
