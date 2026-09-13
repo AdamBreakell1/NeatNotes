@@ -12,23 +12,23 @@ test("C1 mappings use named OCR objectives and preserve all existing cards", () 
   const c1 = topics.filter((topic) => topic.componentId === "h446-01");
   assert.equal(specificationObjectives().length, 119);
   assert.equal(specificationObjectives().filter((row) => row.componentId === "h446-01").length, 84);
-  assert.equal(c1.flatMap((topic) => topic.cards).length, 316);
+  assert.equal(c1.flatMap((topic) => topic.cards).length, 347);
   assert.ok(c1.every((topic) => topic.cards.every((card) => ["mapped", "supplementary"].includes(card.mappingStatus))));
   assert.ok(specificationObjectives().every((row) => !row.title.startsWith("Specification objective")));
   assert.deepEqual(c1.find((topic) => topic.code === "1.3.2").cards.find((card) => card.id === "normalisation").objectives, ["1.3.2(a)", "1.3.2(c)"]);
 });
 
-test("missing content and supplementary concepts cannot become coverage or academic approval", () => {
+test("new mapped practice does not imply complete coverage or academic approval", () => {
   const topics = loadTopics();
   const rows = buildCoverage(topics, QUESTION_BANK, LABS);
   for (const id of ["1.1.3(c)", "1.2.2(b)", "1.2.3(c)", "1.4.1(b)", "1.4.1(e)", "1.4.1(f)", "1.4.1(h)", "1.4.3(a)"]) {
     const row = rows.find((item) => item.id === id);
-    assert.equal(row.status, "missing", id);
-    assert.equal(row.flashcards, 0, id);
+    assert.equal(row.status, "published_unreviewed", id);
+    assert.ok(row.flashcards > 0, id);
     assert.ok(row.gaps.length, id);
   }
   assert.ok(rows.filter((row) => row.flashcards && row.componentId === "h446-01").every((row) => row.status === "published_unreviewed"));
-  assert.ok(rows.filter((row) => row.componentId === "h446-01").every((row) => row.derivedMcqs === row.flashcards && row.authoredChoiceSets === 0));
+  assert.ok(rows.filter((row) => row.componentId === "h446-01").every((row) => row.derivedMcqs === 0 && row.authoredChoiceSets === 0));
   const background = topics.find((topic) => topic.code === "1.4.1").cards.find((card) => card.id === "number-bases");
   assert.equal(background.mappingStatus, "supplementary");
   assert.deepEqual(background.objectives, []);

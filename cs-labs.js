@@ -2,11 +2,18 @@
 
 const { evaluateStudentQuery } = require("./backend/services/sqlExercise");
 const { COMPONENT_TWO_LABS } = require("./component-two-labs");
+const { VERSION: COMPONENT_TWO_VERSION } = require("./component-two");
+const LAB_OBJECTIVES = {
+  "lab-cpu-fde": "1.1.1(b)", "lab-boolean-output": "1.4.3(d)",
+  "lab-c2-binary-search-trace": "2.3.1(f)", "lab-queue-state": "1.4.2(c)",
+  "lab-sql-query": "1.3.2(d)", "lab-normalisation": "1.3.2(c)",
+  "lab-pseudocode-trace": "1.2.4(b)", "lab-network-resilience": "1.3.3(b)",
+};
 
 const LABS = [
   lab("lab-cpu-fde", "CPU trace", "cs-1-1-1", "cs-1-1-1:fde-cycle", "algorithm_trace", "During fetch, which register is copied into the MAR before memory is read?", ["PC", "MDR", "CIR", "Accumulator"], "PC", "The PC contains the address of the next instruction, so that address is copied into the MAR."),
   lab("lab-boolean-output", "Boolean reasoning", "cs-1-4-3", "cs-1-4-3:truth-table-rows", "applied_question", "For A = 1 and B = 0, what is the output of (A AND B) OR (NOT B)?", ["0", "1", "Undefined", "Depends on XOR"], "1", "A AND B is 0. NOT B is 1. Therefore 0 OR 1 gives 1."),
-  lab("lab-binary-search", "Algorithm trace", "cs-1-4-2", "cs-1-4-2:array", "algorithm_trace", "A binary search checks 13 in [3, 7, 13, 19, 24]. The target is 19. What should happen next?", ["Search [3, 7]", "Search [19, 24]", "Return not found", "Check every item from the start"], "Search [19, 24]", "19 is greater than 13, so binary search discards the middle and lower portion and continues in the upper half."),
+  lab("lab-c2-binary-search-trace", "Algorithm trace", "cs-2-3-1", "cs-2-3-1:binary-debug", "algorithm_trace", "A binary search checks 13 in [3, 7, 13, 19, 24]. The target is 19. What should happen next?", ["Search [3, 7]", "Search [19, 24]", "Return not found", "Check every item from the start"], "Search [19, 24]", "19 is greater than 13, so binary search discards the middle and lower portion and continues in the upper half."),
   lab("lab-queue-state", "Data structure state", "cs-1-4-2", "cs-1-4-2:queue", "algorithm_trace", "A, B and C are enqueued in that order. One item is dequeued. What is now at the front?", ["A", "B", "C", "The queue is empty"], "B", "A leaves first because a queue is FIFO, leaving B at the front."),
   lab("lab-sql-query", "SQL query exercise", "cs-1-3-2", "cs-1-3-2:sql-keywords", "applied_question", "Write a query that returns Name from Student where Score is at least 70, ordered by Name. This exercise supports SELECT Name, one Score comparison, and ORDER BY Name with optional ASC/DESC.", null, "select name from student where score >= 70 order by name", "A valid answer selects Name, filters Score with >= 70, and orders the result by Name.", "sql"),
   lab("lab-normalisation", "Normalisation", "cs-1-3-2", "cs-1-3-2:normalisation", "applied_question", "In ORDER(OrderID, CustomerID, CustomerPostcode), CustomerPostcode depends on CustomerID rather than directly on OrderID. What must be removed to reach 3NF?", ["A repeating group", "A partial dependency", "A transitive dependency", "The primary key"], "A transitive dependency", "OrderID determines CustomerID, which determines CustomerPostcode. That indirect dependency is transitive."),
@@ -16,7 +23,10 @@ const LABS = [
 ];
 
 function lab(id, title, topicId, conceptId, activityType, prompt, options, answer, explanation, responseType = "choice") {
-  return { id, title, topicId, conceptId, activityType, prompt, options, answer, explanation, responseType, provenance: "original_neat_notes", reviewStatus: "published" };
+  return { id, title, topicId, conceptId, activityType, prompt, options, answer, explanation, responseType, provenance: "original_neat_notes",
+    objectives: [LAB_OBJECTIVES[id]],
+    reviewStatus: topicId.startsWith("cs-2-") ? "review_pending" : "published",
+    contentVersion: topicId.startsWith("cs-2-") ? COMPONENT_TWO_VERSION : "h446-c1-2026-09-13.1" };
 }
 
 function normalise(value) {

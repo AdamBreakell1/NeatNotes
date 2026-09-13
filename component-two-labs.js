@@ -1,4 +1,5 @@
 "use strict";
+const { COMPONENT_TWO_TOPICS, VERSION } = require("./component-two");
 
 // Bounded original reasoning checks, not execution of arbitrary student programs.
 const rows = [
@@ -16,6 +17,7 @@ const COMPONENT_TWO_LABS = rows.map(([code, concept, title, prompt, options, ans
   topicId: `cs-${code.replaceAll(".", "-")}`,
   conceptId: `cs-${code.replaceAll(".", "-")}:${concept}`,
   activityType: "applied_question", prompt, options, answer: options[answerIndex], explanation,
-  responseType: "choice", provenance: "original_neat_notes", reviewStatus: "review_pending", contentVersion: "h446-c2-2026-09-07.1",
+  objectives: [...COMPONENT_TWO_TOPICS.find((topic) => topic.code === code).cards.find((card) => card.id === concept).objectives],
+  responseType: "choice", provenance: "original_neat_notes", reviewStatus: "review_pending", contentVersion: VERSION,
 }));
 module.exports = { COMPONENT_TWO_LABS };

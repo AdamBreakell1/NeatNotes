@@ -237,6 +237,7 @@ async function dismissLaunch(page) {
     await navigate(page, "revise");
     await page.locator('[data-component="h446-02"]').first().click();
     await page.locator(".focused-retrieval-card").waitFor();
+    assert.match(await page.locator(".retrieval-meta").innerText(), /OCR 2\.[123]\.[1-5]\([a-f]\)/);
     assert.match(await page.locator("#component-content-status").innerText(), /8 topic packs/);
     assert.doesNotMatch(await page.locator("#component-content-status").innerText(), /review pending/i);
     await page.locator("#component-topic-select").selectOption("cs-2-3-1");
@@ -264,6 +265,8 @@ async function dismissLaunch(page) {
     await page.locator("#exam-answer").waitFor();
     await page.locator("#exam-answer").fill("A partial explanation for guided review, not an automatic examiner mark.");
     const writtenPrompt = await page.locator(".exam-question-card > h3").innerText();
+    assert.match(await page.locator(".exam-question-card header").innerText(), /2\.3\.1\([a-f]\)/);
+    evidence.push("Flashcards and written questions display their assessed OCR specification points");
     await page.reload();
     await dismissLaunch(page);
     await navigate(page, "practice");

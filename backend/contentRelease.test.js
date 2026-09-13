@@ -8,7 +8,7 @@ const review = require("../content-review.json");
 
 test("C1 IDs are unchanged and owner-authorized C2 has mapped material without claiming academic review", () => {
   const topics = loadTopics();
-  assert.equal(topics.filter((topic) => topic.componentId === "h446-01").reduce((n, t) => n + t.cards.length, 0), 316);
+  assert.equal(topics.filter((topic) => topic.componentId === "h446-01").reduce((n, t) => n + t.cards.length, 0), 347);
   assert.deepEqual(topics.filter((topic) => topic.componentId === "h446-02").map((topic) => topic.code), ["2.1.1", "2.1.2", "2.1.3", "2.1.4", "2.1.5", "2.2.1", "2.2.2", "2.3.1"]);
   const result = validateCoverage(topics, QUESTION_BANK, LABS, review);
   assert.equal(result.valid, true, result.errors.join("\n"));
@@ -16,10 +16,10 @@ test("C1 IDs are unchanged and owner-authorized C2 has mapped material without c
   assert.equal(coverage.length, 35);
   assert.ok(coverage.every((row) => row.flashcards > 0 && row.status === "published_unreviewed"));
   const c2 = topics.filter((topic) => topic.componentId === "h446-02");
-  assert.equal(c2.reduce((total, topic) => total + topic.cards.length, 0), 115);
+  assert.equal(c2.reduce((total, topic) => total + topic.cards.length, 0), 127);
   assert.ok(c2.every((topic) => isReleased(topic, true) && topic.publicationAuthorization === "content_owner"));
   assert.equal(QUESTION_BANK.filter((item) => item.topicId.startsWith("cs-2-")).length, 16);
-  assert.equal(LABS.filter((item) => item.topicId.startsWith("cs-2-")).length, 8);
+  assert.equal(LABS.filter((item) => item.topicId.startsWith("cs-2-")).length, 9);
 });
 
 test("drafts are blocked in production; version-specific human approval is required", () => {

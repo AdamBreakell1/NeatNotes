@@ -465,16 +465,18 @@ test("production delivery releases authorized C2, preserves C1 draft gates and d
       assert.equal(response.status, 200);
       const payload = await response.json();
       deliveredCards += payload.deck.cards.length;
+      assert.ok(payload.deck.cards.every((card) => card.objectives.length > 0));
       assert.ok(payload.deck.cards.some((card) => card.quiz?.options.length === 4));
       const written = await fetch(`${url}/api/exam/questions?topicId=cs-${code}`, { headers }).then((r) => r.json());
       deliveredQuestions += written.questions.length;
+      assert.ok(written.questions.every((question) => question.objectives.length > 0));
     }
-    assert.equal(deliveredCards, 115);
+    assert.equal(deliveredCards, 127);
     assert.equal(deliveredQuestions, 16);
     const questions = await fetch(`${url}/api/exam/questions?topicId=cs-2-1-1`, { headers }).then((r) => r.json());
     assert.equal(questions.questions.length, 2);
     const labs = await fetch(`${url}/api/labs`, { headers }).then((r) => r.json());
-    assert.equal(labs.labs.filter((lab) => lab.topicId.startsWith("cs-2-")).length, 8);
+    assert.equal(labs.labs.filter((lab) => lab.topicId.startsWith("cs-2-")).length, 9);
     assert.equal((await fetch(`${url}/ocr-h446/2.1.1`)).status, 200);
     const freeHeaders = { Cookie: secondStudentCookie, "Content-Type": "application/json" };
     assert.equal((await fetch(`${url}/api/revision/free-deck`, { method: "POST", headers: freeHeaders, body: JSON.stringify({ deckId: "cs-2-1-1" }) })).status, 200);

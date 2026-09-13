@@ -12,11 +12,13 @@ The current specification identifier is `ocr-h446-2020`. Evidence refers to conc
 
 ## Published Scope
 
-- Component 01 Computer Systems: 16 existing topics, 316 cards, 16 original written questions and eight fixed applied tasks. Status remains `published_unreviewed`. Editorial mapping accounts for all 316 cards: 306 directly mapped and 10 supplementary. Of 84 specification objective rows, 76 have mapped cards and eight have no directly mapped card. This is not a completeness or mastery score.
-- Component 02 Algorithms and Programming: eight draft topics, 115 original cards, 16 original written questions and eight bounded applied checks. Local previews work; production delivery is blocked pending version-specific human academic approval.
+- Component 01 Computer Systems: 16 topics, 347 cards, 16 original written questions and seven fixed applied tasks. Status remains `published_unreviewed`. Editorial mapping accounts for 337 directly mapped cards and 10 supplementary cards. All 84 objective rows now have at least one mapped card, but substantial depth gaps remain: this is not a completeness or mastery score.
+- Component 02 Algorithms and Programming: eight topics, 127 original cards, 16 original written questions and nine bounded applied checks. The owner authorised publication of the current version; this is not independent academic approval. The binary-search lab was moved here from C1 with a new activity ID and an explicit 2.3.1(f) mapping.
 - Component 03/04 Programming Project: integrity guidance only. Neat Notes must not generate candidate-specific assessed NEA work.
 
 The product may say that content is aligned to the OCR H446 specification structure. It must not say that it is OCR approved or endorsed.
+
+The September 2026 past-paper alignment pass is documented in [H446_PAST_PAPER_ALIGNMENT.md](H446_PAST_PAPER_ALIGNMENT.md). Written and applied activities have explicit assessed objectives, separate from their stable concept links; coverage does not inherit every objective of a linked card.
 
 ## Content Metadata
 
@@ -32,7 +34,7 @@ npm run validate:content
 
 The validator checks duplicate identifiers, orphan concepts, explanations, objective mappings, prerequisites, distractor shape and review metadata. Server startup checks content structure. Run `npm run coverage:content` to regenerate the editorial matrix. Structural checks cannot certify academic accuracy.
 
-`component-one-mapping.js` holds the explicit C1 objective links and partial-coverage notes. Its validator detects unmapped additions, stale card IDs and cross-topic objective references. Existing card IDs and answers are unchanged. Supplementary material remains available but cannot inflate objective coverage. Quarantined content and dependent activities are excluded from available coverage counts.
+`component-one-mapping.js` holds the explicit C1 objective links and partial-coverage notes. Its validator detects unmapped additions, stale card IDs and cross-topic objective references. Existing card IDs are retained; the September alignment pass corrects answers without deleting study history. Supplementary material remains available but cannot inflate objective coverage. Quarantined content and dependent activities are excluded from available coverage counts.
 
 ## Local review packs
 

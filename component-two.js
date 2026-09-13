@@ -2,7 +2,7 @@
 
 // Original study activities informed by the owner's Component 2 teaching pack.
 // Version-specific release permission is recorded separately in content-review.json.
-const VERSION = "h446-c2-2026-09-07.1";
+const VERSION = "h446-c2-2026-09-13.1";
 function topic(code, title, summary, rows, prerequisites = []) {
   return {
     id: `cs-${code.replaceAll(".", "-")}`, code, title, summary,
@@ -14,23 +14,25 @@ function topic(code, title, summary, rows, prerequisites = []) {
       objectives: [`${code}(${objective})`], reviewStatus: "review_pending",
       contentVersion: VERSION, difficulty: /Trace|Apply|Debug/.test(category) ? 2 : 1,
       activityType: /Trace/.test(category) ? "algorithm_trace" : "flashcard",
-      commandWord: /^(Explain|Compare|Trace|Identify|Describe|Calculate)/.exec(front)?.[1] || "Recall",
+      commandWord: /^(Explain|Compare|Trace|Identify|Describe|Calculate|Write|Devise|Sketch|Perform|State)/.exec(front)?.[1] || "Recall",
       commonMisconceptions: misconception ? [misconception] : [], prerequisites,
     })),
   };
 }
 const COMPONENT_TWO_TOPICS = [
   topic("2.1.1", "Thinking abstractly", "Choose the details a model needs, explain its limits and apply abstraction to new situations.", [
+    ["model-original","d","Apply","Devise a model to allocate rehearsal rooms to groups. Identify the data retained and one omitted detail.","Retain room capacity, available time slots, group size and requested duration; represent a booking as a group, room and time interval. Omit wall colour because it does not affect capacity or conflicting bookings."],
     ["abstraction", "a", "Abstraction", "What does abstraction do when modelling a problem?", "It retains details relevant to the purpose and omits unnecessary detail.", ["It divides a problem into separately implemented tasks.", "It represents every real-world detail at maximum precision.", "It replaces a model with its final program code."], "Abstraction and decomposition are different techniques."],
     ["purpose", "b", "Purpose", "Explain how abstraction can make a program easier to develop.", "A smaller set of relevant details reduces the complexity of the model and the code needed to implement it."],
-    ["purpose-dependent", "d", "Apply", "A walking route planner and a rail map show the same city. Why might they retain different details?", "Their purposes differ. The walking planner needs usable streets and distances; the rail map needs station connections and interchanges."],
+    ["purpose-dependent", "b", "Apply", "A walking route planner and a rail map show the same city. Why might they retain different details?", "Their purposes differ. The walking planner needs usable streets and distances; the rail map needs station connections and interchanges."],
     ["model-limits", "c", "Models", "Why can a model give a result that differs from reality?", "Its assumptions and omitted details may exclude factors that affect the real system.", ["Every model must generate random results.", "A correctly coded model includes all real-world factors.", "The model cannot contain any real measurements."]],
     ["over-abstraction", "c", "Apply", "A journey model ignores all waiting time. When could that make it unsuitable?", "When comparing journeys with different transfers or service frequencies, waiting time could change which route is quickest."],
     ["model-devise", "d", "Apply", "Devise a simple model for finding a cheapest delivery route.", "Represent destinations as nodes, usable roads as edges and delivery costs as weights. Retain restrictions relevant to feasible routes."],
     ["representation", "a", "Representation", "Why is a graph of road connections an abstraction?", "It represents locations and connections while omitting details such as building appearance and road texture.", ["It must include a photograph of every road.", "It turns every road into a separate executable program.", "It removes the connection between every pair of locations."]],
-    ["abstraction-cost", "b", "Evaluation", "Does abstraction always make a simulation accurate enough?", "No. The omitted details must be irrelevant to the intended decision; otherwise a simpler model can be misleading."],
+    ["abstraction-cost", "c", "Evaluation", "Does abstraction always make a simulation accurate enough?", "No. The omitted details must be irrelevant to the intended decision; otherwise a simpler model can be misleading."],
   ]),
   topic("2.1.2", "Thinking ahead", "Plan inputs, outputs, preconditions, cached data and reusable components before implementation.", [
+    ["input-output-original","a","Apply","A routine flags a stock shortage. State suitable input data and output data, not hardware devices.","Inputs: current quantity and reorder threshold, both integers. Output: a Boolean indicating whether quantity is below the threshold. A keyboard and screen are devices, not the required data."],
     ["input-output", "a", "Apply", "Identify an input and an output for a room-heating controller.", "An input is the measured room temperature; an output is a control signal that switches the heater on or off."],
     ["precondition", "b", "Preconditions", "What is a precondition of an algorithm?", "A condition that must hold before the algorithm is called for its specified behaviour to be guaranteed.", ["A result that is guaranteed after every statement.", "A test that must be repeated after the program terminates.", "A condition that can only be checked by the compiler."]],
     ["binary-precondition", "b", "Apply", "What precondition does binary search require of its input list?", "The list must be sorted according to the same ordering used by the search comparisons.", ["The list must contain an even number of values.", "Every value must be a positive integer.", "The target must already be known to exist."]],
@@ -43,16 +45,18 @@ const COMPONENT_TWO_TOPICS = [
     ["reuse-testing", "d", "Evaluation", "Does using a previously tested component remove the need for integration testing?", "No. Its interface, assumptions and behaviour must still be tested in the new system."],
   ], ["cs-2-1-1:abstraction"]),
   topic("2.1.3", "Thinking procedurally", "Decompose problems, order dependent steps and design clear sub-procedures.", [
+    ["subprocedures-original","d","Apply","Identify two sub-procedures for an application that imports sensor readings and reports valid daily means. Give each purpose.","validateReading checks the timestamp and allowed measurement range; calculateDailyMean totals accepted readings for a day and divides by their count, handling no readings. These isolate specific tasks with clear inputs and outputs."],
     ["decomposition", "a", "Decomposition", "What is decomposition?", "Breaking a problem into smaller, manageable sub-problems.", ["Removing every detail from a problem model.", "Executing all instructions at the same instant.", "Repeating a calculation until it reaches a threshold."]],
     ["problem-parts", "a", "Apply", "Decompose the problem of running a library loan service.", "Separate member identification, item availability, loan creation, return processing and overdue reporting."],
     ["solution-parts", "b", "Apply", "Identify components of a solution that calculates a class average from input marks.", "Read marks, validate them, accumulate a total and count, calculate the mean and display it."],
     ["dependency-order", "c", "Sequence", "Why must mark validation happen before an accepted mark contributes to an average?", "Otherwise invalid values can enter the total and make the result incorrect.", ["Validation always changes the order of the input marks.", "Division can only happen in a separate program.", "A total cannot be held in a local variable."]],
     ["subprocedure", "d", "Modularity", "What makes a useful sub-procedure boundary?", "A cohesive task with a clear purpose, defined inputs and outputs, and limited dependence on unrelated state."],
     ["structure-chart", "b", "Representation", "What does a structure diagram show?", "The decomposition of a system into components and subcomponents.", ["The exact elapsed time of each instruction.", "The physical addresses of every variable.", "The truth value of every possible Boolean input."]],
-    ["independent-testing", "d", "Testing", "How can decomposition help testing?", "Individual routines can be checked against their contracts before testing their interactions in the complete system."],
+    ["independent-testing", "d", "Apply", "Identify sub-procedures for validating and summarising imported marks, and explain how they can be tested.", "validateMark checks one mark against the allowed range; calculateMean totals accepted marks and divides by their count, handling empty input. Test each routine with known inputs and outputs before testing their interaction."],
     ["empty-average", "c", "Debug", "An average routine divides total by count before checking count. What order is safer?", "First check that count is greater than zero. Only then calculate total divided by count; otherwise handle the empty input."],
   ]),
   topic("2.1.4", "Thinking logically", "Recognise decisions, build Boolean conditions and follow the paths they create.", [
+    ["condition-trace-original","c","Trace","Set label = 'low'. Run IF n >= 10 THEN label = 'medium'; then a separate IF n >= 20 THEN label = 'high'. What is label for n = 24, and why?","The first IF sets 'medium', then the independent second IF overwrites it with 'high'. Both conditions are true; the statements are not an ELSE IF chain."],
     ["decision-point", "a", "Apply", "Where is a decision needed before removing an item from a queue?", "Check whether the queue is empty before attempting to dequeue.", ["Only after the removed item has been overwritten.", "Before every assignment, regardless of the queue state.", "Only when the queue has exactly two items."]],
     ["compound-condition", "b", "Logic", "A discount requires a valid ticket and age below 18. Which logical connective joins the tests?", "AND, because both conditions must be true.", ["OR, because either condition alone is sufficient.", "NOT, because both tests must be inverted.", "XOR, because exactly one condition must be true."]],
     ["branch-flow", "c", "Flow", "How does IF / ELSE affect program flow?", "It selects one of two paths according to whether the condition is true or false."],
@@ -73,6 +77,9 @@ const COMPONENT_TWO_TOPICS = [
     ["safe-split", "a", "Apply", "How could a large list be searched concurrently using linear search?", "Partition it into independent regions, search each region, and coordinate the reported results or early termination."],
   ]),
   topic("2.2.1", "Programming techniques", "Trace program constructs, parameters, recursion and object-oriented behaviour; use debugging tools deliberately.", [
+    ["parameter-trace-original","d","Trace","x = 7. Procedure change(p) performs p = p + 4, then p = p * 2. State x after change(x) under scalar pass-by-value and under pass-by-reference.","By value, x remains 7: only the local copy becomes 22. By reference, the caller's x becomes 22. The two cases differ in whether p aliases the caller's variable."],
+    ["sentinel-trace-original","a","Trace","total = 0; read n; WHILE n != -1: total = total + n; read n. Inputs are 6,0,5,-1. State total and explain why -1 is not added.","total is 11. Each value is checked before entering the body, so the sentinel -1 stops the loop before addition. If the first input were -1, total would stay 0."],
+    ["oop-constructor-original","f","Write","Sketch a Counter class with private value, a constructor taking start, and an increment method. State the value after constructing with 4 and calling increment twice.","class Counter: private value; constructor(start): value = start; method increment(): value = value + 1. Each object has its own value; this object's final value is 6."],
     ["constructs", "a", "Constructs", "What are sequence, selection and iteration?", "Sequence runs statements in order, selection chooses paths, and iteration repeats a block."],
     ["pre-post-loop", "a", "Compare", "How do a pre-condition WHILE loop and a post-condition loop differ?", "WHILE can execute zero times if its condition is initially false; a post-condition loop executes its body at least once."],
     ["loop-trace", "a", "Trace", "total = 0; for i = 1 to 3 inclusive: total = total + 2*i. What is total afterwards?", "12, from 2 + 4 + 6.", ["6, from adding the loop counters only.", "10, from omitting the first iteration.", "14, from running one extra addition of 2."]],
@@ -95,8 +102,9 @@ const COMPONENT_TWO_TOPICS = [
     ["oop-apply", "f", "Apply", "Why should a BankAccount balance normally be changed through methods rather than direct external writes?", "Methods can enforce rules such as sufficient funds and keep the object's state consistent."],
   ], ["cs-2-1-3:decomposition"]),
   topic("2.2.2", "Computational methods", "Recognise computable tasks and apply decomposition, modelling, heuristics and other problem-solving methods.", [
+    ["recognition-original","b","Apply","A museum allocates guides to tours without timetable clashes. Explain how recognising a familiar problem can help choose a solution.","Identify guide availability and tour times as inputs and a valid assignment as output. Recognise a scheduling or constraint problem; reuse suitable allocation ideas, but check museum-specific restrictions such as language skills."],
     ["computable", "a", "Recognition", "What makes a task suitable for a computational solution?", "Its relevant inputs, outputs and processing rules can be represented precisely enough for an algorithm to operate on them."],
-    ["problem-recognition", "b", "Recognition", "What should problem recognition establish before choosing an algorithm?", "The actual goal, constraints and success criteria, rather than assuming a particular technical solution."],
+    ["problem-recognition", "b", "Recognition", "What should problem recognition establish before choosing an algorithm?", "The required input and output data, goal and constraints. Recognise whether a familiar problem type or technique is applicable, then check it against this scenario rather than assuming the old solution fits."],
     ["decompose", "c", "Decomposition", "How could a timetable problem be decomposed?", "Separate collecting availability, representing constraints, allocating sessions and checking conflicts."],
     ["divide-conquer", "d", "Algorithms", "What are the main stages of divide and conquer?", "Divide into smaller instances, solve those instances and combine their results where required.", ["Read every input once and never split the problem.", "Try a single random answer and stop immediately.", "Remove every constraint before processing any input."]],
     ["merge-method", "d", "Apply", "Why is merge sort an example of divide and conquer?", "It splits the input into smaller lists, sorts them and combines them by merging."],
@@ -113,6 +121,10 @@ const COMPONENT_TWO_TOPICS = [
     ["intractable", "a", "Complexity", "How is an intractable problem different from an impossible-to-express problem?", "A solution algorithm can be specified, but required resources may be impractical for the input size."],
   ], ["cs-2-1-1:abstraction", "cs-2-1-3:decomposition"]),
   topic("2.3.1", "Algorithms", "Analyse complexity, trace searches and sorts, manipulate data structures and compare shortest-path algorithms.", [
+    ["postorder-original","e","Trace","A binary tree has root M; M's left child is F and right child T; F has children C and H; T has left child R only. Give post-order and breadth-first traversals.","Post-order (left, right, root): C,H,F,R,T,M. Breadth-first (level by level, left to right): M,F,T,C,H,R. In post-order, backtrack to a parent after a subtree finishes; visit that parent only after both its subtrees."],
+    ["stack-code-original","e","Write","A bounded stack uses indices 0-3; top is the index of its top item and -1 means empty. Give pseudocode to push value v without overflowing.","IF top = 3 THEN report full ELSE top = top + 1; stack[top] = v ENDIF. Check capacity before changing top or writing; when initially empty, the first item is written at index 0."],
+    ["bubble-pass-original","f","Trace","Perform one left-to-right pass of ascending bubble sort on [17,5,12,3], comparing adjacent pairs in order.","Compare 17 and 5: [5,17,12,3]; compare 17 and 12: [5,12,17,3]; compare 17 and 3: [5,12,3,17]. The largest item has reached the end, but the list is not yet sorted."],
+    ["linked-list-delete-original","e","Write","In a singly linked list, previous points to a node before target; target is not the first node. Give the link update to remove target and explain whether values shift.","Set previous.next = target.next. This bypasses target; remaining values do not need to shift. Removing the first node instead requires updating the list's head pointer."],
     ["algorithm-contract", "a", "Design", "What should be established before designing an algorithm for a scenario?", "Its inputs, required outputs, constraints and criteria for a correct result."],
     ["boundary-test", "a", "Testing", "Why trace an algorithm with empty, one-item and boundary-value inputs?", "These expose assumptions and off-by-one errors that ordinary cases can miss."],
     ["suitability", "b", "Evaluation", "Why might insertion sort be suitable for a small nearly sorted list?", "It is simple and can do little movement when few elements are out of order, despite quadratic worst-case time."],

@@ -2,7 +2,8 @@
 
 const { COMPONENT_ONE_MAPPING, SUPPLEMENTARY_CARDS, componentOneObjectives } = require("./component-one-mapping");
 const defaultReview = require("./content-review.json");
-const SPECIFICATION = Object.freeze({ id: "ocr-h446", version: "3.0", checkedAt: "2026-09-08", url: "https://www.ocr.org.uk/images/170844-specification-accredited-a-level-gce-computer-science-h446.pdf" });
+const { availableQuiz } = require("./component-one-quizzes");
+const SPECIFICATION = Object.freeze({ id: "ocr-h446", version: "3.0", checkedAt: "2026-09-13", url: "https://www.ocr.org.uk/images/170844-specification-accredited-a-level-gce-computer-science-h446.pdf" });
 const C2_OBJECTIVES = {
   "2.1.1": ["Nature of abstraction", "Need for abstraction", "Model versus reality", "Devise an abstract model"],
   "2.1.2": ["Inputs and outputs", "Preconditions", "Caching", "Reusable components"],
@@ -35,10 +36,10 @@ function buildCoverage(topics, questions = [], labs = [], review = defaultReview
       ...objective, topicId: topic?.id || null,
       status: withheld ? "quarantined" : cards.length ? (topic.reviewStatus === "academically_reviewed" ? "academically_reviewed" : topic.reviewStatus === "review_pending" ? "draft" : "published_unreviewed") : objective.mappingComplete ? "missing" : "mapping_pending",
       flashcards: cards.length,
-      derivedMcqs: objective.componentId === "h446-01" ? cards.length : cards.filter((card) => card.distractors?.length === 3).length,
+      derivedMcqs: topic?.reviewStatus === "review_pending" ? 0 : cards.filter((card) => availableQuiz(card, topic, true)).length,
       authoredChoiceSets: cards.filter((card) => card.distractors?.length === 3).length,
-      writtenQuestions: availableQuestions.filter((question) => question.conceptIds.some((id) => concepts.has(id))).length,
-      appliedTasks: availableLabs.filter((lab) => concepts.has(lab.conceptId)).length,
+      writtenQuestions: availableQuestions.filter((question) => question.objectives?.includes(objective.id)).length,
+      appliedTasks: availableLabs.filter((lab) => lab.objectives?.includes(objective.id)).length,
       contentVersion: topic?.contentVersion || "legacy-c1",
       conceptIds: [...concepts],
     };
@@ -71,6 +72,11 @@ function validateCoverage(topics, questions, labs, review) {
   }
   for (const item of [...questions, ...labs]) {
     for (const id of item.conceptIds || [item.conceptId]) if (!concepts.has(id)) errors.push(`Unknown activity concept: ${item.id}: ${id}`);
+    const topic = topics.find((row) => row.id === item.topicId);
+    if (!item.objectives?.length) errors.push(`Missing activity objective: ${item.id}`);
+    for (const id of item.objectives || []) {
+      if (!objectives.has(id) || !topic || !(id.startsWith(`${topic.code}(`) || id.startsWith(`${topic.code}[`))) errors.push(`Invalid activity objective: ${item.id}: ${id}`);
+    }
   }
   for (const approval of review.academicApprovals) {
     const topic = topics.find((item) => item.id === approval.topicId);

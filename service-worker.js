@@ -1,4 +1,4 @@
-const CACHE_NAME = "neat-notes-shell-20260912-design-r2";
+const CACHE_NAME = "neat-notes-shell-20260913-spec-r1";
 const APP_SHELL = [
   "/",
   "/styles-relaunch.css?v=20260907-student-r1",
@@ -9,7 +9,7 @@ const APP_SHELL = [
   "/revision-session.js?v=20260907-student-r1",
   "/neat-questions.js?v=20260824-relaunch",
   "/practice-drafts.js?v=20260911-resume-r1",
-  "/app-relaunch.js?v=20260912-design-r2",
+  "/app-relaunch.js?v=20260913-spec-r1",
   "/favicon.svg"
 ];
 

@@ -191,7 +191,7 @@ window.REVISION_TOPICS = [
         id: "risc",
         category: "RISC vs CISC",
         front: "What is a RISC processor?",
-        back: "A RISC processor uses a smaller set of simpler instructions, often designed to execute quickly, commonly in a single clock cycle.",
+        back: "A RISC design uses a relatively small set of simple instructions, typically with regular formats that support pipelining. Simple instructions may complete in one cycle in the simplified model; this is not a guarantee for every instruction or modern processor.",
       },
       {
         id: "risc-cisc-task",
@@ -203,13 +203,13 @@ window.REVISION_TOPICS = [
         id: "risc-mobile",
         category: "Scenarios",
         front: "Why can RISC be suitable for mobile devices?",
-        back: "RISC designs can use simpler circuitry, fewer transistors, lower power, and less heat, which suits battery-powered portable devices.",
+        back: "A simpler instruction-decoding design can support low power consumption and less heat, useful for battery life. Actual efficiency depends on the processor implementation and workload, not just the RISC label.",
       },
       {
         id: "cisc-compatibility",
         category: "Scenarios",
         front: "Why might a desktop organisation prefer CISC?",
-        back: "CISC may offer stronger compatibility with existing desktop software and complex instruction support, reducing redevelopment costs.",
+        back: "An organisation may retain a CISC instruction-set family when its existing software targets that family, avoiding porting costs. Compatibility depends on the specific instruction set and platform, not on all CISC processors being interchangeable.",
       },
       {
         id: "parallel-processing",
@@ -269,7 +269,20 @@ window.REVISION_TOPICS = [
     source: "1.1.3 - Topic Notes.pptx",
     summary:
       "Input and output devices, RFID, NFC, barcodes, actuators, printer examples, storage media, SSDs, and virtual storage.",
+    contentVersion: "h446-c1-2026-09-13.1",
     cards: [
+      {
+        id: "ram-rom",
+        category: "Compare",
+        front: "Compare RAM and ROM in a computer.",
+        back: "RAM is volatile read/write memory holding programs and data currently in use. ROM is non-volatile and retains startup instructions without power; normal operation mainly reads it.",
+      },
+      {
+        id: "magnetic-storage",
+        category: "Apply",
+        front: "A media archive needs inexpensive storage for several terabytes. Explain one benefit and one limitation of a magnetic hard disk.",
+        back: "Magnetic disks store bits as magnetised regions and offer low cost per unit of capacity. Moving heads and rotating platters cause mechanical access delay and vulnerability to shock; an SSD is normally faster for random access.",
+      },
       {
         id: "input-device",
         category: "Input",
@@ -364,7 +377,26 @@ window.REVISION_TOPICS = [
     source: "1.2.1 Topic Notes.pptx",
     summary:
       "Operating system functions, OS types, memory management, virtual memory, scheduling, interrupts, BIOS, drivers, and virtual machines.",
+    contentVersion: "h446-c1-2026-09-13.1",
     cards: [
+      {
+        id: "paging-segmentation",
+        category: "Compare",
+        front: "How do paging and segmentation divide a process in memory?",
+        back: "Paging uses fixed-size pages mapped to physical frames; segmentation uses variable-size logical sections such as code and data. Paging can waste space inside a frame; segmentation can leave unusable gaps between allocations.",
+      },
+      {
+        id: "round-robin-trace",
+        category: "Trace",
+        front: "All processes arrive at time 0 in queue order P,Q,R. CPU bursts are 5,2,1 units. Trace round robin with quantum 2, no overhead or blocking.",
+        back: "P runs 0-2; Q 2-4 and finishes; R 4-5 and finishes; P 5-7 then 7-8 and finishes. An unfinished process returns to the end of the ready queue.",
+      },
+      {
+        id: "scheduling-compare",
+        category: "Compare",
+        front: "Distinguish FCFS, SJF, SRT and multilevel feedback queues.",
+        back: "FCFS runs ready processes in arrival order, normally non-preemptively. SJF selects the shortest estimated next CPU burst, non-preemptively. SRT can preempt when a newly ready process has a shorter remaining burst. Multilevel feedback queues move processes between priority queues based on behaviour; time slices and promotion/demotion rules depend on the stated policy.",
+      },
       {
         id: "os-definition",
         category: "Operating Systems",
@@ -399,13 +431,13 @@ window.REVISION_TOPICS = [
         id: "embedded",
         category: "OS Types",
         front: "What is an embedded operating system?",
-        back: "An embedded OS is built into a device, stored in ROM, and designed for a specific purpose such as a washing machine or heart rate monitor.",
+        back: "An embedded OS manages a dedicated device and is tailored to its limited resources and specific tasks. It is commonly kept in non-volatile storage such as flash; being embedded does not require unchangeable ROM.",
       },
       {
         id: "real-time",
         category: "OS Types",
         front: "What is a real-time operating system?",
-        back: "A real-time OS gives guaranteed response times to inputs, making it suitable for safety-critical systems such as aircraft or autonomous vehicles.",
+        back: "A real-time OS schedules work to meet specified response deadlines. Predictable timing matters more than simply having the fastest average response; missing a hard deadline can make a control system fail.",
       },
       {
         id: "memory-management",
@@ -429,7 +461,7 @@ window.REVISION_TOPICS = [
         id: "interrupt",
         category: "Interrupts",
         front: "What is an interrupt?",
-        back: "An interrupt is a signal from hardware, software, or a timer that tells the CPU to pause its current work and deal with an event.",
+        back: "An interrupt is a signal requesting processor attention. At an appropriate instruction boundary, the CPU checks enabled interrupts and their priorities; it saves the current state before executing an interrupt service routine, then restores state to resume.",
       },
       {
         id: "isr",
@@ -453,7 +485,7 @@ window.REVISION_TOPICS = [
         id: "virtual-machine",
         category: "Virtualisation",
         front: "What is a virtual machine?",
-        back: "A virtual machine is a software-based computer that shares the host machine's resources and can run a separate operating system or test environment.",
+        back: "A virtual machine provides a software execution environment. A system VM can emulate a computer and run a guest OS; a process VM can execute intermediate code, allowing that code to run on different platforms with a compatible VM.",
       },
       {
         id: "vm-testing",
@@ -471,7 +503,20 @@ window.REVISION_TOPICS = [
     source: "1.2.2 - Topic Notes.pptx",
     summary:
       "Software categories, application software, open and closed source licensing, translators, compilation stages, errors, libraries, linkers, and loaders.",
+    contentVersion: "h446-c1-2026-09-13.1",
     cards: [
+      {
+        id: "utility-choice",
+        category: "Apply",
+        front: "Identify a utility for recovering from accidental file deletion and explain its purpose.",
+        back: "A backup utility creates recoverable copies of files. A retained earlier copy can be restored after deletion; merely synchronising the deletion to another device is not enough.",
+      },
+      {
+        id: "syntax-code-generation",
+        category: "Describe",
+        front: "Describe syntax analysis and code generation during compilation.",
+        back: "Syntax analysis checks the token sequence against the language grammar and constructs a parse tree or other syntax representation, reporting syntax errors. Code generation translates the analysed representation into target object or intermediate code; optimisation can improve the result without changing its intended behaviour.",
+      },
       {
         id: "software",
         category: "Software",
@@ -602,7 +647,14 @@ window.REVISION_TOPICS = [
     source: "1.2.3 - Topic Notes.pptx",
     summary:
       "Project development stages, methodologies, client feedback, Waterfall, Agile, XP, Spiral, RAD, prototyping, and project risk.",
+    contentVersion: "h446-c1-2026-09-13.1",
     cards: [
+      {
+        id: "algorithm-trace",
+        category: "Trace",
+        front: "Trace this algorithm: total = 0; for each value in [7,2,9,4], if value MOD 2 = 0 then total = total + value. State the final total.",
+        back: "After each value, total is 0,2,2,6. The output total is 6 because only the even values 2 and 4 are added.",
+      },
       {
         id: "project-failure",
         category: "Projects",
@@ -709,7 +761,26 @@ window.REVISION_TOPICS = [
     source: "1.2.4 - Topic Notes.pptx",
     summary:
       "Assembly language, LMC tracing, instruction words, opcodes, operands, immediate, direct, indirect and indexed addressing, and programming paradigms.",
+    contentVersion: "h446-c1-2026-09-13.1",
     cards: [
+      {
+        id: "oop-example",
+        category: "Apply",
+        front: "A Sensor class has a private reading and a getReading method. Explain class, object and encapsulation using this example.",
+        back: "Sensor defines the shared attributes and methods. Each created Sensor object is an instance with its own reading. A private reading accessed through methods restricts direct external changes and keeps state with its behaviour.",
+      },
+      {
+        id: "inheritance-polymorphism",
+        category: "Apply",
+        front: "TemperatureSensor and LightSensor inherit Sensor and override displayReading(). Explain inheritance and polymorphism here.",
+        back: "Each subclass can reuse suitable Sensor attributes and methods: inheritance. Calling displayReading() through the common interface invokes the implementation for the actual object type, such as temperature units or light units: polymorphism.",
+      },
+      {
+        id: "lmc-trace-original",
+        category: "Trace",
+        front: "Trace LMC: INP; STA value; ADD value; SUB one; OUT; HLT; value DAT 0; one DAT 1. The input is 8. State the accumulator after ADD and the output.",
+        back: "STA stores 8 without clearing the accumulator. ADD value produces 16; SUB one produces 15; OUT outputs 15.",
+      },
       {
         id: "assembly-language",
         category: "Assembly",
@@ -840,7 +911,14 @@ window.REVISION_TOPICS = [
     source: "1.3.1 Topic Notes.pptx",
     summary:
       "Lossy and lossless compression, run-length encoding, dictionary coding, encryption, symmetric and asymmetric keys, hashing, collisions, rainbow tables, salts, and checksums.",
+    contentVersion: "h446-c1-2026-09-13.1",
     cards: [
+      {
+        id: "rle-worked",
+        category: "Apply",
+        front: "Encode AAAACCCBB using (count,character) run-length pairs. If each count and character occupies one byte, compare sizes.",
+        back: "(4,A),(3,C),(2,B). The original is 9 bytes; the encoding is 6 bytes, a saving of 3 bytes before any headers. RLE can increase size when runs are short.",
+      },
       {
         id: "compression",
         category: "Compression",
@@ -905,7 +983,7 @@ window.REVISION_TOPICS = [
         id: "hash",
         category: "Hashing",
         front: "What is a hash?",
-        back: "A hash is the result of applying a hashing algorithm to data, producing a fixed or smaller representation that cannot feasibly be reversed.",
+        back: "A hash function maps input data to a hash value, often of fixed length. Hash tables use hashes to locate records and must handle collisions. Cryptographic hashes additionally aim to make recovering a suitable input or finding collisions computationally infeasible.",
       },
       {
         id: "hash-password",
@@ -917,7 +995,7 @@ window.REVISION_TOPICS = [
         id: "good-hash",
         category: "Hashing",
         front: "What makes a good hashing algorithm?",
-        back: "It should be quick to calculate, have a low chance of collisions, and produce very different outputs for tiny input changes.",
+        back: "Requirements depend on the application: a hash-table function should be quick and spread keys well; a cryptographic integrity hash should resist collisions and preimage attacks. Password hashing should be deliberately costly and salted to slow guessing.",
       },
       {
         id: "rainbow",
@@ -947,7 +1025,32 @@ window.REVISION_TOPICS = [
     source: "1.3.2 - Topic Notes.pptx",
     summary:
       "SQL, databases, data capture, APIs and exchange formats, relational databases, keys, referential integrity, indexing, ERDs, record locking, ACID, and normalisation.",
+    contentVersion: "h446-c1-2026-09-13.1",
     cards: [
+      {
+        id: "sql-insert",
+        category: "Write",
+        front: "Write SQL to add ItemID 27, ItemName 'Compass' and Price 8.50 to Item(ItemID, ItemName, Price).",
+        back: "INSERT INTO Item (ItemID, ItemName, Price) VALUES (27, 'Compass', 8.50);",
+      },
+      {
+        id: "sql-subquery",
+        category: "Write",
+        front: "Write SQL to select ItemName from Item where Price exceeds the mean Price of all items.",
+        back: "SELECT ItemName FROM Item WHERE Price > (SELECT AVG(Price) FROM Item);",
+      },
+      {
+        id: "normalisation-worked",
+        category: "Apply",
+        front: "Loan(MemberID,ItemID,MemberName,ItemName) has composite key (MemberID,ItemID). Names depend only on their respective IDs. Explain the 2NF defect and give a decomposition.",
+        back: "MemberName depends only on MemberID and ItemName only on ItemID: partial dependencies on the composite key. Use Member(MemberID,MemberName), Item(ItemID,ItemName) and Loan(MemberID,ItemID), with Loan foreign keys referencing the other two tables.",
+      },
+      {
+        id: "acid-meaning",
+        category: "Apply",
+        front: "A transfer subtracts money from one balance and adds it to another. Explain atomicity and durability.",
+        back: "Atomicity means both updates commit or neither does, avoiding a partially completed transfer. Durability means a committed transfer survives a later failure, using appropriate persistent storage and recovery mechanisms.",
+      },
       {
         id: "database",
         category: "Basics",
@@ -1000,13 +1103,13 @@ window.REVISION_TOPICS = [
         id: "primary-key",
         category: "Keys",
         front: "What is a primary key?",
-        back: "A primary key is a field with a unique value used to identify each record in a table.",
+        back: "A primary key is a field or combination of fields that uniquely identifies each record. Its values must be unique and must not be null.",
       },
       {
         id: "foreign-key",
         category: "Keys",
         front: "What is a foreign key?",
-        back: "A foreign key is a field that links to a primary key in another table.",
+        back: "A foreign key is a field or set of fields referencing a candidate key, usually the primary key, in a related table (or the same table). It can repeat, and may be null if the relationship and constraints allow it.",
       },
       {
         id: "secondary-key",
@@ -1018,7 +1121,7 @@ window.REVISION_TOPICS = [
         id: "referential-integrity",
         category: "Integrity",
         front: "What is referential integrity?",
-        back: "Referential integrity ensures linked data remains consistent, so a foreign key value must match a valid primary key and cascaded changes are handled correctly.",
+        back: "Each non-null foreign key must match an existing referenced key. An update or deletion that would break this rule must be rejected or handled by an explicitly defined action, such as cascading; cascading is not automatic in every database.",
       },
       {
         id: "flat-file",
@@ -1042,7 +1145,7 @@ window.REVISION_TOPICS = [
         id: "many-to-many",
         category: "ERD",
         front: "Why must many-to-many relationships be resolved?",
-        back: "A fully normalised relational database cannot directly store many-to-many relationships efficiently, so a linking table is introduced between the entities.",
+        back: "Use a junction table with foreign keys to both entities. Each row represents one association, giving two one-to-many relationships. The pair of foreign keys can form a composite primary key to prevent duplicate associations.",
       },
       {
         id: "record-locking",
@@ -1078,7 +1181,7 @@ window.REVISION_TOPICS = [
         id: "normal-forms",
         category: "Normalisation",
         front: "What are 1NF, 2NF, and 3NF?",
-        back: "1NF has atomic data, no repeating fields, and a primary key. 2NF means every field depends on the primary key. 3NF means fields depend on the key, the whole key, and nothing but the key.",
+        back: "1NF: atomic values and no repeating groups. 2NF: in 1NF, with no non-key attribute depending on only part of a composite candidate key. 3NF: in 2NF, with no transitive dependency of a non-key attribute on a key through another non-key attribute.",
       },
     ],
   },
@@ -1090,7 +1193,14 @@ window.REVISION_TOPICS = [
     source: "1.3.3 - Topic Notes COPY.pptx",
     summary:
       "Networks, protocols, standards, IP and MAC addresses, DNS, LANs, WANs, packets, switching, TCP/IP layers, network hardware, security, threats, and network models.",
+    contentVersion: "h446-c1-2026-09-13.1",
     cards: [
+      {
+        id: "nic-access-point",
+        category: "Compare",
+        front: "Distinguish a network interface controller (NIC) from a wireless access point.",
+        back: "A NIC provides a device's network connection and handles link-level communication, usually with a MAC address. A wireless access point connects wireless devices to a network, commonly bridging them onto a wired LAN.",
+      },
       {
         id: "network",
         category: "Networks",
@@ -1155,7 +1265,7 @@ window.REVISION_TOPICS = [
         id: "packet-benefits",
         category: "Switching",
         front: "What are benefits of packet switching?",
-        back: "It uses network channels efficiently, makes interception harder, and allows damaged packets to be retransmitted without resending everything.",
+        back: "Packets share network capacity without reserving a dedicated circuit. Routes can adapt to failures or congestion, and a reliable transport protocol can retransmit missing data rather than the whole message. Packet switching alone does not provide confidentiality.",
       },
       {
         id: "circuit-switching",
@@ -1209,7 +1319,7 @@ window.REVISION_TOPICS = [
         id: "switch-hub",
         category: "Hardware",
         front: "How does a switch differ from a hub?",
-        back: "A switch inspects packets and forwards them to the correct device, while a hub broadcasts data to all connected devices.",
+        back: "An Ethernet switch uses a destination MAC address and its address table to forward a frame to the appropriate port; unknown destinations may be flooded. A hub repeats incoming signals to its other ports without inspecting destination addresses.",
       },
       {
         id: "proxy",
@@ -1352,7 +1462,62 @@ window.REVISION_TOPICS = [
     source: "1.4.1 - Topic Notes.pptx",
     summary:
       "Variables, constants, primitive data types, casting, number bases, binary arithmetic, negative numbers, shifts, masks, units, character sets, and floating point representation.",
+    contentVersion: "h446-c1-2026-09-13.1",
     cards: [
+      {
+        id: "positive-binary-worked",
+        category: "Convert",
+        front: "Represent denary 182 as an eight-bit unsigned binary integer. Show the place values used.",
+        back: "10110110: 128 + 32 + 16 + 4 + 2 = 182.",
+      },
+      {
+        id: "positive-hex-worked",
+        category: "Convert",
+        front: "Represent positive denary 125 in hexadecimal, showing the quotient and remainder.",
+        back: "125 = 7 x 16 + 13. The remainder 13 is D, so the representation is 7D.",
+      },
+      {
+        id: "base-conversion-worked",
+        category: "Convert",
+        front: "Convert binary 10110110 to hexadecimal, then verify its denary value.",
+        back: "Split into nibbles 1011 and 0110, giving B6. In denary, 11 x 16 + 6 = 182.",
+      },
+      {
+        id: "signed-integer-worked",
+        category: "Convert",
+        front: "Represent -19 using eight-bit sign and magnitude and eight-bit two's complement.",
+        back: "Sign and magnitude: 10010011. Two's complement: start with 00010011, invert to 11101100 and add 1 to obtain 11101101. Its weighted value is -128 + 64 + 32 + 8 + 4 + 1 = -19.",
+      },
+      {
+        id: "binary-signed-overflow",
+        category: "Apply",
+        front: "Add 01100100 and 00101101 as eight-bit two's-complement numbers. Is the stored result valid?",
+        back: "The stored result is 10010001. The operands are +100 and +45, but +145 exceeds +127; the stored bit pattern represents -111. This is signed overflow even though there is no carry out.",
+      },
+      {
+        id: "floating-representation-worked",
+        category: "Convert",
+        front: "A format has a five-bit two's-complement mantissa with the binary point after the sign bit, followed by a four-bit two's-complement exponent. Decode 10100 0011.",
+        back: "The mantissa 1.0100 is -1 + 1/4 = -0.75; exponent 0011 is +3. The value is -0.75 x 2^3 = -6. It is normalised: the first two mantissa bits differ.",
+      },
+      {
+        id: "floating-subtract-worked",
+        category: "Calculate",
+        front: "Use a five-bit two's-complement mantissa (point after sign) and four-bit two's-complement exponent. Subtract 01000 0010 from 01100 0011. Show alignment and the normalised result.",
+        back: "The values are 6 and 2. At exponent +3, align 0.1000 x 2^2 to 0.0100 x 2^3. Subtract mantissas: 0.1100 - 0.0100 = 0.1000. Result: 01000 0011, representing 4; no rounding is needed.",
+      },
+      {
+        id: "floating-negative-add",
+        category: "Calculate",
+        front: "Use a five-bit two's-complement mantissa (point after sign) and four-bit two's-complement exponent. Add 01100 0011 and 11000 0010, showing alignment.",
+        back: "These represent 6 and -2. Sign-extend the negative mantissa when aligning: 1.1000 x 2^2 = 1.1100 x 2^3. Fixed-width addition 01100 + 11100 gives 01000 after discarding the carry out. Result 01000 0011 represents 4 and is normalised.",
+      },
+      {
+        id: "shift-mask-worked",
+        category: "Calculate",
+        front: "For an eight-bit unsigned value 10110110, find the result of logical right shift by two, then AND the original value with 00001111.",
+        back: "The shift gives 00101101 (45), truncating the remainder in 182 / 4. The AND mask gives 00000110 (6), retaining only the lower four bits.",
+      },
       {
         id: "variables",
         category: "Programming Data",
@@ -1417,7 +1582,7 @@ window.REVISION_TOPICS = [
         id: "binary-addition",
         category: "Binary Arithmetic",
         front: "What should be shown in binary addition exam questions?",
-        back: "You should show the carry bits clearly and discard overflow if the result exceeds the available number of bits.",
+        back: "Show the working and carry bits using the stated bit width. Report overflow if the true answer is outside the representable range. A carry out signals unsigned addition overflow, but signed two's-complement overflow must be checked separately: two inputs of the same sign produce a result with the opposite sign.",
       },
       {
         id: "sign-magnitude",
@@ -1435,19 +1600,19 @@ window.REVISION_TOPICS = [
         id: "binary-subtraction",
         category: "Binary Arithmetic",
         front: "How can binary subtraction be performed using two's complement?",
-        back: "Convert the second number into its negative two's complement form, then add it to the first number and ignore any overflow.",
+        back: "For fixed-width two's-complement A - B, form the two's complement of B and add it to A. Discard a carry beyond the stated width, but do not ignore signed overflow: check whether the mathematical result fits the signed range.",
       },
       {
         id: "left-shift",
         category: "Shifts",
         front: "What does a left shift do to an unsigned binary number?",
-        back: "A left shift moves bits left, adds zeros on the right, and multiplies the value by 2 for each place shifted.",
+        back: "A logical left shift moves bits left, inserts zeros on the right and discards bits beyond the fixed width. It multiplies an unsigned value by 2 per position only when no significant bits are lost; otherwise overflow changes the stored result.",
       },
       {
         id: "right-shift",
         category: "Shifts",
         front: "What does a right shift do to an unsigned binary number?",
-        back: "A right shift moves bits right, adds zeros on the left, and divides the value by 2 for each place shifted.",
+        back: "A logical right shift moves bits right, inserts zeros on the left and discards low-order bits. For an unsigned integer shifted k positions, the result is floor(value / 2^k); an odd value loses its remainder.",
       },
       {
         id: "binary-mask",
@@ -1531,7 +1696,26 @@ window.REVISION_TOPICS = [
     source: "1.4.2 - Topic Notes.pptx",
     summary:
       "Arrays, tuples, lists, records, queues, graphs, trees, binary trees, pointers, vertices, edges, and data structure comparisons.",
+    contentVersion: "h446-c1-2026-09-13.1",
     cards: [
+      {
+        id: "linked-list-operations",
+        category: "Apply",
+        front: "A singly linked list contains K -> M -> T. Explain how to insert R between M and T, then remove M.",
+        back: "Create node R; set R.next to T, then M.next to R. To remove M, set K.next to R, bypassing M. Update links rather than shifting every later data value.",
+      },
+      {
+        id: "stack-operations",
+        category: "Trace",
+        front: "A stack is initially empty. Push 12, push 7, pop, then push 9. State the popped value and the stack from bottom to top.",
+        back: "Pop returns 7 because a stack is last in, first out. The final stack is [12,9], with 9 at the top. Check for empty before popping and capacity before pushing a bounded stack.",
+      },
+      {
+        id: "hash-table-collision",
+        category: "Apply",
+        front: "A table has indices 0-6 and hash h(k)=k MOD 7. Insert keys 16,23,9 in that order using linear probing. Give their indices.",
+        back: "16 goes to 2. 23 also hashes to 2, so probes to 3. 9 hashes to 2, skips occupied 2 and 3, and goes to 4. A lookup follows the same probe sequence and compares the actual key.",
+      },
       {
         id: "array",
         category: "Arrays",
@@ -1662,7 +1846,20 @@ window.REVISION_TOPICS = [
     source: "1.4.3 - Topic Notes.pptx",
     summary:
       "Logic gates, truth tables, Boolean expressions, Karnaugh maps, half and full adders, D-type flip-flops, and Boolean simplification laws.",
+    contentVersion: "h446-c1-2026-09-13.1",
     cards: [
+      {
+        id: "boolean-model",
+        category: "Write",
+        front: "A cabinet unlocks when override O is true, or when both badge B and PIN P are valid. Write a Boolean expression for unlock U.",
+        back: "U = O OR (B AND P). The override alone is sufficient; without it both authentication checks must succeed.",
+      },
+      {
+        id: "boolean-laws-worked",
+        category: "Simplify",
+        front: "Simplify (A AND B) OR (A AND NOT B), naming the main laws.",
+        back: "Distribute A: A AND (B OR NOT B). The bracket is true by complementarity, so A AND true = A. Double negation also gives NOT NOT A = A.",
+      },
       {
         id: "and",
         category: "Logic Gates",
@@ -1733,7 +1930,7 @@ window.REVISION_TOPICS = [
         id: "precedence",
         category: "Expressions",
         front: "What operator order is useful when reading Boolean expressions?",
-        back: "A helpful precedence order is NOT first, then XOR, then AND, then OR.",
+        back: "Use parentheses to make mixed Boolean conditions unambiguous, and follow the precedence specified by the language or question. Do not assume a universal placement of XOR relative to AND and OR.",
       },
       {
         id: "k-map-purpose",
@@ -1745,7 +1942,7 @@ window.REVISION_TOPICS = [
         id: "k-map-groups",
         category: "Karnaugh Maps",
         front: "What grouping order should you look for in a Karnaugh map?",
-        back: "Look for groups of 8 first, then groups of 4, then pairs, and finally isolated 1s.",
+        back: "Cover all required 1s with the largest useful rectangular groups containing a power of two cells (including 16 in a four-variable map). Groups may overlap and wrap across opposite edges; diagonal cells alone are not adjacent.",
       },
       {
         id: "k-map-size",

@@ -6,7 +6,17 @@ const PRIMARY_CONCEPTS = {
   "cs-1-2-1": "virtual-memory", "cs-1-2-2": "compiler", "cs-1-2-3": "agile",
   "cs-1-2-4": "assembly-language", "cs-1-3-1": "hash", "cs-1-3-2": "normalisation",
   "cs-1-3-3": "packet-switching", "cs-1-3-4": "server-side", "cs-1-4-1": "floating-point",
-  "cs-1-4-2": "queue", "cs-1-4-3": "de-morgan", "cs-1-5-1": "cma", "cs-1-5-2": "automation",
+  "cs-1-4-2": "queue", "cs-1-4-3": "de-morgan", "cs-1-5-1": "cma", "cs-1-5-2": "automated-decisions",
+};
+
+// Assessed objectives are explicit; concept links support history and quarantine.
+const WRITTEN_OBJECTIVES = {
+  "1.1.1": "1.1.1(a)", "1.1.2": "1.1.2(a)", "1.1.3": "1.1.3(a)",
+  "1.2.1": "1.2.1(b)", "1.2.2": "1.2.2(d)", "1.2.3": "1.2.3(b)",
+  "1.2.4": "1.2.4(c)", "1.3.1": "1.3.1(d)", "1.3.2": "1.3.2(c)",
+  "1.3.3": "1.3.3(b)", "1.3.4": "1.3.4(d)", "1.4.1": "1.4.1(g)",
+  "1.4.2": "1.4.2(c)", "1.4.3": "1.4.3(c)", "1.5.1": "1.5.1(b)",
+  "1.5.2": "1.5.2[2]",
 };
 
 const QUESTION_BANK = [
@@ -20,10 +30,10 @@ const QUESTION_BANK = [
   question("exam-112-risc-cisc", "cs-1-1-2", "1.1.2", "Types of processor", 4, "Compare", "Compare RISC and CISC processor instruction sets.", [
     point("RISC uses a smaller set of simple instructions.", ["risc smaller instruction set", "risc simple instructions", "reduced instruction set"]),
     point("CISC uses a larger set that can include more complex instructions.", ["cisc larger instruction set", "cisc complex instructions", "complex instruction set"]),
-    point("A RISC instruction commonly completes in fewer clock cycles.", ["risc fewer clock cycles", "risc one clock cycle", "risc faster instruction"]),
+    point("RISC instructions typically have regular, often fixed-length formats; CISC instructions may have variable lengths.", ["risc fixed length", "cisc variable length", "regular instruction formats"]),
     point("A CISC program may need fewer instructions to perform the same task.", ["cisc fewer instructions", "cisc less instructions", "cisc shorter program"]),
   ], "A comparison should make paired points rather than listing isolated features."),
-  question("exam-113-ssd", "cs-1-1-3", "1.1.3", "Input, output and storage", 3, "Explain", "Explain two reasons why an SSD may be chosen instead of a magnetic hard disk for a laptop.", [
+  question("exam-113-ssd", "cs-1-1-3", "1.1.3", "Input, output and storage", 3, "Explain", "Identify one physical difference between an SSD and a magnetic hard disk, explain how it benefits a laptop, and identify one further performance or power-use benefit.", [
     point("An SSD has no moving parts.", ["no moving parts", "solid state"]),
     point("It is more resistant to shock or movement and therefore suitable for a portable device.", ["more durable", "shock resistant", "less damaged by movement", "portable"]),
     point("It normally provides faster access/read/write performance or uses less power.", ["faster access", "faster read", "faster write", "less power", "lower power"]),
@@ -83,12 +93,12 @@ const QUESTION_BANK = [
     point("A is at the front after A, B and C are enqueued.", ["a at front", "front is a"]),
     point("The dequeue operation removes/returns A, leaving B at the front.", ["dequeue a", "a removed", "b at front"]),
   ], "A queue removes from the front, so the earliest enqueued item leaves first."),
-  question("exam-143-demorgan", "cs-1-4-3", "1.4.3", "Boolean algebra", 3, "Apply", "Use De Morgan's law to rewrite NOT(A AND B), then state when the resulting expression is true.", [
+  question("exam-143-demorgan", "cs-1-4-3", "1.4.3", "Boolean algebra", 3, "Rewrite", "Use De Morgan's law to rewrite NOT(A AND B), then state when the resulting expression is true.", [
     point("The expression becomes (NOT A) OR (NOT B).", ["not a or not b", "¬a ∨ ¬b", "!a or !b"]),
     point("It is true when A is false.", ["a is false", "a=0", "not a true"]),
     point("It is true when B is false, including when both inputs are false.", ["b is false", "b=0", "either input false", "both false", "both are false"]),
   ], "Negating an AND changes it to an OR and negates each input."),
-  question("exam-151-cma", "cs-1-5-1", "1.5.1", "Computing related legislation", 4, "Discuss", "A student guesses another user's password and reads files without permission. Discuss how the Computer Misuse Act is relevant.", [
+  question("exam-151-cma", "cs-1-5-1", "1.5.1", "Computing related legislation", 4, "Explain", "A student guesses another user's password and reads files without permission. Explain why the Computer Misuse Act is relevant and how additional intent or modification could affect the offence.", [
     point("The access is unauthorised because permission was not given.", ["unauthorised access", "without permission"]),
     point("Using a guessed password does not make the access authorised.", ["guessed password", "credentials do not give permission"]),
     point("Accessing the account/data can constitute an offence under the Computer Misuse Act.", ["computer misuse act", "offence"]),
@@ -115,6 +125,8 @@ function question(id, topicId, topicCode, topicTitle, marks, commandWord, prompt
     topicCode,
     topicTitle,
     conceptIds: [`${topicId}:${PRIMARY_CONCEPTS[topicId]}`],
+    objectives: [WRITTEN_OBJECTIVES[topicCode]],
+    contentVersion: "h446-c1-2026-09-13.1",
     marks,
     commandWord,
     prompt,

@@ -3831,7 +3831,7 @@ function renderRevisionPage() {
       const sessionTotal = activeAdaptiveSession && !activeAdaptiveSession.completedAt ? activeAdaptiveSession.items.length : deckTotal;
       const sessionDone = activeAdaptiveSession && !activeAdaptiveSession.completedAt ? activeAdaptiveSession.completedConceptIds.length : completedCount;
       return `<article class="focused-retrieval-card" aria-label="Revision activity">
-        <div class="retrieval-meta"><span>${escapeHtml(card.category)}</span><span>${activeAdaptiveSession && !activeAdaptiveSession.completedAt ? `${activeAdaptiveSession.completedConceptIds.length + 1} of ${activeAdaptiveSession.items.length} in session` : `${completedCount + 1} of ${deckTotal}`}</span></div>
+        <div class="retrieval-meta"><span>${escapeHtml(card.category)}${card.objectives?.length ? ` · OCR ${escapeHtml(card.objectives.join(", "))}` : ""}</span><span>${activeAdaptiveSession && !activeAdaptiveSession.completedAt ? `${activeAdaptiveSession.completedConceptIds.length + 1} of ${activeAdaptiveSession.items.length} in session` : `${completedCount + 1} of ${deckTotal}`}</span></div>
         <progress class="session-progress-track" max="${sessionTotal}" value="${sessionDone}" aria-label="Activities completed in this session">${sessionDone} of ${sessionTotal}</progress>
         <ol class="retrieval-steps" aria-label="Activity steps"><li ${!isFlipped ? 'aria-current="step"' : 'class="step-done"'}>1 · Recall</li><li ${isFlipped ? 'aria-current="step"' : ''}>2 · Check &amp; rate</li><li>3 · Next card</li></ol>
         <h3>${escapeHtml(card.front)}</h3>
@@ -4843,7 +4843,7 @@ function renderExamPracticeQuestion() {
     return;
   }
 
-  elements.examPracticePanel.innerHTML = `<article class="exam-question-card"><header><div><span>${escapeHtml(question.topicCode)}</span><strong>${escapeHtml(question.topicTitle)}</strong></div><div class="exam-question-meta"><span>${question.marks} marks</span><span>About ${question.expectedMinutes} min</span></div></header><div class="exam-command-row"><span>${escapeHtml(question.commandWord)}</span><details><summary>Command-word help</summary><p>${escapeHtml(getCommandWordHelp(question.commandWord))}</p></details></div><h3>${escapeHtml(question.prompt)}</h3><form class="exam-answer-form" data-exam-answer-form><label for="exam-answer">Your answer</label><textarea id="exam-answer" name="answer" rows="8" maxlength="4000" required placeholder="Build a clear answer before checking the rubric.">${escapeHtml(state.answer || "")}</textarea><div class="exam-answer-footer"><label for="exam-confidence">Confidence<select id="exam-confidence" name="confidence"><option value="">Prefer not to say</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label><button class="primary-button" type="submit">${state.originalAttemptId ? "Submit improved answer" : "Check against rubric"}</button></div><p class="status-message" data-exam-status role="status" aria-live="polite"></p></form></article>`;
+  elements.examPracticePanel.innerHTML = `<article class="exam-question-card"><header><div><span>${escapeHtml(question.objectives?.join(", ") || question.topicCode)}</span><strong>${escapeHtml(question.topicTitle)}</strong></div><div class="exam-question-meta"><span>${question.marks} marks</span><span>About ${question.expectedMinutes} min</span></div></header><div class="exam-command-row"><span>${escapeHtml(question.commandWord)}</span><details><summary>Command-word help</summary><p>${escapeHtml(getCommandWordHelp(question.commandWord))}</p></details></div><h3>${escapeHtml(question.prompt)}</h3><form class="exam-answer-form" data-exam-answer-form><label for="exam-answer">Your answer</label><textarea id="exam-answer" name="answer" rows="8" maxlength="4000" required placeholder="Build a clear answer before checking the rubric.">${escapeHtml(state.answer || "")}</textarea><div class="exam-answer-footer"><label for="exam-confidence">Confidence<select id="exam-confidence" name="confidence"><option value="">Prefer not to say</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label><button class="primary-button" type="submit">${state.originalAttemptId ? "Submit improved answer" : "Check against rubric"}</button></div><p class="status-message" data-exam-status role="status" aria-live="polite"></p></form></article>`;
 }
 
 function getCommandWordHelp(commandWord) {
@@ -4851,6 +4851,11 @@ function getCommandWordHelp(commandWord) {
     Compare: "Make paired similarities or differences. Use both subjects in each comparison where possible.",
     Discuss: "Develop relevant points and consider more than one side or consequence where the question invites it.",
     Explain: "Make the reason or process clear, linking cause to effect rather than listing facts.",
+    Rewrite: "Produce an equivalent expression or corrected code, showing the requested working.",
+    Trace: "Follow each step and record changing values or state, not just the final result.",
+    Evaluate: "Weigh benefits and limitations in context and reach a justified judgement.",
+    Describe: "Give the relevant characteristics or steps in a clear sequence.",
+    Design: "Specify a solution that satisfies the stated requirements.",
     Apply: "Use the knowledge in the specific expression, data or scenario given.",
   };
   return help[commandWord] || "Respond directly to the command word and use precise Computer Science terminology.";
@@ -5343,6 +5348,7 @@ function hydrateRevisionTopicFromDeck(deck) {
     id: card.cardKey || String(card.id || "").replace(`${topic.id}__`, ""),
     serverCardId: card.id,
     category: card.category || "Revision",
+    objectives: card.objectives || [],
     front: card.front || "",
     back: card.back || "",
     quiz: card.quiz || null,

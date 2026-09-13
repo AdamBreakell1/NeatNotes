@@ -6,7 +6,7 @@ test("Computer Science applied tasks cover both examined components", () => {
   const result = validateLabs();
   assert.equal(result.valid, true, result.errors.join("\n"));
   assert.equal(result.count, 16);
-  assert.equal(LABS.filter((lab) => lab.topicId.startsWith("cs-2-")).length, 8);
+  assert.equal(LABS.filter((lab) => lab.topicId.startsWith("cs-2-")).length, 9);
 });
 
 test("SQL lab accepts equivalent spacing and a trailing semicolon", () => {
