@@ -19,7 +19,7 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <script src="/theme-init.js?v=20260824-relaunch"></script>
     <link rel="stylesheet" href="/styles-relaunch.css?v=20260907-student-r1" />
-    <link rel="stylesheet" href="/student-layout.css?v=20260912-design-r2" />
+    <link rel="stylesheet" href="/student-layout.css?v=20260913-ui-r1" />
   </head>
   <body>
     <a class="skip-link" href="#app-view">Skip to main content</a>
@@ -1212,7 +1212,14 @@
             <p>Download your data, clear local preferences, or permanently close your RecallStride account.</p>
             <label class="privacy-consent-row" for="usage-analytics-consent">
               <span><strong>Help improve RecallStride</strong><small>Share privacy-safe feature usage with BreakellSystems. Note text, answers, names, and email addresses are never included.</small></span>
-              <input id="usage-analytics-consent" type="checkbox" />
+              <span class="ui-switch">
+                <input id="usage-analytics-consent" type="checkbox" />
+                <svg viewBox="0 0 292 142" aria-hidden="true" focusable="false">
+                  <path class="ui-switch-track" d="M71 142C31.7878 142 0 110.212 0 71C0 31.7878 31.7878 0 71 0C110.212 0 119 30 146 30C173 30 182 0 221 0C260 0 292 31.7878 292 71C292 110.212 260.212 142 221 142C181.788 142 173 112 146 112C119 112 110.212 142 71 142Z" />
+                  <path class="ui-switch-symbol" d="M71 45v52M241 71a20 20 0 1 1-40 0 20 20 0 0 1 40 0" />
+                  <circle class="ui-switch-thumb" cx="71" cy="71" r="55" />
+                </svg>
+              </span>
             </label>
             <div class="settings-actions">
               <button id="download-data-button" type="button">Download workspace JSON</button>

@@ -488,3 +488,86 @@ button:disabled { transform: none; }
   .contact-hero { padding: 20px; }
   .landing-hero { padding-block: 32px; }
 }
+
+/* Uiverse adaptations: Voxybuns (tactile buttons), Allyhere (field states),
+   njesenberger (switch), kennyotsu (notices). See UIVERSE-LICENSE.txt. */
+:is(.today-session-actions > button, .landing-hero-actions .primary-account-button,
+    .focused-retrieval-card > button, .exam-answer-footer .primary-button) {
+  border: 1px solid color-mix(in srgb, var(--accent) 65%, var(--text));
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--accent) 45%, #10243c);
+  transition: transform 140ms ease, box-shadow 140ms ease, background 180ms ease;
+}
+@media (hover: hover) {
+  :is(.today-session-actions > button, .landing-hero-actions .primary-account-button,
+      .focused-retrieval-card > button, .exam-answer-footer .primary-button):hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 0 color-mix(in srgb, var(--accent) 45%, #10243c);
+  }
+}
+:is(.today-session-actions > button, .landing-hero-actions .primary-account-button,
+    .focused-retrieval-card > button, .exam-answer-footer .primary-button):active:not(:disabled) {
+  transform: translateY(2px); box-shadow: 0 1px 0 var(--accent);
+}
+
+/* Keep labels permanently visible; invalid feedback appears only after interaction. */
+:is(.auth-form, .contact-form, .settings-panel, .exam-answer-form, .editor)
+  :is(input:not([type="checkbox"]):not([type="radio"]), textarea, select) {
+  transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+:is(.auth-form, .contact-form, .settings-panel, .exam-answer-form, .editor)
+  :is(input:not([type="checkbox"]):not([type="radio"]), textarea, select):focus-visible {
+  border-color: var(--accent); outline: 2px solid var(--focus); outline-offset: 2px;
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+:is(.auth-form, .contact-form, .settings-panel, .exam-answer-form)
+  :is(input, textarea):user-invalid {
+  border-color: var(--danger); outline-color: var(--danger);
+}
+
+.ui-switch { position: relative; display: inline-grid; place-items: center; width: 56px; height: 44px; flex: 0 0 56px; }
+.privacy-consent-row .ui-switch input {
+  appearance: none; position: absolute; inset: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; border: 0; border-radius: 12px; background: transparent;
+  box-shadow: none; z-index: 1; cursor: pointer;
+}
+.ui-switch svg { width: 56px; height: 28px; overflow: visible; pointer-events: none; }
+.privacy-consent-row .ui-switch input:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.ui-switch-track { fill: var(--border-strong); transition: fill 220ms ease; }
+.ui-switch-symbol { fill: none; stroke: var(--text); stroke-width: 10; stroke-linecap: round; }
+.ui-switch-thumb { fill: var(--surface); stroke: var(--border); stroke-width: 3; transition: transform 280ms var(--motion-ease); }
+.ui-switch input:checked + svg .ui-switch-track { fill: var(--accent); }
+.ui-switch input:checked + svg .ui-switch-thumb { transform: translateX(150px); }
+.ui-switch input:checked + svg .ui-switch-symbol { stroke: var(--on-accent); }
+.ui-switch input:disabled { cursor: not-allowed; }
+.ui-switch input:disabled + svg { opacity: .5; }
+
+.status-message:not(:empty) {
+  --notice-color: var(--accent-ink);
+  color: var(--text); background: var(--surface-subtle);
+  border: 1px solid var(--border); border-inline-start: 3px solid var(--notice-color);
+  border-radius: 10px; padding: 10px 12px; line-height: 1.5; overflow-wrap: anywhere;
+  animation: notice-arrive 180ms ease-out;
+}
+.status-message.success:not(:empty) { --notice-color: var(--success); }
+.status-message.error:not(:empty) { --notice-color: var(--danger); background: var(--danger-soft); }
+button[aria-busy="true"] { cursor: progress; }
+button[aria-busy="true"]::before {
+  content: ""; display: inline-block; width: .85em; height: .85em;
+  margin-inline-end: .5em; vertical-align: -.1em; border: 2px solid currentColor;
+  border-inline-end-color: transparent; border-radius: 50%; animation: ui-busy 700ms linear infinite;
+}
+@keyframes notice-arrive { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ui-busy { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .ui-switch *, .status-message:not(:empty), button[aria-busy="true"]::before { animation: none; transition: none; }
+  :is(.today-session-actions > button, .landing-hero-actions .primary-account-button,
+      .focused-retrieval-card > button, .exam-answer-footer .primary-button) { transition: none; }
+  :is(.today-session-actions > button, .landing-hero-actions .primary-account-button,
+      .focused-retrieval-card > button, .exam-answer-footer .primary-button):is(:hover, :active) { transform: none; }
+}
+@media (forced-colors: active) {
+  .ui-switch-track { fill: Canvas; stroke: ButtonText; stroke-width: 8; }
+  .ui-switch-thumb { fill: ButtonText; }
+  .ui-switch input:checked + svg .ui-switch-track { fill: Highlight; }
+  .ui-switch-symbol, .ui-switch input:checked + svg .ui-switch-symbol { stroke: ButtonText; }
+}

@@ -1811,6 +1811,7 @@ function registerPublicAssetRoutes() {
     ["/manifest.webmanifest", "application/manifest+json"],
     ["/styles.css", "text/css"],
     ["/student-layout.css", "text/css"],
+    ["/UIVERSE-LICENSE.txt", "text/plain"],
     ["/revision-generator.js", "application/javascript"],
     ["/neat-questions.js", "application/javascript"],
     ["/favicon.svg", "image/svg+xml"],

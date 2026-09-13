@@ -334,6 +334,25 @@ async function dismissLaunch(page) {
         assert.equal(await page.locator('[data-global-action="plans"]:visible').count(), 1);
         await page.locator('[data-global-action="settings"]').click();
         await screenshot(page, `settings-${width}`);
+        if (width === 390) {
+          await page.locator('[data-settings-tab="data"]').click();
+          const consent = page.locator('#usage-analytics-consent');
+          assert.equal(await consent.isChecked(), false, 'Visual switch must not opt users in');
+          await consent.focus();
+          await page.keyboard.press('Tab');
+          await page.keyboard.press('Shift+Tab');
+          assert.equal(await consent.evaluate(el => el === document.activeElement), true);
+          assert.equal(await consent.evaluate(el => getComputedStyle(el).outlineStyle), 'solid');
+          const box = await consent.boundingBox();
+          assert.ok(box.width >= 44 && box.height >= 44);
+          await consent.press('Space');
+          assert.equal(await consent.isChecked(), true);
+          assert.equal(await page.locator('.ui-switch-thumb').evaluate(el => getComputedStyle(el).transitionDuration), '0s');
+          await screenshot(page, 'uiverse-switch-mobile');
+          await consent.press('Space');
+          assert.equal(await consent.isChecked(), false);
+          evidence.push('Uiverse switch preserves opt-in state, keyboard operation, focus ring, touch target and reduced motion');
+        }
         await page.keyboard.press("Escape");
       }
       await navigate(page, "revise");
