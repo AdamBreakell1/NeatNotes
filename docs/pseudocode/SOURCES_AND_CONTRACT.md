@@ -1,6 +1,6 @@
 # H446 sources and executable contract
 
-Researched 13 September 2026. Contract: **rs-h446-1.0.0**. This is a small RecallStride execution dialect, not the set of answers OCR examiners may credit. Parser failure is not an exam mark. No J277 assessment rules are imported.
+Researched 13 September 2026. Current contract: **rs-h446-2.0.0**. This is the RecallStride worksheet execution dialect, not the set of answers OCR examiners may credit. Parser failure is not an exam mark. No J277 assessment rules are imported.
 
 Revalidated 7 October 2026: fetched the official H446 specification again; version 3.0 / April 2026 and the SHA-256 below remain unchanged. Current ICO/GOV.UK policy guidance and its review limitations are separately linked in [POLICY_REVIEW.md](../POLICY_REVIEW.md). Library alternatives were inspected on 13 September and have not been adopted; no later maintenance claim is made.
 
@@ -19,26 +19,24 @@ Revalidated 7 October 2026: fetched the official H446 specification again; versi
 
 The official appendix supplies spelling and examples, not a complete executable semantics specification. The conventions below belong to RecallStride. Source positions use one-based lines and UTF-16 columns.
 
-## Supported matrix
+## Current executable contract: 2.0.0
 
-| Area | Supported in 1.0.0 | Boundary / execution convention | OCR location |
-| --- | --- | --- | --- |
-| Layout / case | One statement per line, blank lines, `//` comments; case-insensitive keywords and built-ins; case-sensitive variable and routine names | ASCII identifiers, letter/underscore then letters/digits/underscores, maximum 64 characters; indentation cosmetic. Separate word operators from adjacent operands (`12 MOD 5`, not `12MOD5`). ASCII single/double quoted strings; no multiline literals or escapes. Smart quotes get a helpful diagnostic. | pp.33,36; case/lexical details are local conventions |
-| Values | Numbers, strings, `true`, `false`; inferred variable type on assignment | No null/object literals, undefined reads fail. Reassignment must keep the value type. Booleans are not numbers. | p.33; strictness local |
-| Assignment / tests | `=` assignment; `== != < <= > >=` comparisons | No chained comparisons; use AND. Same-type scalar equality; ordered comparisons on numbers or strings. | pp.33–34 |
-| Precedence high → low | `()` / calls / array access / string members; right-associative `^`; unary `+ -`; `* / DIV MOD`; `+ -`; comparisons; `NOT`; `AND`; `OR` | Exponentiation binds above numeric negation; AND/OR short-circuit with Boolean operands; no coercion. Parentheses recommended for clarity. | p.34 lists operators; precedence/short-circuit are local |
-| Numbers | Binary64 finite numbers; `/` real division; integer operands for DIV/MOD | Magnitudes above 2^53−1 rejected, including rounded integer results; no arbitrary precision. DIV truncates toward zero; MOD = a − trunc(a/b)×b, including negative operands. Zero divisor errors. Decimal rounding remains possible. | p.34; precision/negative behaviour local |
-| Casting | `int`, `float`, `str` | Full numeric string required (no partial parsing); int truncates toward zero; bool/array to number rejected. Leading/trailing whitespace on numeric input accepted. `str` scalar only. | p.33; details local |
-| I/O | `input(prompt)` returns next queued string; `print(value)` appends one line | Prompt shown separately from output. Missing input diagnoses the exact line; add fixtures then rerun. Stop cancels input/run. No prompt dialogs, networking or files. One fixture line per input, empty fixture lines explicit. | p.33 |
-| Selection | `if … then / elseif / else / endif` | Boolean condition required. Switch/case explicitly unsupported. | p.34 |
-| Iteration | `for i = start to end / next i`; `while / endwhile`; `do / until` | For endpoints evaluated once; inclusive integer range, step +1; descending range runs zero times. Modification of the counter in the body is rejected. Empty loop iterations consume work. No `step`, `break` or `continue`. | p.33; local details labelled |
-| Strings | `+`, `.length`, `.subString(start,count)` (any member-name case) | Zero-based UTF-16 code units; strict bounds, empty substring allowed at end; length never normalises Unicode. Strings immutable. | p.35; UTF-16/bounds local |
-| Arrays | `array items[size]`, `items[index] = value`, `items[index]` | One dimension, fixed zero-based bounds, 0-sized allowed; uninitialised reads fail; scalar cells with per-cell stable type; no array literals, resizing or whole-array assignment. | p.36; one dimension subset |
-| Routines | Top-level functions/procedures, positional parameters, optional `:byVal`, `return expression` in functions | Isolated local scope; no implicit access to main variables. Scalars and arrays copied by value (allocation charged). Scalar returns only. Functions must return; procedures cannot return a value. No nested definitions, global/byRef, recursion or OOP in this version. | pp.33,35; subset explicit |
-| Trace | Bounded after-statement snapshots with source line, local variables and routine stack | Inspection of a completed/failed run, not an interactive debugger. First 120 events, first 12 variables, first 8 array cells and first 80 string characters. Truncation disclosed. | RecallStride feature |
+The task library is adapted from the user's five CodingTasks worksheets. Their reference editor, [Exam Reference Language](https://www.examreferencelanguage.co.uk), was inspected on 7 October 2026 for task/editor/console/file workflow. Its [terms](https://www.examreferencelanguage.co.uk/terms.php) were also inspected. No proprietary code or editor was adopted. School starter links required sign-in; labelled replacement fixtures make every task self-contained.
 
-## Hard ceilings
+| Area | Supported behaviour |
+| --- | --- |
+| Layout | One statement per line; blank lines and // comments. Keywords/built-ins ignore case, variable/routine names are case-sensitive. Straight quotes; no string escapes. |
+| Values | Finite binary64 numbers up to ±(2^53−1), strings, true/false, arrays and virtual file handles. Variables keep their assigned type. |
+| Operators | = assigns; == != < <= > >= compare same-type scalars. ^ is right-associative and above unary signs; then * / DIV MOD, +/−, comparisons, NOT, AND, OR. AND/OR short-circuit. DIV truncates towards zero; MOD keeps the dividend's sign. |
+| Input/output | input(prompt) returns text and pauses Run for interactive input if the queue is exhausted. print(value) adds one output line. int/float/real/str provide explicit conversions. |
+| Selection | if/elseif/else/endif and switch expression: / case value: / default: / endswitch. CASE may have an inline statement. First matching case executes; no fallthrough. switch true: supports Boolean cases. |
+| Loops | for i=start to end [step integer] / next i, inclusive bounds; while/endwhile; do/until; break/continue inside loops. Step cannot be zero. Loop counters cannot be assigned inside the body. |
+| Strings | Zero-based UTF-16 indexes; length, upper/lower, subString(start,count), left/right(count), split(separator), ASC(character), CHR(code). Strict bounds; strings immutable. |
+| Arrays | One, two or three declared dimensions; nested array literals; comma indexes or successive brackets; length of an array or row. Fixed bounds; declared cells must be assigned before reading. Whole arrays are copied on assignment. |
+| Numbers | random(min,max) inclusive integers; floor, ceil, round(value[,decimals]), sqrt, abs, min, max, format(value,decimals). Fixed-seed checks and stable-seed interactive replay; fresh Run seed. |
+| Files | Simple virtual filenames only. existsFile, newFile, delFile/deleteFile, open, openRead, openWrite. Handles support readLine, writeLine, endOfFile, close. open reads/appends; openWrite clears or creates. Reopen to reset the read position. No host filesystem or networking. |
+| Timing | wait/sleep(seconds) records output delays; cancellable console playback honours them without blocking the main thread. |
+| Routines | Top-level functions/procedures, positional parameters, optional :byVal. Local scopes; scalar/array arguments copied by value. Scalar returns. Recursion, globals, byRef and classes are outside this worksheet language. |
+| Trace | First 120 after-statement events, 12 variables, 8 cells per array and 80 characters per string. Inspection, not a live step debugger. |
 
-16,384 source UTF-16 units; 6,000 tokens; 64 parse/AST depth; 50,000 work units (statements, expressions, loops and size-based operations); 750ms runtime wall budget per case; 32 routine calls; recursion disallowed; 256 variable declarations per run; 4,096 cumulative array cells; 8,192 characters per string; 262,144 cumulative created/copied string characters; 200 output lines / 16,384 output characters; 100 input items / 1,024 characters each / 8,192 total. Worker parent terminates a Run after 2 seconds and each functional suite after 12 seconds; Stop terminates immediately and a subsequent Run creates a fresh worker. Parser and evaluator depth are checked before recursive descent. Limits may be lowered in tests, never raised by browser messages.
-
-Unsupported constructs are reported separately from malformed supported syntax. All limits are part of this version. No source/output is HTML, JavaScript, a URL to execute, or an instruction to the application.
+Hard ceilings and isolation are documented in [ARCHITECTURE.md](ARCHITECTURE.md). Check task executes public cases against original task files; edited files remain intact. Random-character and generated-file cases validate allowed outputs and file-derived counts. File-creation cases compare contents; timed karaoke also checks event timing. Passing finite tests does not prove algorithm correctness or award an OCR mark. Independent review metadata is not presented as a prerequisite for using these owner-authorised tasks.

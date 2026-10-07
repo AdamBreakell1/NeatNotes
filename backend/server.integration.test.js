@@ -484,9 +484,10 @@ test("production delivery releases authorized C2, preserves C1 draft gates and d
     assert.equal((await fetch(`${url}/api/revision/decks/cs-2-1-2`, { headers: freeHeaders })).status, 402);
     assert.equal((await fetch(`${url}/api/revision/free-deck`, { method: "POST", headers: freeHeaders, body: JSON.stringify({ deckId: "cs-2-1-2" }) })).status, 402);
     const coding = await fetch(`${url}/api/coding/tasks`, { headers }).then(r => r.json());
-    assert.deepEqual(coding.tasks, []);
+    assert.equal(coding.tasks.length, 60);
+    assert.equal(coding.tasks.filter(t=>t.worksheet && t.worksheet!=="5.8b").length,51);
     assert.equal(coding.preview, false);
-    assert.equal((await fetch(`${url}/api/coding/tasks/minutes-to-seconds`, { headers })).status, 404);
+    assert.equal((await fetch(`${url}/api/coding/tasks/minutes-to-seconds`, { headers })).status, 200);
     assert.equal((await fetch(`${url}/api/billing/mock-upgrade`, { method: "POST", headers, body: JSON.stringify({ plan: "pro" }) })).status, 403);
   } finally {
     child.kill("SIGTERM");
@@ -495,18 +496,20 @@ test("production delivery releases authorized C2, preserves C1 draft gates and d
 });
 
 
-test("coding draft access, attempt identity, tampered scores, pilot consent, export and deletion", async () => {
+test("complete coding catalogue, attempt identity, tampered scores, pilot consent, export and deletion", async () => {
   const codingCookie = await createVerifiedAccount({ name: "Coding API Fixture", email: "coding-api@example.test", password: "CodingPass123" });
   const headers = { Cookie: codingCookie, "Content-Type": "application/json" };
-  assert.equal((await fetch(`${baseUrl}/api/coding/tasks`)).status, 401);
-  assert.equal((await fetch(`${baseUrl}/api/coding/tasks/minutes-to-seconds`, { headers })).status, 402);
+  assert.equal((await fetch(`${baseUrl}/api/coding/tasks`)).status, 200);
+  assert.equal((await fetch(`${baseUrl}/api/coding/tasks/minutes-to-seconds`, { headers })).status, 200);
   assert.equal((await fetch(`${baseUrl}/api/revision/free-deck`, { method:"POST",headers,body:JSON.stringify({deckId:"cs-2-2-1"}) })).status,200);
   const tasks = await fetch(`${baseUrl}/api/coding/tasks`,{headers}).then(r=>r.json());
-  assert.equal(tasks.tasks.length,7);assert.equal(tasks.preview,true);assert.equal(tasks.tasks[0].solutions,undefined);
-  assert.equal((await fetch(`${baseUrl}/api/coding/tasks/first-match`,{headers})).status,402);
-  assert.equal((await fetch(`${baseUrl}/api/coding/tasks/first-match/solution`,{headers})).status,402);
+  assert.equal(tasks.tasks.length,60);assert.equal(tasks.preview,false);assert.equal(tasks.tasks[0].solutions,undefined);
+  assert.equal((await fetch(`${baseUrl}/api/coding/tasks/first-match`,{headers})).status,200);
+  assert.equal((await fetch(`${baseUrl}/api/coding/tasks/first-match/solution`,{headers})).status,200);
   const task=tasks.tasks[0],payload={id:"synthetic-attempt-12345678",taskId:task.id,taskVersion:task.version,interpreterVersion:task.interpreterVersion,mode:"independent",firstCheck:true,assistance:{runs:0,hints:0,checks:0,solution:false},outcomes:task.cases.map(c=>({id:c.id,outcome:"passed"}))};
   const endpoint=`${baseUrl}/api/coding/tasks/${task.id}/attempts`;
+  assert.equal((await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})).status,401);
+  assert.equal((await fetch(`${baseUrl}/api/coding/attempts`)).status,401);
   for(const invalid of [{...payload,score:100},{...payload,trusted:true},{...payload,source:"do not store"}])assert.equal((await fetch(endpoint,{method:"POST",headers,body:JSON.stringify(invalid)})).status,400);
   const saved=await fetch(endpoint,{method:"POST",headers,body:JSON.stringify(payload)});assert.equal(saved.status,201);assert.equal((await saved.json()).record.masteryEligible,false);
   assert.equal((await fetch(endpoint,{method:"POST",headers,body:JSON.stringify(payload)})).status,200);

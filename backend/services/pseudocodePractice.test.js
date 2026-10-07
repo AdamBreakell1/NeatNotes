@@ -1,9 +1,9 @@
 'use strict';
 const {test}=require('node:test');const assert=require('node:assert/strict');const {DatabaseSync}=require('node:sqlite');
 const {TASKS}=require('./pseudocodeTasks');const P=require('./pseudocodePractice');const D=require('../../pseudocode-drafts');const {validateEvent,registerPilotRoutes}=require('./pilotTelemetry');const {benchmark}=require('../../scripts/benchmark-pseudocode');
-const fixture=(id='attempt-123456789012')=>({id,taskId:TASKS[0].id,taskVersion:TASKS[0].version,interpreterVersion:'rs-h446-1.0.0',mode:'independent',firstCheck:true,assistance:{runs:0,hints:0,checks:0,solution:false},outcomes:TASKS[0].cases.map(c=>({id:c.id,outcome:'passed'}))});
+const fixture=(id='attempt-123456789012')=>({id,taskId:TASKS[0].id,taskVersion:TASKS[0].version,interpreterVersion:require('../../pseudocode-engine').VERSION,mode:'independent',firstCheck:true,assistance:{runs:0,hints:0,checks:0,solution:false},outcomes:TASKS[0].cases.map(c=>({id:c.id,outcome:'passed'}))});
 function storage(){const m=new Map();return{get length(){return m.size;},key:i=>[...m.keys()][i],getItem:k=>m.get(k)||null,setItem:(k,v)=>m.set(k,v),removeItem:k=>m.delete(k)};}
-test('version-specific academic gate and production cannot enable draft preview',()=>{
+test('review provenance is version-specific and separate from published practice access',()=>{
  assert.equal(P.canPreview({NODE_ENV:'production',RECALLSTRIDE_CODING_PREVIEW:'true'}),false);assert.equal(P.canPreview({NODE_ENV:'development'}),false);assert.equal(P.canPreview({NODE_ENV:'development',RECALLSTRIDE_CODING_PREVIEW:'true'}),true);
  assert.ok(TASKS.every(t=>!P.isReviewed(t)));const t=TASKS[0];const records=[{taskId:t.id,version:t.version,sha256:P.digest(t),status:'approved',reviewer:'Synthetic reviewer fixture',reviewedAt:'2026-09-13'}];
  assert.equal(P.isReviewed(t,records),true);assert.equal(P.isReviewed({...t,prompt:t.prompt+' changed'},records),false);
@@ -28,9 +28,9 @@ test('local drafts, content changes, expiration, offline retry identity and stor
  store.clear('a');now=1000;store.save('a','expired',draft);now+=D.MAX_AGE+1;store.save('a','current',draft);assert.ok(store.export('a').drafts.current);assert.equal(store.export('a').drafts.expired,undefined);
  const broken=D.createStore({setItem(){throw Error('quota');},getItem(){throw Error('blocked');}});assert.equal(broken.save('a',t.id,draft),false);assert.equal(broken.draft('a',t.id),null);
 });
-test('small authored benchmark detects seeded faults and accepts structurally different alternatives',()=>{
- const b=benchmark();assert.equal(b.summary.tasks,8);assert.equal(b.summary.falseNegatives,0);assert.equal(b.summary.falsePositives,0);assert.equal(b.summary.correctAlternatives,17);assert.equal(b.summary.seededFaults,17);
- for(const t of TASKS){assert.equal(t.provenance.independentReviewer,null);assert.ok(t.hints.length===3&&t.rubric.length>=3&&t.misconceptions.length>=2);assert.ok(TASKS.some(x=>x.id===t.transferId));}
+test('worksheet corpus accepts reference solutions and retains seeded fault detection',()=>{
+ const b=benchmark();assert.equal(b.summary.tasks,60);assert.equal(b.summary.falseNegatives,0);assert.equal(b.summary.falsePositives,0);assert.equal(b.summary.correctAlternatives,69);assert.equal(b.summary.seededFaults,17);
+ for(const t of TASKS){assert.equal(t.provenance.independentReviewer,null);assert.ok(t.hints.length===3&&t.rubric.length>=2&&Array.isArray(t.misconceptions));assert.ok(TASKS.some(x=>x.id===t.transferId));}
 });
 test('pilot events allow enum and identity data only, never source, answers or arbitrary text',()=>{
  const value={id:'event-123456789012',name:'coding_check',sessionId:'session-123456789012',taskId:TASKS[0].id,mode:'learn'};assert.deepEqual(validateEvent(value),value);

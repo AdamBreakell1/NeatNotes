@@ -1,0 +1,61 @@
+{
+  "date": "2026-10-07",
+  "scope": "Embedded coding workspace from user-supplied CodingTasks worksheets",
+  "deployment": "User-authorised deployment through existing Render main integration; see DEPLOYMENT_CODE_STUDIO_2026_10_07.md for serving evidence.",
+  "interpreterVersion": "rs-h446-2.0.0",
+  "tasks": {
+    "coreWorksheetExercises": 51,
+    "optionalWorksheetGame": 1,
+    "retainedExercises": 8,
+    "total": 60
+  },
+  "validation": {
+    "unitAndApiTests": 90,
+    "codingBrowserChecks": 23,
+    "existingBrowserChecks": 44,
+    "syntaxFiles": 65,
+    "contentTopics": 24,
+    "contentConcepts": 474,
+    "diffWhitespace": "pass"
+  },
+  "benchmark": {
+    "tasks": 60,
+    "cases": 174,
+    "correctAlternatives": 69,
+    "falseNegatives": 0,
+    "seededFaults": 17,
+    "falsePositives": 0
+  },
+  "browserChecks": [
+    "All 60 tasks available without a deck selection or approval placeholder",
+    "Real worker execution pauses for interactive input and resumes in the terminal",
+    "Task checks work; account receipts remain metadata-only and never award mastery",
+    "Task catalogue categories, search and task selection",
+    "Three successive interactive inputs with a real 3D array",
+    "Editable virtual files; task checks isolate original fixtures without overwriting student files",
+    "Task source and added files restore after reload",
+    "Project download and import preserve source and virtual files",
+    "Malformed project imports are rejected without destroying the draft",
+    "Input and output markup is literal text",
+    "Diagnostics focus the failing source line",
+    "Infinite loop stops at the execution budget",
+    "Stop terminates a worker and cancels delayed terminal output",
+    "Karaoke checks file replacement and one-second timing",
+    "Random-number file validated against generated counts",
+    "Playable Top Trumps hides computer card until the player chooses a criterion",
+    "Workbench reflows at 320/390/768/1440 widths",
+    "Light/dark text and code contrast",
+    "Sign-out clears account drafts and closes the other tab\u2019s editor",
+    "Account switching does not expose previous drafts",
+    "Guest task catalogue and scratchpad work; account metadata stays private",
+    "Opened workspace can run locally offline with the cached interpreter",
+    "No source/file marker in API payloads or browser errors"
+  ],
+  "limitations": [
+    "Public functional checks do not award exam marks or prove arbitrary algorithm correctness.",
+    "Linked school starter files returned HTTP 401; replacement fixtures are labelled in tasks.",
+    "Populations are fictional classroom data; planet data uses fixed historical figures.",
+    "No production accounts or billing/email providers used as test fixtures."
+  ],
+  "preferencesSavedTo": "/Users/adambreakell/.codex/AGENTS.md"
+}

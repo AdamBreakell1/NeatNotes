@@ -2,7 +2,7 @@
 
 ## Student-only direction
 
-The current 7 October increment adds bounded pseudocode practice, commercial policy drafts, review packets and pilot measurement. Start with the [release report](docs/RELEASE_REPORT.md), [deployment record](docs/DEPLOYMENT_2026_10_07.md) and [continuation checkpoint](docs/CONTINUE_RECALLSTRIDE.md). Existing classroom retirement, account return-to-task and recall practice are preserved. C1 and C2 material is published under the earlier owner's permission with independent academic review pending; new coding tasks, C1 quizzes and repairs are draft gated. RecallStride is the selected brand; naming clearance remains incomplete. The user subsequently authorised this guarded deployment; academic/legal and provider checks remain pending.
+The latest 7 October change rebuilds pseudocode practice into an embedded coding workspace: 51 worksheet exercises, an optional game and eight retained tasks, with interactive input/output, arrays, strings, virtual files, task checks and project save/open. The user has authorised deployment of this completed workspace to the existing Render service. See [the checkpoint](docs/CONTINUE_RECALLSTRIDE.md) and [coding architecture](docs/pseudocode/ARCHITECTURE.md). The previous deployed release is recorded in [the deployment record](docs/DEPLOYMENT_2026_10_07.md).
 
 RecallStride is a BreakellSystems OCR A-Level Computer Science revision and notes platform. The current app is a vanilla frontend served by an Express backend with SQLite persistence. Existing Neat Notes account identifiers, storage keys, support inbox and provider configuration remain compatible.
 
@@ -10,7 +10,7 @@ RecallStride is a BreakellSystems OCR A-Level Computer Science revision and note
 
 The earlier guarded relaunch was promoted to `main`. Its history is in [the checkpoint](docs/STUDENT_RELAUNCH.md); current [coverage](docs/H446_COVERAGE.md) and [release gates](docs/STUDENT_RELEASE_RUNBOOK.md) distinguish owner-authorised publication from academic approval. Generate local editorial packs with `npm run review:content -- --component h446-02` and `npm run review:coding`. Engineering deployment is not academic approval or permission to alter live billing.
 
-Pseudocode preview is explicit and non-production only: `RECALLSTRIDE_CODING_PREVIEW=true`. Keep `pseudocode-review.json` empty until a named reviewer approves the exact task version and hash. Use the isolated fixture commands in the continuation checkpoint to demonstrate the draft loop without reading local credentials or using real accounts.
+Coding tasks are user-authorised teaching material available to guests and signed-in students independently of revision-deck access. Account attempt history remains authenticated. Review metadata never fabricates academic approval and does not block this functional workspace. Validation uses isolated fixture databases, never production accounts or credentials.
 
 ## Local Setup
 

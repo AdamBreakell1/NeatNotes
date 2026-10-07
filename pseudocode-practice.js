@@ -1,213 +1,456 @@
-/* Native editing adapter and local practice controller. No source is sent to the server. */
+/* Embedded student workspace. Source and virtual files remain on this device. */
 (function () {
- 'use strict';
- const panel=document.querySelector('#coding-practice-section');
- const VERSION='rs-h446-1.0.0';
- let storage;try{storage=window.localStorage;}catch{storage={length:0,getItem:()=>null,setItem:()=>{throw Error('Storage unavailable');},removeItem:()=>{},key:()=>null};}
- const drafts=window.CodingDrafts.createStore(storage);
- let owner=null,context=null,tasks=[],active=null,draft=null,worker=null,watchdog=null,job=0,loadId=0,visible=false,history=[],historyIndex=0,revision=0,resultRevision=-1,latestResult=null,trace=[],retiredSource=null,loading=false,sessionId=null;
- const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
- const $=(id)=>panel.querySelector('#'+id);
- async function request(path,options={}) {
-  const response=await fetch(path,{credentials:'same-origin',cache:'no-store',...options,headers:{'Content-Type':'application/json',...options.headers}});
-  const data=await response.json().catch(()=>({})); if(!response.ok){const error=new Error(data.error||'The request did not complete. Retry when connected.');error.status=response.status;throw error;}return data;
- }
- function event(name){if(!owner||context?.analytics!==true)return;const eventId=crypto.randomUUID();request('/api/pilot/events',{method:'POST',body:JSON.stringify({id:eventId,name,sessionId,taskId:active?.id||null,mode:draft?.mode||'learn'})}).catch(()=>{});}
- function message(text){if($('coding-status'))$('coding-status').textContent=text;}
- function saved(){if(!owner||!active||!draft)return false;const ok=drafts.save(owner,active.id,draft);if($('coding-save'))$('coding-save').textContent=ok?'Draft saved on this device · not synced':'Browser storage unavailable or full. Keep this page open and export your draft.';return ok;}
- function stop(text='Stopped. Your code is preserved. Run again to start with a fresh input queue.'){
-  job++;if(worker)worker.terminate();worker=null;clearTimeout(watchdog);watchdog=null;
-  if($('coding-stop'))$('coding-stop').disabled=true;
-  if($('coding-run'))controls();if(text)message(text);
- }
- function controls(){if(!draft||!$('coding-run'))return;const independent=draft.mode==='independent'&&draft.assistance.checks===0;
-  $('coding-run').disabled=Boolean(worker)||independent||retiredSource!==null;
-  $('coding-check').disabled=Boolean(worker)||retiredSource!==null;
-  $('coding-stop').disabled=!worker;
-  $('coding-hint').disabled=Boolean(worker)||independent||draft.assistance.hints>=active.hints.length;
-  $('coding-solution').disabled=Boolean(worker)||independent;
-  $('coding-example').disabled=Boolean(worker)||independent;
-  $('coding-source').readOnly=Boolean(worker);$('coding-plan').readOnly=draft.mode==='independent'&&draft.assistance.checks>0;$('coding-input').readOnly=Boolean(worker);
-  $('coding-mode-note').textContent=draft.mode==='independent'?'Independent attempt: Run, hints and the solution stay closed until your first check. Afterwards, feedback use is recorded. This browser cannot certify unaided work.':'Learn / Run: use inputs, traces and progressive hints to improve your program.';
-  $('coding-assistance').textContent=`This draft: ${draft.assistance.runs} runs · ${draft.assistance.hints} hints · ${draft.assistance.checks} checks · solution ${draft.assistance.solution?'seen':'not seen'}`;
-  $('coding-check').textContent=independent?'Submit first attempt':'Check public tests';
-  $('coding-finish').disabled=!latestResult||resultRevision!==revision;
- }
- function highlight(){const source=$('coding-source');if(!source)return;const value=source.value;
-  // Decorative, non-executing tokenizer: language validation occurs in the worker.
-  const pattern=/(\/\/[^\n]*|"[^"\n]*"|'[^'\n]*'|\b(?:if|then|elseif|else|endif|while|endwhile|do|until|for|to|next|array|function|endfunction|procedure|endprocedure|return|true|false|AND|OR|NOT|DIV|MOD)\b|\b\d+(?:\.\d+)?\b)/gi;
-  let html='',at=0;for(const match of value.matchAll(pattern)){html+=esc(value.slice(at,match.index));const token=match[0],kind=token.startsWith('//')?'comment':/^["']/.test(token)?'string':/^\d/.test(token)?'number':'keyword';html+=`<span class="coding-${kind}">${esc(token)}</span>`;at=match.index+token.length;}html+=esc(value.slice(at));
-  $('coding-highlight').innerHTML=html+'\n';$('coding-lines').textContent=Array.from({length:value.split('\n').length},(_,i)=>i+1).join('\n');scrollSync();
- }
- function scrollSync(){const source=$('coding-source');if(!source)return;$('coding-highlight').scrollTop=source.scrollTop;$('coding-highlight').scrollLeft=source.scrollLeft;$('coding-lines').scrollTop=source.scrollTop;}
- function invalidate(){revision++;latestResult=null;trace=[];resultRevision=-1;$('coding-results').replaceChildren();$('coding-trace').hidden=true;$('coding-diagnostics').replaceChildren();$('coding-inline-error').hidden=true;$('coding-lines').classList.remove('coding-diag-gutter');$('coding-source').removeAttribute('aria-invalid');message('Code changed. Run or check this version for fresh feedback.');controls();}
- function edit(value,start,end,remember=true){if(!draft||value.length>16384)return;const source=$('coding-source');source.value=value;source.setSelectionRange(start??value.length,end??start??value.length);draft.source=value;if(remember){history=history.slice(0,historyIndex+1);history.push(value);if(history.length>100)history.shift();historyIndex=history.length-1;}invalidate();highlight();saved();}
- function undo(direction){const next=historyIndex+direction;if(next<0||next>=history.length)return;historyIndex=next;edit(history[next],undefined,undefined,false);$('coding-source').focus();}
- function indent(out=false){const e=$('coding-source'),start=e.value.lastIndexOf('\n',e.selectionStart-1)+1,end=e.value.indexOf('\n',e.selectionEnd),stop=end<0?e.value.length:end,selected=e.value.slice(start,stop),replacement=selected.split('\n').map(line=>out?line.replace(/^( {1,2}|\t)/,''):'  '+line).join('\n');edit(e.value.slice(0,start)+replacement+e.value.slice(stop),start,start+replacement.length);e.focus();}
- function sourcePosition(line,column){const e=$('coding-source'),lines=e.value.split('\n');const safeLine=Math.max(1,Math.min(lines.length,line));let offset=lines.slice(0,safeLine-1).reduce((n,v)=>n+v.length+1,0)+Math.max(0,column-1);e.focus();e.setSelectionRange(offset,offset+1);e.scrollTop=Math.max(0,(safeLine-3)*24);scrollSync();$('coding-location').textContent=`Source line ${safeLine}, column ${column}`;}
- function showDiagnostic(d){$('coding-inline-error').hidden=false;$('coding-inline-error').textContent=`Line ${d.line}, column ${d.column}: ${d.message}`;$('coding-lines').classList.add('coding-diag-gutter');$('coding-diagnostics').innerHTML=`<li><button type="button" data-coding-line="${Number(d.line)||1}" data-coding-column="${Number(d.column)||1}">${esc(d.category)} · line ${Number(d.line)||1}, column ${Number(d.column)||1}: ${esc(d.message)}</button><p>${esc(d.hint)}</p></li>`;$('coding-source').setAttribute('aria-invalid','true');message(`${d.category} diagnostic at line ${d.line}: ${d.message} ${d.hint}`);}
- async function validateCurrent(myOwner,myTask,myLoad){const data=await request(`/api/coding/tasks/${encodeURIComponent(myTask.id)}`);if(owner!==myOwner||active?.id!==myTask.id||loadId!==myLoad)return false;
-  if(data.task.version!==myTask.version||data.task.interpreterVersion!==VERSION){retiredSource=draft.source;message('Task or interpreter changed. Export this draft, then reload the task. Its old code has been preserved.');controls();return false;}return true;}
- async function execute(action){
-  if(!active||worker||retiredSource!==null)return;const myOwner=owner,myTask=active,myLoad=loadId;
-  stop(null);const id=String(job);message('Checking current task access…');
-  try{if(!await validateCurrent(myOwner,myTask,myLoad)||String(job)!==id)return;}catch(error){if(owner!==myOwner||myLoad!==loadId)return;message(`${error.message} Code is still saved locally; retry or export it.`);if([401,402,404].includes(error.status))retiredSource=draft.source;controls();return;}
-  const source=$('coding-source').value;
-  if(source.length>16384){message('Shorten the source to 16,384 characters before running.');return;}
-  const inputs=draft.inputs===''?[]:draft.inputs.split('\n').map(line=>line==='""'?'':line);
-  if(inputs.length>100||inputs.some(v=>v.length>1024)||draft.inputs.length>8192){message('Input limit: 100 lines, 1,024 characters per line and 8,192 total.');return;}
-  const firstCheck=draft.assistance.checks===0,assistance={...draft.assistance};
-  if(action==='run')draft.assistance.runs=Math.min(10000,draft.assistance.runs+1);else draft.assistance.checks=Math.min(10000,draft.assistance.checks+1);
-  saved();$('coding-diagnostics').replaceChildren();$('coding-inline-error').hidden=true;$('coding-lines').classList.remove('coding-diag-gutter');$('coding-source').removeAttribute('aria-invalid');$('coding-output').textContent='';$('coding-results').replaceChildren();$('coding-trace').hidden=true;latestResult=null;
-  try{worker=new Worker('/pseudocode-worker.js?v='+VERSION);}catch{message('This browser could not start the worker. Your source is saved; export it or retry in a browser with Web Workers.');controls();return;}
-  controls();message(action==='run'?'Running with the fixture queue…':'Checking normal, boundary and adversarial cases locally…');
-  const runRevision=revision;
-  watchdog=setTimeout(()=>{if(String(job)===id){stop('Time limit reached. The worker was terminated; check your loops and run again.');}},action==='run'?2000:12000);
-  worker.onerror=()=>{if(String(job)===id)stop('Worker failed safely. Your code is preserved; retry to create a new worker.');};
-  worker.onmessage=async(messageEvent)=>{
-   if(String(job)!==id||messageEvent.data.id!==id||owner!==myOwner||myLoad!==loadId)return;
-   const result=messageEvent.data.result;stop(null);resultRevision=runRevision;
-   if(action==='run'){
-    $('coding-output').textContent=result.output.length?result.output.join('\n'):'(No output)';
-    $('coding-input-log').textContent=result.prompts.length?`Input prompts: ${result.prompts.join(' → ')}`:'No input requested.';
-    trace=result.trace||[];if(trace.length){$('coding-trace').hidden=false;$('coding-trace-select').innerHTML=trace.map((t,i)=>`<option value="${i}">Event ${i+1} · source line ${t.line}</option>`).join('');showTrace();$('coding-trace-note').textContent=result.traceTruncated?'Trace capped at 120 events. Values show at most 12 variables, 8 array cells and 80 characters.':'After-statement trace. Values show at most 12 variables, 8 array cells and 80 characters.';}
-    if(result.diagnostic)showDiagnostic(result.diagnostic);else message(`Run finished: ${result.output.length} output lines; ${result.steps} work units. Check the public tests next.`);
-    event('coding_run');
-   }else{
-    latestResult=result;
-    $('coding-results').innerHTML=`<h4>Functional tests · local practice</h4><p>${result.allPassed?'Passes these tests. This does not prove correctness.':'Some tests did not pass. Use the case details to improve your program.'}</p><p>${esc(active.comparison.whitespace)}; output order matters. ${active.comparison.kind==='numeric'?`Absolute tolerance: ${active.comparison.absoluteTolerance}.`:''}</p>`+result.cases.map(c=>`<details><summary>${c.passed?'Pass':'Needs attention'} · ${esc(c.label)}</summary><p>Input: ${esc(JSON.stringify(active.cases.find(x=>x.id===c.id)?.inputs))}</p><p>Expected output</p><pre>${esc(c.expected.join('\n')||'(No output)')}</pre><p>Your output</p><pre>${esc(c.output.join('\n')||'(No output)')}</pre>${c.diagnostic?`<button type="button" data-coding-line="${c.diagnostic.line}" data-coding-column="${c.diagnostic.column}">Line ${c.diagnostic.line}: ${esc(c.diagnostic.message)}</button><p>${esc(c.diagnostic.hint)}</p>`:''}</details>`).join('');
-    message(result.allPassed?'Passes these tests. Review your method separately below; no numerical mark is awarded.':'Functional checks found a difference. Open a case to inspect the inputs, expected output and diagnostic.');
-    const attempt={id:crypto.randomUUID(),taskId:myTask.id,taskVersion:myTask.version,interpreterVersion:VERSION,mode:draft.mode,firstCheck,assistance,outcomes:result.cases.map(c=>({id:c.id,outcome:c.passed?'passed':c.diagnostic?'diagnostic':'failed'}))};
-    draft.lastAttempt=attempt.id;draft.revisit={taskId:myTask.transferId,dueAt:new Date(Date.now()+3*86400000).toISOString()};draft.completed=false;saved();renderRevisit();
-    if(!drafts.queue(myOwner,attempt))$('coding-sync').textContent='Attempt retry queue is full or unavailable. Export coding data before closing; this result has not synced.';else await sync(myOwner);
-    event('coding_check');
-   }
-   if(owner===myOwner&&active?.id===myTask.id)controls();
-  };
-  worker.postMessage({id,action,source,inputs,cases:myTask.cases,comparison:myTask.comparison});
- }
- function showTrace(){const item=trace[Number($('coding-trace-select').value)||0];if(!item)return;$('coding-trace-values').textContent=JSON.stringify({line:item.line,scope:item.stack.length?item.stack.join(' → '):'main',variables:item.variables},null,2);}
- async function sync(myOwner=owner){if(!myOwner)return;for(const attempt of drafts.pending(myOwner)){
-  if(owner!==myOwner)return;try{await request(`/api/coding/tasks/${encodeURIComponent(attempt.taskId)}/attempts`,{method:'POST',body:JSON.stringify(attempt)});if(owner!==myOwner)return;drafts.acknowledge(myOwner,attempt.id);}
-  catch(error){if(owner===myOwner&&$('coding-sync'))$('coding-sync').textContent=`Local attempt waiting to sync: ${error.message} Retry or export the saved metadata.`;return;}}
-  if(owner===myOwner&&$('coding-sync'))$('coding-sync').textContent='Local outcome metadata synced. Source, input and prediction stay on this device.';
- }
- function renderRevisit(){const r=draft?.revisit;if(!$('coding-revisit'))return;$('coding-revisit').textContent=r?`Suggested fresh task: ${tasks.find(t=>t.id===r.taskId)?.title||r.taskId}, from ${new Date(r.dueAt).toLocaleDateString()}. This is a three-day practice reminder, not verified mastery.`:'After checking, a fresh task will be suggested for a delayed revisit.';}
- async function exportData(){if(!owner)return;const local=drafts.export(owner);if(active&&draft)local.drafts[active.id]=draft;let synced=[];let notice='';try{synced=(await request('/api/coding/attempts')).attempts;}catch{notice='Network unavailable: server metadata was not included.';}
-  const blob=new Blob([JSON.stringify({exportedAt:new Date().toISOString(),owner,local,attempts:synced,notice},null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='recallstride-coding-data.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);message(notice||'Coding data exported, including this device’s drafts.');}
- async function choose(id){stop(null);loadId++;const task=tasks.find(t=>t.id===id);if(!task)return;active=task;retiredSource=null;revision=0;resultRevision=-1;latestResult=null;trace=[];
-  const stored=drafts.draft(owner,id),restored=window.CodingDrafts.restore(stored,task);
-  drafts.remember(owner,id);if($('coding-task-select'))$('coding-task-select').value=id;
-  draft=restored.draft||{taskVersion:task.version,interpreterVersion:VERSION,source:task.starter,inputs:task.example.inputs.join('\n'),plan:'',mode:'learn',assistance:{runs:0,hints:0,checks:0,solution:false},rubric:[],completed:false};
-  if(restored.stale){retiredSource=restored.recovery;draft.source=retiredSource;draft.taskVersion=stored.taskVersion;draft.interpreterVersion=stored.interpreterVersion;}
-  history=[draft.source];historyIndex=0;renderTask();if(restored.stale)message('This draft uses an older content version. Export it before resetting to the new starter. Checks are disabled until reset.');else saved();event('coding_task_opened');
- }
- const reference=`<p><strong>${VERSION}</strong> · H446-style executable subset. OCR may credit other intelligible pseudocode; parser errors are not exam marks.</p>
- <dl><dt>Values and output</dt><dd><code>x=int(input("Number"))</code>, <code>print(x)</code>. Input returns text. One statement per line; <code>//</code> starts a comment.</dd>
- <dt>Selection</dt><dd><code>if x==3 then</code>, <code>elseif</code>, <code>else</code>, <code>endif</code>. Assign with =; compare with ==. Boolean operators: AND, OR, NOT.</dd>
- <dt>Loops</dt><dd><code>for i=0 to 3</code> … <code>next i</code> includes 0 and 3. <code>while condition</code> … <code>endwhile</code>; <code>do</code> … <code>until condition</code>.</dd>
- <dt>Strings and arrays</dt><dd><code>word.length</code>, <code>word.subString(0,1)</code>. <code>array a[4]</code> has indices 0–3. Assign each cell before reading it.</dd>
- <dt>Functions</dt><dd><code>function double(n)</code>, <code>return n*2</code>, <code>endfunction</code>. Arguments copied by value; variables inside a routine are local. Procedures use <code>procedure</code> / <code>endprocedure</code>.</dd>
- <dt>Conventions and limits</dt><dd>Names are case-sensitive; keywords are not. Precedence: calls, ^, unary +/−, * / DIV MOD, +/−, comparisons, NOT, AND, OR. ^ groups right; AND/OR short-circuit. Finite binary64 numbers up to ±(2^53−1); DIV truncates toward zero and MOD keeps the dividend’s sign. No implicit type changes. Strings use UTF-16 positions and strict bounds. 16,384 source characters, 64 nesting levels, 50,000 work units, 750ms per case, 4,096 array cells, 8,192 characters per string, 200 output lines. Recursion, globals, byRef, 2D arrays, files, classes and switch are unsupported.</dd></dl>
- <p><a href="https://www.ocr.org.uk/images/170844-specification-accredited-a-level-gce-computer-science-h446.pdf#page=38" target="_blank" rel="noopener">OCR H446 specification 3.0, §5d (opens a new tab)</a></p>`;
- function renderTask(){
-  $('coding-workspace').innerHTML=`<header class="coding-task-head"><div><p class="eyebrow">${esc(active.kind)} · ${esc(active.difficulty)} · about ${active.minutes} min</p><h3>${esc(active.title)}</h3></div><span class="coding-badge">${active.reviewStatus==='draft'?'Draft · academic review pending':'Reviewed task'}</span></header>
-  <p class="coding-task-prompt">${esc(active.prompt)}</p><p class="coding-objectives">H446 ${esc(active.objectives.join(', '))} · task ${esc(active.version)}</p>
-  <div class="coding-grid"><div class="coding-main">
-  <label for="coding-plan">1. Predict or plan before you run</label><p id="coding-plan-prompt">${esc(active.planPrompt)}</p><textarea id="coding-plan" rows="2" maxlength="2000" aria-describedby="coding-plan-prompt">${esc(draft.plan)}</textarea>
-  <div class="coding-mode-row"><label for="coding-mode">Attempt mode</label><select id="coding-mode"><option value="learn">Learn / Run</option><option value="independent">Independent attempt</option></select></div><p id="coding-mode-note"></p>
-  <div class="coding-editor-heading"><label for="coding-source">2. Write your pseudocode</label><label class="coding-inline-label"><input id="coding-plain" type="checkbox"> Plain text</label></div>
-  <div class="coding-edit-tools"><button type="button" data-code-action="undo">Undo</button><button type="button" data-code-action="redo">Redo</button><button type="button" data-code-action="indent">Indent</button><button type="button" data-code-action="outdent">Outdent</button><button type="button" data-code-action="reset">Reset starter</button></div>
-  <div class="coding-editor"><pre id="coding-lines" aria-hidden="true"></pre><div class="coding-code-layers"><pre id="coding-highlight" aria-hidden="true"></pre><textarea id="coding-source" maxlength="16384" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" aria-describedby="coding-editor-help coding-location coding-diagnostics">${esc(draft.source)}</textarea></div></div>
-  <p id="coding-inline-error" class="coding-inline-diagnostic" hidden></p><p id="coding-editor-help">Tab moves to the next control. Use Indent/Outdent for two spaces. Ctrl/⌘+Enter runs; Ctrl/⌘+Z undoes.</p><p id="coding-location">Line numbers refer to your source.</p><p id="coding-save"></p>
-  <div class="coding-runbar"><button id="coding-run" class="primary-button" type="button" data-code-action="run">Run</button><button id="coding-stop" type="button" data-code-action="stop" disabled>Stop</button><button id="coding-check" type="button" data-code-action="check">Check public tests</button></div>
-  <p id="coding-status" role="status" aria-live="polite" aria-atomic="true">Ready. Plan your approach, then write and run.</p><ul id="coding-diagnostics" class="coding-diagnostics" aria-label="Code diagnostics"></ul>
-  <section class="coding-output-panel" aria-labelledby="coding-output-title"><h4 id="coding-output-title">Output</h4><pre id="coding-output" tabindex="0">Run your program to see output here.</pre><p id="coding-input-log"></p></section>
-  <details id="coding-trace" hidden><summary>Inspect the execution trace</summary><p id="coding-trace-note"></p><label for="coding-trace-select">Trace event</label><select id="coding-trace-select"></select><button type="button" data-code-action="trace-line">Go to source line</button><pre id="coding-trace-values"></pre></details>
-  <section id="coding-results" aria-label="Functional test results"></section>
-  </div><aside class="coding-side" aria-label="Inputs and guidance">
-  <section><h4>Input fixtures</h4><label for="coding-input">One input per line</label><textarea id="coding-input" rows="4" maxlength="8192" spellcheck="false">${esc(draft.inputs)}</textarea><p>An empty box means no inputs. Use <code>""</code> for an empty-string input. Input exhaustion points to the line that needs another value.</p><button type="button" data-code-action="example-input">Use example inputs</button><p>Expected example output</p><pre>${esc(active.example.output.join('\n')||'(No output)')}</pre></section>
-  <details id="coding-reference"><summary>Language help · ${VERSION}</summary>${reference}<button id="coding-example" type="button" data-code-action="example">Try a small runnable example</button></details>
-  <section><h4>Need a nudge?</h4><p>Reveal one hint at a time: concept, strategy, then a targeted clue.</p><ol id="coding-hints">${active.hints.slice(0,draft.assistance.hints).map(h=>`<li>${esc(h)}</li>`).join('')}</ol><button id="coding-hint" type="button" data-code-action="hint">Reveal next hint</button><button id="coding-solution" type="button" data-code-action="solution">Reveal one worked solution</button><pre id="coding-solution-source" hidden></pre></section>
-  <p id="coding-assistance"></p></aside></div>
-  <section class="coding-review"><h4>3. Review your method</h4><p>Functional checks and reasoning are separate. No OCR mark, numerical practice score or grade is awarded. Explain each criterion to yourself.</p>${active.rubric.map((r,i)=>`<label><input type="checkbox" data-coding-rubric="${i}" ${draft.rubric[i]?'checked':''}> ${esc(r)}</label>`).join('')}<button id="coding-finish" type="button" data-code-action="finish" disabled>Finish this practice</button><p id="coding-revisit"></p><button type="button" data-code-action="transfer">Open a fresh transfer task</button></section>
-  <details class="coding-data"><summary>Save, sync and privacy</summary><p>Source, inputs and predictions stay on this browser for up to 30 days after editing. Local outcome metadata can sync to your account for 30 days. Signing out clears this device’s coding drafts. Export first on a shared computer. These results never grant verified mastery.</p><p id="coding-sync">Checking pending local metadata…</p><button type="button" data-code-action="sync">Retry metadata sync</button><button type="button" data-code-action="export">Export coding data</button><button type="button" data-code-action="clear">Clear coding data</button></details>`;
-  $('coding-mode').value=draft.mode;highlight();controls();renderRevisit();sync();
- }
- async function show(options){
-  visible=true;context=options;
-  const nextOwner=options.owner||null;if(nextOwner!==owner){stop(null);loadId++;owner=nextOwner;active=null;draft=null;tasks=[];sessionId=crypto.randomUUID();}
-  if(!owner){panel.innerHTML='<h3>Pseudocode practice</h3><p>Sign in to access coding tasks in your selected Free deck or Pro catalogue. The full feedback loop is included in any accessible reviewed task.</p><button type="button" data-code-action="login">Sign in</button>';return;}
-  if(active&&$('coding-source')){
-   const myOwner=owner,myTask=active,myLoad=loadId;
-   try{await validateCurrent(myOwner,myTask,myLoad);}catch(error){if(owner===myOwner&&myLoad===loadId){message(`${error.message} Your draft is preserved; retry online or export it.`);if([401,402,404].includes(error.status))retiredSource=draft.source;controls();}}
-   return;
+  'use strict';
+  const panel = document.querySelector('#coding-practice-section');
+  const VERSION = 'rs-h446-2.0.0';
+  const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const $ = id => panel.querySelector('#' + id);
+  let storage;
+  try { storage = window.localStorage; } catch { storage = {length:0,getItem:()=>null,setItem:()=>{throw Error('Storage unavailable');},removeItem:()=>{},key:()=>null}; }
+  const drafts = window.CodingDrafts.createStore(storage);
+  let owner = null, context = {}, tasks = [], active = null, draft = null, visible = false;
+  let worker = null, watchdog = null, playback = null, session = null, job = 0, loadId = 0, loading = false;
+  let history = [], historyIndex = 0, revision = 0, latestResult = null, trace = [], selectedFile = null;
+  let sessionId = null, libraryOpen = false;
+  const scratch = {id:'scratch',title:'Scratchpad',category:'Your code',kind:'Explore',difficulty:'Open practice',version:'2026-10-07.2',interpreterVersion:VERSION,
+    prompt:'Try an idea, practise a language feature or build your own program. Use input() for interactive questions and Files for text data.',
+    starter:'// Your own program\nname=input("What is your name?")\nprint("Hello, "+name)\n',files:{},cases:[],example:{inputs:['Ada'],output:['Hello, Ada']},hints:[],rubric:[],transferId:'worksheet-1-1'};
+  const localOwner = () => owner || 'guest';
+  async function request(path, options = {}) {
+    const response = await fetch(path, {credentials:'same-origin',cache:'no-store',...options,headers:{'Content-Type':'application/json',...options.headers}});
+    const data = await response.json().catch(()=>({}));
+    if (!response.ok) throw new Error(data.error || 'Could not connect. Your draft remains saved on this device.');
+    return data;
   }
-  if(loading)return;loading=true;const sequence=++loadId,myOwner=owner;
-  panel.innerHTML='<h3>Pseudocode practice</h3><p role="status">Loading available tasks…</p>';
-  try{const response=await request('/api/coding/tasks');if(sequence!==loadId||owner!==myOwner||!visible)return;tasks=response.tasks;
-   panel.innerHTML=`<div class="coding-catalogue"><div><p class="eyebrow">Write · run · understand</p><h3>Pseudocode practice</h3><p>${esc(response.notice)}</p>${response.preview?'<p class="coding-preview-note">Local editorial preview. These eight drafts are not published or independently approved.</p>':''}</div><div><label for="coding-task-select">Choose a task</label><select id="coding-task-select" ${tasks.length?'':'disabled'}>${tasks.map(t=>`<option value="${esc(t.id)}">${esc(t.title)}</option>`).join('')||'<option>No reviewed tasks available</option>'}</select></div></div>${response.locked.length?`<details><summary>Tasks in other decks (${response.locked.length})</summary><p>Free includes the full feedback loop in your one selected deck. Most writing tasks belong to 2.2.1 Programming techniques. Select that deck before claiming your Free choice, or use Pro to access other reviewed decks.</p>${response.locked.map(t=>`<p>${esc(t.title)} · ${esc(t.topicId)}</p>`).join('')}<button type="button" data-code-action="decks">Choose a revision deck</button></details>`:''}<div class="coding-general-actions"><button type="button" data-code-action="reload">Reload task list</button><button type="button" data-code-action="export">Export saved coding data</button></div><div id="coding-workspace"></div>`;
-   if(tasks.length){const resume=drafts.resume(owner);await choose(tasks.some(t=>t.id===resume)?resume:tasks[0].id);}
-   event('coding_session_started');
-  }catch(error){if(sequence===loadId)panel.innerHTML=`<h3>Pseudocode practice</h3><p role="status">${esc(error.message)} Saved drafts are preserved.</p><button type="button" data-code-action="reload">Retry loading tasks</button><button type="button" data-code-action="export">Export saved coding data</button>`;}
-  finally{loading=false;}
- }
- panel.addEventListener('input',e=>{
-  if(!draft)return;
-  if(e.target.id==='coding-source'){draft.source=e.target.value;history=history.slice(0,historyIndex+1);history.push(draft.source);if(history.length>100)history.shift();historyIndex=history.length-1;invalidate();highlight();}
-  if(e.target.id==='coding-plan')draft.plan=e.target.value;
-  if(e.target.id==='coding-input'){draft.inputs=e.target.value;invalidate();}
-  if(e.target.hasAttribute('data-coding-rubric'))draft.rubric[Number(e.target.dataset.codingRubric)]=e.target.checked;
-  saved();
- });
- panel.addEventListener('change',e=>{
-  if(e.target.id==='coding-task-select')choose(e.target.value);
-  if(e.target.id==='coding-plain')panel.querySelector('.coding-editor').classList.toggle('coding-plain',e.target.checked);
-  if(e.target.id==='coding-mode'){stop(null);draft.mode=e.target.value;saved();controls();}
-  if(e.target.id==='coding-trace-select')showTrace();
- });
- panel.addEventListener('scroll',e=>{if(e.target.id==='coding-source')scrollSync();},true);
- panel.addEventListener('keydown',e=>{
-  if(e.target.id!=='coding-source')return;
-  if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();if(!$('coding-run').disabled)execute('run');}
-  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();undo(e.shiftKey?1:-1);}
-  if(e.key==='Enter'&&!e.ctrlKey&&!e.metaKey){e.preventDefault();const target=e.target,start=target.selectionStart,end=target.selectionEnd,line=target.value.slice(0,start).split('\n').at(-1),spaces=line.match(/^\s*/)[0];edit(target.value.slice(0,start)+'\n'+spaces+target.value.slice(end),start+1+spaces.length);}
- });
- panel.addEventListener('click',async e=>{
-  const line=e.target.closest('[data-coding-line]');if(line){sourcePosition(Number(line.dataset.codingLine),Number(line.dataset.codingColumn));return;}
-  const button=e.target.closest('[data-code-action]');if(!button||button.disabled)return;const action=button.dataset.codeAction;
-  if(action==='login')return context?.login?.();if(action==='decks')return context?.decks?.();
-  if(action==='reload'){stop(null);active=null;loading=false;return show(context);}
-  if(action==='export')return exportData();if(action==='sync')return sync();
-  if(!draft)return;
-  if(action==='run'||action==='check')return execute(action);if(action==='stop')return stop();
-  if(action==='undo'||action==='redo')return undo(action==='undo'?-1:1);if(action==='indent'||action==='outdent')return indent(action==='outdent');
-  if(action==='reset'||action==='example'){
-   if(!window.confirm(action==='reset'?'Replace your code with the current starter? Export first if you need a copy.':'Replace your code with a small language example? Undo restores your previous code.'))return;
-   stop(null);retiredSource=null;draft.taskVersion=active.version;draft.interpreterVersion=VERSION;
-   if(action==='example'){draft.assistance.hints=Math.max(1,draft.assistance.hints);draft.inputs='3';$('coding-input').value='3';}
-   edit(action==='reset'?active.starter:'n=int(input("Number"))\nfor i=1 to n\n  print(i)\nnext i');controls();return;
+  function message(text) { if ($('coding-status')) $('coding-status').textContent = text; }
+  function event(name) {
+    if (!owner || context.analytics !== true) return;
+    request('/api/pilot/events', {method:'POST',body:JSON.stringify({id:crypto.randomUUID(),name,sessionId,taskId:active?.id === 'scratch' ? null : active?.id || null,mode:draft?.mode || 'learn'})}).catch(()=>{});
   }
-  if(action==='example-input'){draft.inputs=active.example.inputs.join('\n');$('coding-input').value=draft.inputs;invalidate();saved();return;}
-  if(action==='hint'){draft.assistance.hints++;$('coding-hints').innerHTML=active.hints.slice(0,draft.assistance.hints).map(h=>`<li>${esc(h)}</li>`).join('');saved();controls();event('coding_hint');return;}
-  if(action==='solution'){
-   if(!window.confirm('Reveal a worked solution? Its use will be recorded as assistance, and your source will stay unchanged.'))return;
-   const myOwner=owner,myTask=active,myLoad=loadId;
-   try{const data=await request(`/api/coding/tasks/${encodeURIComponent(active.id)}/solution`);if(owner!==myOwner||loadId!==myLoad)return;if(data.version!==myTask.version){message('The solution version changed. Reload the task before revealing it.');return;}draft.assistance.solution=true;$('coding-solution-source').hidden=false;$('coding-solution-source').textContent=data.solution;saved();controls();event('coding_solution');}catch(error){message(error.message);}return;
+  function save() {
+    if (!active || !draft) return;
+    const ok = drafts.save(localOwner(), active.id, draft);
+    if ($('coding-save')) $('coding-save').textContent = ok ? 'Saved on this device' : 'Storage unavailable — download your project before leaving.';
   }
-  if(action==='trace-line'){const item=trace[Number($('coding-trace-select').value)||0];if(item)sourcePosition(item.line,item.column);return;}
-  if(action==='transfer'){const id=draft.revisit?.taskId||active.transferId;if(!tasks.some(t=>t.id===id)){message('The transfer task is in another deck or awaiting review. Choose an available fresh task from the list.');return;}return choose(id);}
-  if(action==='finish'){
-   if(!latestResult||resultRevision!==revision)return;if(draft.completed){message('This practice is already complete. Come back for a fresh transfer task.');return;}
-   if(active.rubric.some((_,i)=>!draft.rubric[i])){message('Review each method criterion before finishing. These are self-review checks, not marks.');return;}
-   draft.completed=true;saved();event('coding_session_completed');message('Practice reviewed. Come back for the suggested fresh task after three days; repeated runs do not count as mastery.');return;
+  function disposeWorker() { if (worker) worker.terminate(); worker = null; clearTimeout(watchdog); watchdog = null; }
+  function stop(text = 'Stopped. Your code and files are preserved.') {
+    job++; disposeWorker(); clearTimeout(playback); playback = null; session = null;
+    if ($('coding-terminal-form')) $('coding-terminal-form').hidden = true;
+    controls(); if (text) message(text);
   }
-  if(action==='clear'){
-   if(!window.confirm('Delete this account’s coding metadata and this browser’s coding drafts? Export first if you want to keep them.'))return;
-   try{await request('/api/coding/attempts',{method:'DELETE'});drafts.clear(owner);active=null;draft=null;stop(null);await show(context);}catch(error){message(`Deletion did not complete: ${error.message} Your data is preserved.`);}
+  function controls() {
+    if (!draft || !$('coding-run')) return;
+    const busy = Boolean(worker || session);
+    $('coding-run').disabled = busy; $('coding-stop').disabled = !busy;
+    $('coding-check').disabled = busy || !active.cases.length;
+    $('coding-source').readOnly = busy;
+    if ($('coding-input')) $('coding-input').readOnly = busy;
+    if ($('coding-file-text')) $('coding-file-text').readOnly = busy;
+    for (const button of panel.querySelectorAll('[data-code-action="new-file"],[data-code-action="delete-file"],[data-code-action="reset-files"],[data-code-action="solution-use"],[data-code-action="reset"],[data-code-action="import"],[data-code-action="undo"],[data-code-action="redo"],[data-code-action="indent"],[data-code-action="outdent"]')) button.disabled = busy;
+    if ($('coding-finish')) $('coding-finish').disabled = !latestResult?.allPassed;
+    if ($('coding-assistance')) $('coding-assistance').textContent = `${draft.assistance.runs} runs · ${draft.assistance.checks} checks · ${draft.assistance.hints} hints${draft.assistance.solution?' · solution viewed':''}`;
   }
- });
- window.addEventListener('online',()=>{if(visible)sync();});
- window.addEventListener('storage',e=>{if(e.key==='recallstride-coding-session-change'){stop(null);owner=null;active=null;draft=null;tasks=[];loadId++;panel.innerHTML='<p role="status">The account session changed in another tab. Reload before resuming coding practice.</p>';}});
- window.CodingPractice={show,hide(){visible=false;stop(null);},sessionChanged(previousOwner,clear=false){stop(null);loadId++;loading=false;if(clear)drafts.clear(previousOwner);owner=null;active=null;draft=null;tasks=[];panel.replaceChildren();try{storage.setItem('recallstride-coding-session-change',crypto.randomUUID());}catch{}},exportLocal(id){return drafts.export(id);},clearLocal(id){drafts.clear(id);}};
+  function highlight() {
+    const source = $('coding-source'); if (!source) return;
+    const pattern = /(\/\/[^\n]*|"[^"\n]*"|'[^'\n]*'|\b(?:if|then|elseif|else|endif|switch|case|default|endswitch|while|endwhile|do|until|for|to|step|next|break|continue|array|function|endfunction|procedure|endprocedure|return|true|false|AND|OR|NOT|DIV|MOD)\b|\b\d+(?:\.\d+)?\b)/gi;
+    let html = '', offset = 0;
+    for (const match of source.value.matchAll(pattern)) {
+      html += escape(source.value.slice(offset, match.index));
+      const text = match[0], kind = text.startsWith('//') ? 'comment' : /^["']/.test(text) ? 'string' : /^\d/.test(text) ? 'number' : 'keyword';
+      html += `<span class="coding-${kind}">${escape(text)}</span>`; offset = match.index + text.length;
+    }
+    $('coding-highlight').innerHTML = html + escape(source.value.slice(offset)) + '\n';
+    $('coding-lines').textContent = Array.from({length:source.value.split('\n').length},(_,i)=>i+1).join('\n');
+    scrollSync();
+  }
+  function scrollSync() {
+    const source = $('coding-source'); if (!source) return;
+    $('coding-highlight').scrollTop = source.scrollTop; $('coding-highlight').scrollLeft = source.scrollLeft;
+    $('coding-lines').scrollTop = source.scrollTop;
+  }
+  function invalidate() {
+    revision++; latestResult = null; draft.completed = false; trace = [];
+    $('coding-results')?.replaceChildren(); $('coding-diagnostics')?.replaceChildren();
+    $('coding-source')?.removeAttribute('aria-invalid');
+    controls();
+  }
+  function edit(value, start, end, remember = true) {
+    if (!draft || value.length > 16384) return;
+    const source = $('coding-source'); source.value = value; draft.source = value;
+    source.setSelectionRange(start ?? value.length, end ?? start ?? value.length);
+    if (remember) { history = history.slice(0,historyIndex+1); history.push(value); if (history.length > 100) history.shift(); historyIndex = history.length - 1; }
+    invalidate(); highlight(); save();
+  }
+  function undo(direction) {
+    const next = historyIndex + direction; if (next < 0 || next >= history.length) return;
+    historyIndex = next; edit(history[next], undefined, undefined, false); $('coding-source').focus();
+  }
+  function indent(out = false) {
+    const e = $('coding-source'), start = e.value.lastIndexOf('\n',e.selectionStart-1)+1, end = e.value.indexOf('\n',Math.max(e.selectionStart,e.selectionEnd-1));
+    const finish = end < 0 ? e.value.length : end;
+    const replacement = e.value.slice(start,finish).split('\n').map(line=>out?line.replace(/^( {1,2}|\t)/,''):'  '+line).join('\n');
+    edit(e.value.slice(0,start)+replacement+e.value.slice(finish), start, start+replacement.length); e.focus();
+  }
+  function sourcePosition(line, column = 1) {
+    const e = $('coding-source'), lines = e.value.split('\n'); line = Math.max(1,Math.min(lines.length,line));
+    const at = lines.slice(0,line-1).reduce((n,v)=>n+v.length+1,0)+Math.max(0,column-1);
+    e.focus(); e.setSelectionRange(at,at+1); e.scrollTop = Math.max(0,(line-3)*24); scrollSync();
+  }
+  function diagnostic(d) {
+    $('coding-diagnostics').innerHTML = `<button type="button" data-coding-line="${Number(d.line)||1}" data-coding-column="${Number(d.column)||1}">Line ${Number(d.line)||1}: ${escape(d.message)}</button><p>${escape(d.hint)}</p>`;
+    $('coding-source').setAttribute('aria-invalid','true'); message(d.message);
+  }
+  function terminal(text, input = false) {
+    const line = document.createElement('div'); line.textContent = text; if (input) line.className = 'coding-terminal-echo';
+    $('coding-output').append(line); $('coding-output').scrollTop = $('coding-output').scrollHeight;
+  }
+  function bottomTab(name) {
+    for (const button of panel.querySelectorAll('[data-coding-bottom]')) { const current = button.dataset.codingBottom === name; button.setAttribute('aria-pressed',String(current)); }
+    for (const view of panel.querySelectorAll('[data-coding-bottom-view]')) view.hidden = view.dataset.codingBottomView !== name;
+  }
+  function guideTab(name) {
+    for (const button of panel.querySelectorAll('[data-coding-guide]')) button.setAttribute('aria-pressed',String(button.dataset.codingGuide===name));
+    for (const view of panel.querySelectorAll('[data-coding-guide-view]')) view.hidden = view.dataset.codingGuideView !== name;
+  }
+  async function execute(action) {
+    if (!active || worker || session) return;
+    stop(null); $('coding-diagnostics').replaceChildren(); $('coding-source').removeAttribute('aria-invalid');
+    $('coding-output').replaceChildren(); $('coding-results').replaceChildren(); bottomTab(action==='check'?'checks':'console');
+    latestResult = null;controls();
+    const source = $('coding-source').value;
+    if (action==='run') {
+      const inputs = draft.inputs===''?[]:draft.inputs.split('\n').map(line=>line==='""'?'':line);
+      if(inputs.length>100||inputs.some(v=>v.length>1024)||draft.inputs.length>8192){message('Use at most 100 inputs, 1,024 characters each and 8,192 total.');return;}
+      draft.assistance.runs++; session = {source,inputs,files:{...draft.files},seed:crypto.getRandomValues(new Uint32Array(1))[0]||1,eventsShown:0,eventTime:0,owner,taskId:active.id,load:loadId,revision};
+      save(); controls(); dispatch('run');
+    } else {
+      if(!active.cases.length)return;
+      draft.assistance.checks++; save(); dispatch('check');
+    }
+  }
+  function dispatch(action) {
+    const id = String(++job), myOwner = owner, myTask = active, myLoad = loadId, runRevision = revision;
+    try { worker = new Worker('/pseudocode-worker.js?v='+VERSION); }
+    catch { session=null;controls();message('The browser could not start the interpreter. Download your project and try a browser with Web Workers.');return; }
+    controls(); message(action==='run'?'Running…':'Checking the task examples…');
+    watchdog = setTimeout(()=>{if(String(job)===id)stop('Execution stopped at the time limit. Check whether your loop can finish.');},action==='run'?3000:22000);
+    worker.onerror = ()=>{if(String(job)===id)stop('Interpreter stopped safely. Your code is preserved.');};
+    worker.onmessage = async e => {
+      if(String(job)!==id||e.data.id!==id||owner!==myOwner||loadId!==myLoad||active.id!==myTask.id)return;
+      const result = e.data.result; disposeWorker();
+      if(action==='run') {
+        trace=result.trace||[];
+        renderTrace();
+        playEvents(result,id,()=>{
+          if(result.awaitingInput){
+            draft.files={...result.files};renderFiles();save();
+            $('coding-terminal-form').hidden=false;
+            $('coding-terminal-prompt').textContent=result.prompts.at(-1)||'Enter a value';
+            $('coding-terminal-input').value=''; $('coding-terminal-input').focus();
+            message('Waiting for input — enter a value below, or Stop.'); controls();
+          } else {
+            const successfulFiles = result.files || {};
+            // Even a runtime error can leave useful files to inspect.
+            draft.files={...successfulFiles}; session=null; renderFiles(); save(); controls();
+            if(result.diagnostic)diagnostic(result.diagnostic);else message(`Run finished · ${result.output.length} output lines`);
+            event('coding_run');
+          }
+        });
+      } else {
+        latestResult=result; renderChecks(result); controls();
+        message(result.allPassed?'Passes all task checks. Review your method and try your own inputs.':'Some checks need attention. Open a result to compare outputs.');
+        draft.lastCheckPassed=result.allPassed; draft.lastCheckAt=new Date().toISOString(); save();
+        if(owner&&result.cases.length){
+          const attempt={id:crypto.randomUUID(),taskId:myTask.id,taskVersion:myTask.version,interpreterVersion:VERSION,mode:draft.mode,firstCheck:draft.assistance.checks===1,assistance:{...draft.assistance,checks:draft.assistance.checks-1},outcomes:result.cases.map(c=>({id:c.id,outcome:c.passed?'passed':c.diagnostic?'diagnostic':'failed'}))};
+          if(drafts.queue(owner,attempt)) await sync(owner);else $('coding-sync').textContent='The local retry queue is full. Download your coding data to preserve this result.';
+        }
+        if(owner===myOwner&&loadId===myLoad)event('coding_check');
+      }
+    };
+    worker.postMessage({id,action,source:action==='run'?session.source:draft.source,inputs:session?.inputs||[],files:action==='run'?session.files:active.files,seed:session?.seed,cases:myTask.cases,comparison:myTask.comparison});
+  }
+  function playEvents(result,id,done) {
+    const state=session; if(!state)return;
+    const events=result.events||result.output.map(text=>({kind:'output',text,atMs:0}));
+    const next=()=>{
+      if(String(job)!==id||session!==state)return;
+      if(state.eventsShown>=events.length){
+        const remaining=Math.max(0,(result.delay||0)-state.eventTime);
+        state.eventTime=result.delay||state.eventTime;
+        if(remaining){playback=setTimeout(()=>{if(String(job)===id&&session===state)done();},remaining);}else done();return;
+      }
+      const item=events[state.eventsShown],delay=Math.max(0,item.atMs-state.eventTime);
+      const emit=()=>{if(String(job)!==id||session!==state)return;state.eventsShown++;state.eventTime=item.atMs;
+        terminal(item.kind==='input'?`${item.prompt} > ${item.value}`:item.text,item.kind==='input');next();};
+      if(delay)playback=setTimeout(emit,delay);else emit();
+    };next();
+  }
+  function renderChecks(result) {
+    $('coding-results').innerHTML=`<p class="coding-check-summary">${result.cases.filter(c=>c.passed).length} of ${result.cases.length} checks passed</p><p>Task checks use the supplied starter data. Your edited files and draft remain intact.</p>`+result.cases.map(c=>{
+      const fixture=active.cases.find(x=>x.id===c.id);
+      return `<details><summary><span class="coding-result-${c.passed?'pass':'fail'}">${c.passed?'Pass':'Check'}</span> ${escape(c.label)}</summary><p>Inputs: ${escape(JSON.stringify(fixture.inputs))}</p>${fixture.validator?'<p>This case validates random output against the actual generated data.</p>':''}<div class="coding-comparison"><div><strong>Expected</strong><pre>${escape(c.expected.join('\n')||'(No output)')}</pre></div><div><strong>Your output</strong><pre>${escape(c.output.join('\n')||'(No output)')}</pre></div></div>${c.expectedFiles?`<p>Created-file contents are also checked.</p>`:''}${fixture.expectedTimings?'<p>One-second gaps between verses are also checked.</p>':''}${c.diagnostic?`<button type="button" data-coding-line="${c.diagnostic.line}" data-coding-column="${c.diagnostic.column}">Line ${c.diagnostic.line}: ${escape(c.diagnostic.message)}</button>`:''}</details>`;
+    }).join('');
+  }
+  function renderTrace() {
+    $('coding-trace-select').innerHTML=trace.map((t,i)=>`<option value="${i}">${i+1} · line ${t.line}</option>`).join('');
+    $('coding-trace-note').textContent=trace.length?'Select a recorded step to inspect variables. Trace keeps the first 120 events.':'Run a program to inspect its variables here.';
+    showTrace();
+  }
+  function showTrace() {
+    const step=trace[Number($('coding-trace-select').value)||0];
+    $('coding-trace-values').textContent=step?JSON.stringify({line:step.line,scope:step.stack.join(' → ')||'main',variables:step.variables},null,2):'';
+  }
+  function validFiles(files) {
+    if(!files||typeof files!=='object'||Array.isArray(files)||Object.keys(files).length>20)return false;
+    let size=0;
+    for(const [name,text] of Object.entries(files)){if(!/^[A-Za-z0-9_-][A-Za-z0-9_. -]{0,63}$/.test(name)||name.includes('..')||typeof text!=='string')return false;size+=text.length;}
+    return size<=65536;
+  }
+  function renderFiles() {
+    if(!$('coding-files'))return;
+    const names=Object.keys(draft.files); if($('coding-file-count'))$('coding-file-count').textContent=names.length; if(!names.includes(selectedFile))selectedFile=names[0]||null;
+    $('coding-files').innerHTML=`<p>Text files belong to this task and stay on your device. Programs can read, create and write them.</p><div class="coding-file-list">${names.map(name=>`<button type="button" data-coding-file="${escape(name)}" aria-pressed="${name===selectedFile}">${escape(name)}</button>`).join('')}</div><form id="coding-file-create"><label for="coding-file-name">New filename</label><div class="coding-field-row"><input id="coding-file-name" maxlength="64" placeholder="data.txt" required><button type="submit" data-code-action="new-file">Add</button></div></form>${selectedFile?`<label for="coding-file-text">${escape(selectedFile)}</label><textarea id="coding-file-text" rows="12" maxlength="65536" spellcheck="false">${escape(draft.files[selectedFile])}</textarea><button type="button" data-code-action="delete-file">Delete file</button>`:'<p>No files yet. Add one above or create one in your program.</p>'}<button type="button" data-code-action="reset-files">Restore task files</button>`;
+    controls();
+  }
+  function renderLibrary() {
+    const category=$('coding-category').value,term=$('coding-search').value.toLowerCase().trim();
+    const shown=tasks.filter(t=>(!category||t.category===category)&&`${t.title} ${t.worksheet||''} ${t.prompt}`.toLowerCase().includes(term));
+    $('coding-task-count').textContent=`${shown.length} tasks`;
+    $('coding-task-list').innerHTML=shown.map(t=>{
+      const saved=drafts.draft(localOwner(),t.id);const status=saved?.completed?'Reviewed':saved?.lastCheckPassed?'Checks passed':saved?'In progress':'Start task';
+      return `<button type="button" class="coding-task-card" data-coding-task="${escape(t.id)}"><span>${escape(t.worksheet||t.category)} · ${escape(t.difficulty)}</span><strong>${escape(t.title)}</strong><small>${escape(status)}</small></button>`;
+    }).join('')||'<p>No matching tasks. Try another word or category.</p>';
+  }
+  const languageHelp=`<h4>Language reference</h4><p>One statement per line. Keywords ignore case; variable names are case-sensitive. <code>//</code> begins a comment.</p>
+    <details open><summary>Input, output and numbers</summary><pre>name=input("Name")
+print("Hello, "+name)
+n=int(input("Whole number"))
+x=float(input("Decimal"))
+print(str(n))</pre><p>Input returns text. Run asks for missing values in the terminal. Use str() to join numbers into strings. Math: + − * / ^ DIV MOD, floor, ceil, round, sqrt, abs, min, max. <code>format(x,2)</code> returns two decimal places. <code>random(1,6)</code> includes both endpoints.</p></details>
+    <details><summary>Selection and loops</summary><pre>if n&gt;0 then
+ print("positive")
+elseif n==0 then
+ print("zero")
+else
+ print("negative")
+endif
+switch n:
+ case 1: print("one")
+ default: print("other")
+endswitch
+for i=10 to 0 step -1
+ print(i)
+next i
+while n&gt;0
+ n=n-1
+endwhile
+do
+ n=int(input("Positive number"))
+until n&gt;0</pre><p>= assigns; == compares. Boolean operators: AND, OR, NOT. For endpoints are inclusive; step cannot be zero. break exits a loop; continue starts its next iteration.</p></details>
+    <details><summary>Strings and arrays</summary><pre>word="Computer"
+print(word[0])
+print(word.length)
+print(word.subString(0,3))
+print(word.upper)
+print(word.lower)
+print(word.left(2))
+print(word.right(2))
+parts="a,b,c".split(",")
+print(ASC("A"))
+print(CHR(65))
+names=["Ada","Grace"]
+array grid[3,4]
+grid[0,0]=7
+array cube[2,3,3]
+cube[1,2,0]="History"</pre><p>Indexes start at zero. subString takes start and character count. Arrays support 1, 2 or 3 dimensions, nested literals, comma indexes or successive brackets. Assign declared cells before reading them.</p></details>
+    <details><summary>Virtual files and timed output</summary><pre>if existsFile("data") then
+ delFile("data")
+endif
+newFile("data")
+f=open("data")
+f.writeLine("one")
+f.close()
+f=openRead("data")
+while NOT f.endOfFile()
+ print(f.readLine())
+ wait(1)
+endwhile
+f.close()</pre><p>open reads and appends; openRead reads; openWrite creates or clears for writing. close then reopen to read from the start. Files never access your computer or network. wait/sleep(seconds) delays terminal playback; Stop cancels it.</p></details>
+    <details><summary>Functions and procedures</summary><pre>function double(n)
+ return n*2
+endfunction
+print(double(3))
+procedure greet(name:byVal)
+ print("Hello "+name)
+endprocedure
+greet("Ada")</pre><p>Arguments are copied by value; routine variables are local. Recursion, classes, globals and byRef are outside this worksheet language.</p></details>
+    <p>Programs run in a worker: 16,384 source characters, 1,000,000 work units per run, 4,096 array cells, 1,000 output lines, 20 virtual files/65,536 characters and 30 seconds of timed output. Use Stop at any time.</p>`;
+  function renderTask() {
+    $('coding-task-select').value=active.id;
+    $('coding-workspace').innerHTML=`<header class="coding-task-head"><div><p class="eyebrow">${escape(active.worksheet||active.category)} · ${escape(active.kind)} · ${escape(active.difficulty)}</p><h3>${escape(active.title)}</h3></div><button type="button" data-code-action="next">Next task →</button></header>
+      <div class="coding-workbench"><aside class="coding-guide" aria-label="Task instructions and files"><div class="coding-tabs" aria-label="Workspace guidance"><button type="button" data-coding-guide="task" aria-pressed="true">Task</button><button type="button" data-coding-guide="files" aria-pressed="false">Files <span id="coding-file-count">${Object.keys(draft.files).length}</span></button><button type="button" data-coding-guide="language" aria-pressed="false">Language</button></div>
+      <div data-coding-guide-view="task"><p class="coding-task-prompt">${escape(active.prompt)}</p>${active.fixtureNote?`<p class="coding-fixture-note">${escape(active.fixtureNote)}</p>`:''}<details open><summary>Example</summary><p>Input</p><pre>${escape(active.example.inputs.join('\n')||'(No input)')}</pre><p>Expected output</p><pre>${escape(active.example.output.join('\n')||'(No output)')}</pre><button type="button" data-code-action="example-input">Run with these inputs</button></details>
+      <details><summary>Plan your approach</summary><label for="coding-plan">Notes or prediction</label><textarea id="coding-plan" rows="3" maxlength="2000">${escape(draft.plan)}</textarea><label for="coding-mode">Attempt label</label><select id="coding-mode"><option value="learn">Practice</option><option value="independent">First attempt</option></select><p>Your runs and help use are recorded with checks.</p></details>
+      ${active.hints.length?`<details><summary>Hints and worked solution</summary><ol id="coding-hints">${active.hints.slice(0,draft.assistance.hints).map(h=>`<li>${escape(h)}</li>`).join('')}</ol><button id="coding-hint" type="button" data-code-action="hint">Next hint</button><button id="coding-solution" type="button" data-code-action="solution">Show solution</button><pre id="coding-solution-source" hidden></pre><button id="coding-solution-use" type="button" data-code-action="solution-use" hidden>Use solution in editor</button></details>`:''}
+      ${active.rubric.length?`<details><summary>Review your work</summary>${active.rubric.map((r,i)=>`<label class="coding-checkbox"><input type="checkbox" data-coding-rubric="${i}" ${draft.rubric[i]?'checked':''}>${escape(r)}</label>`).join('')}<button id="coding-finish" type="button" data-code-action="finish" disabled>Mark reviewed</button><p>Task checks are practice feedback; they do not award exam marks.</p></details>`:''}</div>
+      <div id="coding-files" data-coding-guide-view="files" hidden></div><div data-coding-guide-view="language" hidden>${languageHelp}</div></aside>
+      <main class="coding-main"><div class="coding-editor-heading"><label for="coding-source">code.erl</label><span id="coding-save"></span><label class="coding-checkbox"><input id="coding-plain" type="checkbox">Plain text</label></div><div class="coding-edit-tools"><button type="button" data-code-action="undo">Undo</button><button type="button" data-code-action="redo">Redo</button><button type="button" data-code-action="indent">Indent</button><button type="button" data-code-action="outdent">Outdent</button><button type="button" data-code-action="reset">Reset code</button><button type="button" data-code-action="download">Download</button><button type="button" data-code-action="import">Open project</button><input id="coding-project-import" type="file" accept=".json,.erl,.txt" hidden></div>
+      <div class="coding-editor"><pre id="coding-lines" aria-hidden="true"></pre><div class="coding-code-layers"><pre id="coding-highlight" aria-hidden="true"></pre><textarea id="coding-source" maxlength="16384" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" aria-describedby="coding-editor-help">${escape(draft.source)}</textarea></div></div>
+      <div class="coding-runbar"><button id="coding-run" class="primary-button" type="button" data-code-action="run">▶ Run</button><button id="coding-stop" type="button" data-code-action="stop" disabled>■ Stop</button><button id="coding-check" type="button" data-code-action="check">Check task</button><span id="coding-assistance"></span></div><p id="coding-editor-help">Ctrl/⌘ + Enter to run. Tab moves to the next control; use Indent for spacing.</p>
+      <p id="coding-status" role="status" aria-live="polite" aria-atomic="true">Ready — write your program and press Run.</p><div id="coding-diagnostics" class="coding-diagnostics"></div>
+      <section class="coding-console"><div class="coding-tabs"><button type="button" data-coding-bottom="console" aria-pressed="true">Console</button><button type="button" data-coding-bottom="checks" aria-pressed="false">Task checks</button><button type="button" data-coding-bottom="trace" aria-pressed="false">Variables</button></div>
+      <div data-coding-bottom-view="console"><div id="coding-output" role="log" aria-label="Program output" tabindex="0"></div><form id="coding-terminal-form" hidden><label id="coding-terminal-prompt" for="coding-terminal-input">Input</label><div class="coding-field-row"><input id="coding-terminal-input" maxlength="1024" autocomplete="off"><button type="submit">Enter ↵</button></div></form><details class="coding-fixtures"><summary>Preload input values (optional)</summary><label for="coding-input">One value per line; use "" for an empty value</label><textarea id="coding-input" rows="3" maxlength="8192" spellcheck="false">${escape(draft.inputs)}</textarea><p>Run will ask interactively when these values run out.</p></details></div>
+      <div id="coding-results" data-coding-bottom-view="checks" hidden><p>Check task runs the stated cases against the task’s original files.</p></div><div data-coding-bottom-view="trace" hidden><p id="coding-trace-note"></p><label for="coding-trace-select">Recorded step</label><select id="coding-trace-select"></select><button type="button" data-code-action="trace-line">Go to source line</button><pre id="coding-trace-values"></pre></div></section>
+      </main></div><footer class="coding-data"><details><summary>Saving and privacy</summary><p>Code, files and planning notes are saved on this device for 30 days after editing. Signed-in accounts can also keep check outcome metadata. Your source and file contents are never uploaded. Download a project to move it between devices. Export before signing out on a shared computer.</p><p id="coding-sync">${owner?'Checking pending outcomes…':'Guest drafts stay on this device.'}</p><button type="button" data-code-action="export">Export coding data</button><button type="button" data-code-action="sync">Retry outcome sync</button><button type="button" data-code-action="clear">Clear saved coding data</button></details></footer>`;
+    $('coding-mode').value=draft.mode;renderFiles();highlight();renderTrace();controls();save();sync();
+  }
+  function choose(id) {
+    stop(null); loadId++; active=id==='scratch'?scratch:tasks.find(t=>t.id===id); if(!active)return;
+    revision=0;latestResult=null;trace=[];selectedFile=null;
+    const stored=drafts.draft(localOwner(),id),restored=window.CodingDrafts.restore(stored,active);
+    draft=restored.draft||{source:active.starter,inputs:'',plan:'',mode:'learn',assistance:{runs:0,hints:0,checks:0,solution:false},rubric:[],files:{...active.files},completed:false,taskVersion:active.version,interpreterVersion:VERSION};
+    if(!validFiles(draft.files))draft.files={...active.files};
+    if(restored.stale){draft.source=restored.recovery;draft.recoveredFromVersion=stored.taskVersion;}
+    draft.taskVersion=active.version;draft.interpreterVersion=VERSION;
+    history=[draft.source];historyIndex=0;drafts.remember(localOwner(),id);renderTask();
+    if(restored.stale)message('Your earlier code has been restored in the updated workspace. Review the task and run it again.');
+    libraryOpen=false;$('coding-library').hidden=true;event('coding_task_opened');
+  }
+  async function sync(myOwner=owner) {
+    if(!myOwner)return;
+    for(const attempt of drafts.pending(myOwner)){
+      if(owner!==myOwner)return;
+      try{await request(`/api/coding/tasks/${encodeURIComponent(attempt.taskId)}/attempts`,{method:'POST',body:JSON.stringify(attempt)});if(owner!==myOwner)return;drafts.acknowledge(myOwner,attempt.id);}
+      catch(error){if(owner===myOwner&&$('coding-sync'))$('coding-sync').textContent='Check outcome saved locally; sync will retry. '+error.message;return;}
+    }
+    if(owner===myOwner&&$('coding-sync'))$('coding-sync').textContent='Check outcome metadata synced. Code and files stay on this device.';
+  }
+  function download(data,filename,type='application/json') {
+    const blob=new Blob([typeof data==='string'?data:JSON.stringify(data,null,2)],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download=filename;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }
+  async function exportData() {
+    const exportingOwner=owner,local=drafts.export(localOwner());let attempts=[];if(exportingOwner){try{attempts=(await request('/api/coding/attempts')).attempts;}catch{message('Export includes local data; account outcomes were unavailable.');}}
+    if(owner!==exportingOwner)return;
+    download({exportedAt:new Date().toISOString(),local,attempts},'recallstride-coding-data.json');
+  }
+  async function show(options) {
+    visible=true;context=options||{};const nextOwner=context.owner||null;
+    if(nextOwner!==owner){stop(null);loadId++;owner=nextOwner;active=null;draft=null;tasks=[];}
+    if(active&&$('coding-source'))return;
+    if(loading)return;loading=true;sessionId=crypto.randomUUID();const id=++loadId;
+    panel.innerHTML='<p role="status">Loading the coding workspace…</p>';
+    try{
+      const response=await request('/api/coding/tasks');if(id!==loadId||!visible)return;
+      tasks=response.tasks;
+      panel.innerHTML=`<header class="coding-studio-head"><div><p class="eyebrow">Write · run · explore</p><h2>Pseudocode practice</h2><p>Real tasks and an interpreter, right here in RecallStride.</p></div><div class="coding-studio-actions"><button type="button" data-code-action="browse">Browse ${tasks.length} tasks</button><button type="button" data-code-action="scratch">Scratchpad</button><label class="coding-select-label" for="coding-task-select">Current task<select id="coding-task-select">${tasks.map(t=>`<option value="${escape(t.id)}">${escape(t.worksheet||'Extra')} · ${escape(t.title)}</option>`).join('')}<option value="scratch">Scratchpad</option></select></label></div></header>
+      <section id="coding-library" class="coding-library" aria-label="Coding task library" hidden><div class="coding-library-filters"><label for="coding-category">Topic<select id="coding-category"><option value="">All topics</option>${[...new Set(tasks.map(t=>t.category))].map(c=>`<option>${escape(c)}</option>`).join('')}</select></label><label for="coding-search">Find a task<input id="coding-search" type="search" placeholder="Search titles or task numbers"></label><span id="coding-task-count"></span></div><div id="coding-task-list"></div></section><div id="coding-workspace"></div>`;
+      renderLibrary();const resume=drafts.resume(localOwner());choose(resume==='scratch'||tasks.some(t=>t.id===resume)?resume:tasks[0].id);event('coding_session_started');
+    }catch(error){if(id===loadId)panel.innerHTML=`<p role="status">${escape(error.message)}</p><button type="button" data-code-action="reload">Retry loading</button><button type="button" data-code-action="export">Export saved drafts</button>`;}
+    finally{loading=false;}
+  }
+  panel.addEventListener('input',e=>{
+    if(e.target.id==='coding-search'){renderLibrary();return;}if(!draft)return;
+    if(e.target.id==='coding-source'){
+      draft.source=e.target.value;history=history.slice(0,historyIndex+1);history.push(draft.source);if(history.length>100)history.shift();historyIndex=history.length-1;invalidate();highlight();
+    }
+    if(e.target.id==='coding-plan')draft.plan=e.target.value;
+    if(e.target.id==='coding-input')draft.inputs=e.target.value;
+    if(e.target.id==='coding-file-text'){
+      const files={...draft.files,[selectedFile]:e.target.value};
+      if(validFiles(files)){draft.files=files;invalidate();}else{e.target.value=draft.files[selectedFile];message('Virtual file storage is limited to 65,536 characters.');}
+    }
+    if(e.target.hasAttribute('data-coding-rubric'))draft.rubric[Number(e.target.dataset.codingRubric)]=e.target.checked;
+    save();
+  });
+  panel.addEventListener('change',async e=>{
+    if(e.target.id==='coding-task-select')choose(e.target.value);
+    if(e.target.id==='coding-category')renderLibrary();
+    if(e.target.id==='coding-plain')panel.querySelector('.coding-editor').classList.toggle('coding-plain',e.target.checked);
+    if(e.target.id==='coding-mode'){draft.mode=e.target.value;save();}
+    if(e.target.id==='coding-trace-select')showTrace();
+    if(e.target.id==='coding-project-import'){
+      const file=e.target.files[0];if(!file)return;const importingOwner=owner,importingLoad=loadId;
+      try{
+        if(file.size>120000)throw Error('Project is too large. Use up to 16,384 source characters and 65,536 file characters.');
+        const text=await file.text();if(owner!==importingOwner||loadId!==importingLoad)return;let source=text,files=null;
+        if(file.name.toLowerCase().endsWith('.json')){const project=JSON.parse(text);source=project.source;files=project.files;if(project.format!=='recallstride-code-project'||project.version!==1)throw Error('Choose a RecallStride project JSON, or a plain .erl/.txt source file.');}
+        if(typeof source!=='string'||source.length>16384||(files&&!validFiles(files)))throw Error('Project source or files exceed the workspace limits.');
+        stop(null);edit(source);if(files){draft.files={...files};renderFiles();save();}message('Project opened. Task checks still use the current task’s original data.');
+      }catch(error){message(error.message);}e.target.value='';
+    }
+  });
+  panel.addEventListener('submit',e=>{
+    if(e.target.id==='coding-terminal-form'){
+      e.preventDefault();if(!session||worker)return;
+      const value=$('coding-terminal-input').value;
+      if(session.inputs.length>=100||session.inputs.reduce((n,v)=>n+v.length,0)+value.length>8192){message('Input limit reached. Stop and use a smaller dataset.');return;}
+      session.inputs.push(value);$('coding-terminal-form').hidden=true;dispatch('run');
+    }
+    if(e.target.id==='coding-file-create'){
+      e.preventDefault();if(worker||session)return;const name=$('coding-file-name').value.trim();
+      if(Object.hasOwn(draft.files,name)){message('That file already exists. Select it to edit.');return;}
+      const files={...draft.files,[name]:''};if(!validFiles(files)){message('Use a simple filename without folders; at most 20 files.');return;}
+      draft.files=files;selectedFile=name;invalidate();renderFiles();save();$('coding-file-count').textContent=Object.keys(files).length;
+    }
+  });
+  panel.addEventListener('scroll',e=>{if(e.target.id==='coding-source')scrollSync();},true);
+  panel.addEventListener('keydown',e=>{
+    if(e.target.id!=='coding-source'||e.target.readOnly)return;
+    if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){e.preventDefault();execute('run');}
+    else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();undo(e.shiftKey?1:-1);}
+    else if(e.key==='Enter'){
+      e.preventDefault();const at=e.target.selectionStart,end=e.target.selectionEnd,line=e.target.value.slice(0,at).split('\n').at(-1);
+      const spaces=line.match(/^\s*/)[0];edit(e.target.value.slice(0,at)+'\n'+spaces+e.target.value.slice(end),at+1+spaces.length);
+    }
+  });
+  panel.addEventListener('click',async e=>{
+    const line=e.target.closest('[data-coding-line]');if(line){sourcePosition(Number(line.dataset.codingLine),Number(line.dataset.codingColumn));return;}
+    const task=e.target.closest('[data-coding-task]');if(task){choose(task.dataset.codingTask);return;}
+    const file=e.target.closest('[data-coding-file]');if(file){selectedFile=file.dataset.codingFile;renderFiles();return;}
+    const guide=e.target.closest('[data-coding-guide]');if(guide){guideTab(guide.dataset.codingGuide);return;}
+    const bottom=e.target.closest('[data-coding-bottom]');if(bottom){bottomTab(bottom.dataset.codingBottom);return;}
+    const button=e.target.closest('[data-code-action]');if(!button||button.disabled||button.type==='submit')return;
+    const action=button.dataset.codeAction;
+    if(action==='reload'){stop(null);active=null;loading=false;show(context);return;}
+    if(action==='export'){exportData();return;}
+    if(action==='browse'){libraryOpen=!libraryOpen;$('coding-library').hidden=!libraryOpen;if(libraryOpen){renderLibrary();$('coding-search').focus();}return;}
+    if(action==='scratch'){choose('scratch');return;}
+    if(!draft)return;
+    if(action==='run'||action==='check'){execute(action);return;}
+    if(action==='stop'){stop();return;}
+    if(action==='undo'||action==='redo'){undo(action==='undo'?-1:1);return;}
+    if(action==='indent'||action==='outdent'){indent(action==='outdent');return;}
+    if(action==='sync'){sync();return;}
+    if(action==='next'){choose(active.transferId||tasks[0].id);return;}
+    if(action==='example-input'){draft.inputs=active.example.inputs.join('\n');$('coding-input').value=draft.inputs;save();message('Example inputs loaded. Press Run.');return;}
+    if(action==='reset'){edit(active.starter);message('Task starter restored. Undo recovers your previous code.');return;}
+    if(action==='download'){download({format:'recallstride-code-project',version:1,taskId:active.id,source:draft.source,files:draft.files},`recallstride-${active.id}.json`);return;}
+    if(action==='import'){$('coding-project-import').click();return;}
+    if(action==='reset-files'){draft.files={...active.files};invalidate();renderFiles();save();$('coding-file-count').textContent=Object.keys(draft.files).length;message('Task files restored.');return;}
+    if(action==='delete-file'){delete draft.files[selectedFile];selectedFile=null;invalidate();renderFiles();save();$('coding-file-count').textContent=Object.keys(draft.files).length;return;}
+    if(action==='hint'){
+      if(draft.assistance.hints<active.hints.length){draft.assistance.hints++;$('coding-hints').innerHTML=active.hints.slice(0,draft.assistance.hints).map(h=>`<li>${escape(h)}</li>`).join('');save();controls();event('coding_hint');}return;
+    }
+    if(action==='solution'){
+      const myLoad=loadId,myTask=active;
+      try{const data=await request(`/api/coding/tasks/${encodeURIComponent(active.id)}/solution`);if(loadId!==myLoad)return;
+        if(data.version!==myTask.version)throw Error('The task changed. Reload the catalogue to get its current solution.');
+        draft.assistance.solution=true;$('coding-solution-source').textContent=data.solution;$('coding-solution-source').hidden=false;$('coding-solution-use').hidden=false;save();controls();event('coding_solution');
+      }catch(error){message(error.message);}return;
+    }
+    if(action==='solution-use'){edit($('coding-solution-source').textContent);message('Worked solution loaded. Undo recovers your previous code.');return;}
+    if(action==='trace-line'){const step=trace[Number($('coding-trace-select').value)||0];if(step)sourcePosition(step.line,step.column);return;}
+    if(action==='finish'){
+      if(active.rubric.some((_,i)=>!draft.rubric[i])){message('Tick each method review item before marking reviewed.');return;}
+      draft.completed=true;save();message('Practice reviewed. Try the next task to apply the idea again.');event('coding_session_completed');return;
+    }
+    if(action==='clear'){
+      if(!window.confirm('Clear this account’s coding outcomes and this device’s drafts? Download anything you want to keep first.'))return;
+      try{if(owner)await request('/api/coding/attempts',{method:'DELETE'});drafts.clear(localOwner());stop(null);active=null;show(context);}catch(error){message(error.message);}return;
+    }
+  });
+  window.addEventListener('online',()=>{if(visible)sync();});
+  window.addEventListener('storage',e=>{if(e.key==='recallstride-coding-session-change'){stop(null);owner=null;active=null;draft=null;tasks=[];loadId++;panel.innerHTML='<p role="status">The account session changed in another tab. Reload to continue.</p>';}});
+  window.CodingPractice={show,hide(){visible=false;stop(null);},sessionChanged(previousOwner,clear=false){stop(null);loadId++;loading=false;if(clear)drafts.clear(previousOwner);owner=null;active=null;draft=null;tasks=[];panel.replaceChildren();try{storage.setItem('recallstride-coding-session-change',crypto.randomUUID());}catch{}},exportLocal(id){return drafts.export(id);},clearLocal(id){drafts.clear(id);}};
 })();

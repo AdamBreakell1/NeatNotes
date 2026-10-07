@@ -654,6 +654,7 @@ function renderPracticeMode() {
   updatePracticeFocus();
   const inPractice = activeAppSection === "practice";
   const codingActive = inPractice && activePracticeMode === "coding";
+  document.querySelector("#revision-view").classList.toggle("coding-workspace-active", codingActive);
   document.querySelector("#coding-practice-section").hidden = !codingActive;
   if (codingActive) window.CodingPractice.show({ owner: !isGuestMode ? currentUser?.id : null, analytics: parseClientJson(accountProfile?.studentProfile?.notification_preferences, {}).usageAnalytics === true, login: () => openAuthModal("login"), decks: () => setAppSection("revise") });
   else window.CodingPractice.hide();

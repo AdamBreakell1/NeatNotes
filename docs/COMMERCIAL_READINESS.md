@@ -1,6 +1,8 @@
-# RecallStride: completion ledger and promotion gates
+# RecallStride: commercial readiness ledger
 
-**Subsequent owner instruction, 7 October:** “deploy it” authorises the guarded engineering rollout documented in [DEPLOYMENT_2026_10_07.md](DEPLOYMENT_2026_10_07.md). It supersedes the preceding local-only scope below, while retaining coding publication gates and pending academic/legal/provider/device checks. It is not an unrestricted commercial-readiness sign-off.
+**Latest coding instruction, 7 October:** implement the complete worksheet/interpreter workspace. The prior coding publication restriction is superseded. All 60 coding tasks are available; independent review is descriptive metadata, not an empty-page dependency. See [the current checkpoint](CONTINUE_RECALLSTRIDE.md). Provider checks remain pending as requested.
+
+**Earlier owner instruction, 7 October:** “deploy it” authorises the guarded engineering rollout documented in [DEPLOYMENT_2026_10_07.md](DEPLOYMENT_2026_10_07.md). It supersedes the preceding local-only scope below, while retaining coding publication gates and pending academic/legal/provider/device checks. It is not an unrestricted commercial-readiness sign-off.
 
 Updated 7 October 2026. Applies to the 13 September execution brief and the current local working tree. The user chose **provider checks pending**. The September deployment permission was for an earlier release; it does not authorise deployment of this increment. No provider objects, customer communications, domains or real data changed.
 

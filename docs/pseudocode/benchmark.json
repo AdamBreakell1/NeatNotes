@@ -1,12 +1,688 @@
 {
   "date": "2026-10-07",
-  "interpreterVersion": "rs-h446-1.0.0",
-  "provenance": "Development-authored corpus and expectations; internally checked, NOT independently academically reviewed.",
+  "interpreterVersion": "rs-h446-2.0.0",
+  "provenance": "User-supplied worksheets adapted with labelled replacement fixtures plus eight original exercises. Functional checks do not confer exam marks.",
   "tasks": [
     {
+      "id": "worksheet-1-1",
+      "version": "2026-10-07.2",
+      "sha256": "3974e98f469fc577bee0a9d3839eec1bde6a97d294ac1b80c9772b123a14ea9c",
+      "caseCount": 4,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-1-2",
+      "version": "2026-10-07.2",
+      "sha256": "7d9014e955f6a556b36fdf270f5719381956de56698dfa7f04121300b1e4b100",
+      "caseCount": 8,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-1-3",
+      "version": "2026-10-07.2",
+      "sha256": "17364a0c721067e9ea0624000db1cf3dcab8063964269f301ae5e1665064d11b",
+      "caseCount": 3,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-1-4",
+      "version": "2026-10-07.2",
+      "sha256": "c49c4aaf52dd9cac5290ada470d1c2d60658b2ff3ae78c8da7a7b169d5d03d7d",
+      "caseCount": 8,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-1-5",
+      "version": "2026-10-07.2",
+      "sha256": "510b1b29215e90d51a538893e14cc3e3b5993fa37e625a8da5dd390adea173c7",
+      "caseCount": 4,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-1-6",
+      "version": "2026-10-07.2",
+      "sha256": "69304e3e8fe81374b6626a84c1e58b17ec5b40276f917962330f7fd5c4ef80c1",
+      "caseCount": 4,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-1-7",
+      "version": "2026-10-07.2",
+      "sha256": "8bacacefe4601abe55fc100b1f7fa9af5e618d297cb71e8aa5d3250c5d86db35",
+      "caseCount": 4,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-1-8",
+      "version": "2026-10-07.2",
+      "sha256": "006fbc3cbee8415e4d63e9b5e3df485245c6d9c5adaad181d6e006762d705df4",
+      "caseCount": 3,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-1-9",
+      "version": "2026-10-07.2",
+      "sha256": "2d5187169d1b7ae206fe9601f1246e509a42e38e231220a663693961b17c861a",
+      "caseCount": 4,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-1-10",
+      "version": "2026-10-07.2",
+      "sha256": "026084943532d60c0887757270cff42787c82bea90e65cf9e9896b46364ba841",
+      "caseCount": 4,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-2-1",
+      "version": "2026-10-07.2",
+      "sha256": "e29993b97efd42e468f88bbefa122680795969f31e7020c1a95312310178cc21",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-2-2",
+      "version": "2026-10-07.2",
+      "sha256": "a59beeaf81541e081e2309a90b2b4ee5439eff4bad6cade1e55567155be39f08",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-2-3",
+      "version": "2026-10-07.2",
+      "sha256": "ec7d02fca6ff81de4faa07d51117f654acf692581904a60c714318f2b4ef1adc",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-2-4",
+      "version": "2026-10-07.2",
+      "sha256": "0365b8c25615cee985f035718158601ecdfd49afd607f32e88cb3052cc5b79ef",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-2-5",
+      "version": "2026-10-07.2",
+      "sha256": "c2b8ed8338057746e4c40a29e40c2f8b030df1c0895d3b1276b516e6bd8c3568",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-2-6",
+      "version": "2026-10-07.2",
+      "sha256": "1cba07e72fe7450a33f3b24c111d97f81ebc5c0db1fb3a688cf462811cb9ba1f",
+      "caseCount": 2,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-2-7",
+      "version": "2026-10-07.2",
+      "sha256": "f41af63d9f97ac02074c1b6385ca95476c386a1e06d0565050c1c76b9059c2f6",
+      "caseCount": 3,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-2-8",
+      "version": "2026-10-07.2",
+      "sha256": "fe0d860a99f97955129b527efe58623351b0017811aa521de33ed31e48fa591c",
+      "caseCount": 3,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-2-9",
+      "version": "2026-10-07.2",
+      "sha256": "8fd3e4195b3eb98b9ca3161007cbfc19cbbbe29f689502d99e5248e1046cd082",
+      "caseCount": 3,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-3-1",
+      "version": "2026-10-07.2",
+      "sha256": "049aeea05fe3c4148066a986d5b1da30559973560b8171c021de8b2e666f56cb",
+      "caseCount": 2,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-3-2",
+      "version": "2026-10-07.2",
+      "sha256": "a32617cbaa685c2285f0c2addf82a64892f1a0ec59533d82f41e10a7a0f3b2a1",
+      "caseCount": 3,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-3-3",
+      "version": "2026-10-07.2",
+      "sha256": "4ed1c69279dba7d422f69b2c5329d73e9283bc7688bea9f1d8d1c20dc22bf83e",
+      "caseCount": 2,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-3-4",
+      "version": "2026-10-07.2",
+      "sha256": "67f985e62111ded520fb009e859b003c12c0899b0594464f6e2cb464d6a5cd90",
+      "caseCount": 3,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-3-5",
+      "version": "2026-10-07.2",
+      "sha256": "5c4f6942e165692b81f88b6cc95f454652bc16b231b2193b97c26fecefc141b5",
+      "caseCount": 3,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-3-6",
+      "version": "2026-10-07.2",
+      "sha256": "fd5612652d2d66d44086f7c58a1accd1ec7c4381c9466c44b170cec682f1b262",
+      "caseCount": 3,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-3-7",
+      "version": "2026-10-07.2",
+      "sha256": "bbc17f20a5916b984b847e32fb22797b2de10f85f7cd568ac70d8ee099e78f33",
+      "caseCount": 3,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-3-8",
+      "version": "2026-10-07.2",
+      "sha256": "d2aca034e964970e3f61a1479d11737c4588015a418ab98bc1f59992df80de38",
+      "caseCount": 3,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-3-9",
+      "version": "2026-10-07.2",
+      "sha256": "beca577738d34ff8cad54903abb88a3e93fe41d0d98e7f45946d080e32d40f6d",
+      "caseCount": 4,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-3-10",
+      "version": "2026-10-07.2",
+      "sha256": "8fb4b91cf8fb0e21bc000cc50cf99598e2c778b11b965952cd7cc7c086ac4a6d",
+      "caseCount": 2,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-4-1",
+      "version": "2026-10-07.2",
+      "sha256": "2cfb57c4c65241ee0f9c843df4091d0e9a5188ca8c505f7cb7ce6fced016ecb4",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-4-2",
+      "version": "2026-10-07.2",
+      "sha256": "861bfe6b240a6c43947008ee7b5ffddf8dca1c5b8f7345099b08e1e0f53ea589",
+      "caseCount": 3,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-4-3",
+      "version": "2026-10-07.2",
+      "sha256": "6d7b3310f481c2970b7d25781529023ae9d24ab5cd138fa3ba31518949223585",
+      "caseCount": 4,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-4-4",
+      "version": "2026-10-07.2",
+      "sha256": "29e63c649f5ec905fbf197915e16fd84626ea3fad9b72d55a96373172210fb52",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-4-5",
+      "version": "2026-10-07.2",
+      "sha256": "0609a1c229fb2510eb5f29b35342c5597c9de5ecc598481c5b87359f1837c0f6",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-4-6",
+      "version": "2026-10-07.2",
+      "sha256": "15fe269e55bde97b49821e003b8e215d2b7b8d2e47b2458fc96e731c3c9959be",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-4-7",
+      "version": "2026-10-07.2",
+      "sha256": "748b58da3688d7a98611a6d996bd8c8c711cadd01e2986be8192adc699d0f53b",
+      "caseCount": 4,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-4-8",
+      "version": "2026-10-07.2",
+      "sha256": "967e3b7f801558bf978825698340dc3ff2c23b488cb52f34019dbb2606ccbe75",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-4-9",
+      "version": "2026-10-07.2",
+      "sha256": "e2c0afd571b652f4ef79257447e663f675467e537aca63e4f804013377fcc6f9",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-4-10",
+      "version": "2026-10-07.2",
+      "sha256": "5990079ce30fe73046be531be95715e14ea65ff3ceab8bc1ba97014e3e424320",
+      "caseCount": 4,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-4-11",
+      "version": "2026-10-07.2",
+      "sha256": "139ab5256d33319d4734f3d35dc488bf2fe3df82bee5ae75acfcc1fb293a4283",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-4-12",
+      "version": "2026-10-07.2",
+      "sha256": "7faec302189a8e4b15d019664bb44817e6367c8ef2851f28a32d422e195f1f22",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-4-13",
+      "version": "2026-10-07.2",
+      "sha256": "3905231df9bc235aeabd8b9bdb0338431f285cd896b8bb87b9c08c2f5b865060",
+      "caseCount": 3,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-4-14",
+      "version": "2026-10-07.2",
+      "sha256": "133686d137b4892379d3717f02bff91010870f7711f9d8ca730da42c92f68a4c",
+      "caseCount": 2,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-5-1",
+      "version": "2026-10-07.2",
+      "sha256": "3f8fb7611def7c0344763511a39c0e2d18120270cca4ee98f79b5bc10eaf3b87",
+      "caseCount": 2,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-5-2",
+      "version": "2026-10-07.2",
+      "sha256": "63b4a5f45477010e8ae10e921c127a9f81d8419b4e5f78861d6a5482906c8178",
+      "caseCount": 2,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-5-3",
+      "version": "2026-10-07.2",
+      "sha256": "e8e01550045ca97e95d3f1a56fadd7e8ccf91160e091f93596341a5b776b86fd",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-5-4",
+      "version": "2026-10-07.2",
+      "sha256": "91811e9e8466d99c51c21a7eaf1e3e227171bb292d810226933019753cb76858",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-5-5",
+      "version": "2026-10-07.2",
+      "sha256": "eeaa8e74db9c603dded8df39e5635cd369f3ca68356fa3aa0c50cc9dbe092013",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-5-6",
+      "version": "2026-10-07.2",
+      "sha256": "0925a0d66166d645290780f3758c44abf34487bee71fb909b79a6f9cd7c8022f",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-5-7",
+      "version": "2026-10-07.2",
+      "sha256": "21791cb545aef80ce74d497e19b8e1b35876f4c33eceff494b6d518c7d251287",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-5-8",
+      "version": "2026-10-07.2",
+      "sha256": "ade1154b5e05e98b18dbc3ac0dca09fd855db866d55f1bf74f5eabec13425bdc",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
+      "id": "worksheet-5-8b",
+      "version": "2026-10-07.2",
+      "sha256": "2c913ce28368fd8db8d27d207bce7abfc6308226b748e4f995b0c1bdafcf2166",
+      "caseCount": 1,
+      "alternatives": [
+        {
+          "index": 1,
+          "passed": true
+        }
+      ],
+      "mutations": []
+    },
+    {
       "id": "minutes-to-seconds",
-      "version": "2026-10-07.1",
-      "sha256": "e9fcb5e61f60692f0173f9e0df6ed1fd75180ea42d6f960c15bb17fd93e1dd0f",
+      "version": "2026-10-07.2",
+      "sha256": "e9394683cc1139014ec54baa19633d468d4f019ad24da60ccc4831a86a1362d1",
       "caseCount": 5,
       "alternatives": [
         {
@@ -31,8 +707,8 @@
     },
     {
       "id": "temperature-range",
-      "version": "2026-10-07.1",
-      "sha256": "156379c4c499cc15d5636ada020347f87c60167c8cac68e282345bfecdc01f1e",
+      "version": "2026-10-07.2",
+      "sha256": "377e8ce6446a9ca2dd4819c9901124015bb2405ade8248bb7217a9478adaf3be",
       "caseCount": 6,
       "alternatives": [
         {
@@ -57,8 +733,8 @@
     },
     {
       "id": "running-total",
-      "version": "2026-10-07.1",
-      "sha256": "b04b61dba3392540af3dc96b17a085c6e073a3f08d049c6dcc37beecd7fccf09",
+      "version": "2026-10-07.2",
+      "sha256": "912a6892dee0af42cc76e3c2941d78ac0498e068c4a701f5cd7c4ba440bd0f39",
       "caseCount": 6,
       "alternatives": [
         {
@@ -91,8 +767,8 @@
     },
     {
       "id": "code-length",
-      "version": "2026-10-07.1",
-      "sha256": "bec5c6c8420b9c28a4b2fda049b94441419a3a21d6b36044cc3d0d4536b28ed7",
+      "version": "2026-10-07.2",
+      "sha256": "f2c6d5ea36869de94f6e0b36ac8f5b398da0a55b7e19e88419debee21b4963df",
       "caseCount": 5,
       "alternatives": [
         {
@@ -117,8 +793,8 @@
     },
     {
       "id": "count-letter",
-      "version": "2026-10-07.1",
-      "sha256": "14998985aa5eb040538099527833f970cf339b7d80e7c9b0e308244988fad2b2",
+      "version": "2026-10-07.2",
+      "sha256": "ace2ebb2129393aaac4f9b3cabcde5ccb7c890ea5d7d9b53b333509ba8606e41",
       "caseCount": 6,
       "alternatives": [
         {
@@ -143,8 +819,8 @@
     },
     {
       "id": "first-match",
-      "version": "2026-10-07.1",
-      "sha256": "3eec317ed1a99d2868e35af11a31d901b9a019452603298a50369e01b4470fe0",
+      "version": "2026-10-07.2",
+      "sha256": "a09ace3cd4c3f450a12491caa0f2ba0532e4cd7299bf74582d95921f7bed58a9",
       "caseCount": 6,
       "alternatives": [
         {
@@ -169,8 +845,8 @@
     },
     {
       "id": "countdown-trace",
-      "version": "2026-10-07.1",
-      "sha256": "2527dd5e8864efb4ffd1b0d2d90e53c7034c8cc006db5df988411b6b2471c106",
+      "version": "2026-10-07.2",
+      "sha256": "54643c93cd44025fb32abe839d00a331c7239d203bcb831f3f979bc9a286b7ac",
       "caseCount": 5,
       "alternatives": [
         {
@@ -195,8 +871,8 @@
     },
     {
       "id": "ticket-total",
-      "version": "2026-10-07.1",
-      "sha256": "60585870f2845b4ec37c5b5fc7c20d0df6b1c2cf15b41fb60f1c1c52ece970ea",
+      "version": "2026-10-07.2",
+      "sha256": "c91d24db69220dbc8aa7ff1fae2b6bebfa9600231bab5534d4365620652ce48d",
       "caseCount": 6,
       "alternatives": [
         {
@@ -221,16 +897,16 @@
     }
   ],
   "summary": {
-    "tasks": 8,
-    "cases": 45,
-    "correctAlternatives": 17,
+    "tasks": 60,
+    "cases": 174,
+    "correctAlternatives": 69,
     "falseNegatives": 0,
     "seededFaults": 17,
     "falsePositives": 0
   },
   "limitations": [
     "Finite public cases can be hard-coded by a determined learner.",
-    "These rates describe this small authored corpus only, not accuracy on arbitrary student programs.",
+    "These rates describe this supplied task corpus only, not accuracy on arbitrary student programs.",
     "No numerical score, OCR examiner mark or grade prediction.",
     "Function/loop method and reasoning require self-review and independent human content review."
   ]

@@ -9,7 +9,7 @@ function isReviewed(task, releases = RELEASES) {
   return releases.some((r) => r.taskId === task.id && r.version === task.version && r.sha256 === digest(task) && r.status === 'approved' && typeof r.reviewer === 'string' && r.reviewer.trim() && typeof r.reviewedAt === 'string' && Number.isFinite(Date.parse(r.reviewedAt)));
 }
 function canPreview(environment = process.env) { return environment.NODE_ENV !== "production" && environment.RECALLSTRIDE_CODING_PREVIEW === "true"; }
-function publicTask(task) { const { solutions, mutations, ...publicData } = task; return { ...publicData, reviewStatus: isReviewed(task) ? "reviewed" : "draft", evaluation: "local", numericalScore: null }; }
+function publicTask(task) { const { solutions, mutations, ...publicData } = task; return { ...publicData, reviewStatus: "available", evaluation: "local", numericalScore: null }; }
 function normaliseAttempt(body, task) {
   const allowed = ['id','taskId','taskVersion','interpreterVersion','mode','assistance','outcomes','firstCheck'];
   if (!body || Object.keys(body).some((key) => !allowed.includes(key))) throw new Error("Only local attempt metadata is accepted; source, scores and personal text are not accepted.");
@@ -57,21 +57,17 @@ function createPracticeStore(db, now = () => Date.now()) {
 }
 function registerPracticeRoutes(app, { db, requireUser, rateLimit, canAccess }) {
   const store = createPracticeStore(db); store.prune(); const cleanup = setInterval(() => store.prune(), 86400000); cleanup.unref();
-  function available(task) { return Boolean(task && (isReviewed(task) || canPreview())); }
+  // User-authorised teaching material is available independently of revision decks.
+  // Academic review metadata is descriptive, not a runtime publication dependency.
   function gate(req, res, next) {
     const task = TASKS.find((item) => item.id === req.params.id);
-    if (!available(task)) return res.status(404).json({ error: "This coding task is withdrawn or awaiting academic review. Your local draft can still be exported." });
-    if (!canAccess(req.user, task.topicId)) return res.status(402).json({ error: "This task belongs to another deck. Free includes coding practice in your selected deck; Pro expands access to reviewed tasks in other decks." });
+    if (!task) return res.status(404).json({ error: "Coding task not found. Your saved draft can still be exported." });
     req.codingTask = task; next();
   }
-  app.get('/api/coding/tasks', requireUser, (req,res) => {
-    const availableTasks = TASKS.filter(available);
-    res.json({ interpreterVersion: VERSION, preview: canPreview(), evaluation: 'local', tasks: availableTasks.filter((t) => canAccess(req.user,t.topicId)).map(publicTask),
-      locked: availableTasks.filter((t) => !canAccess(req.user,t.topicId)).map((t) => ({ id:t.id,title:t.title,topicId:t.topicId,reviewStatus:isReviewed(t)?'reviewed':'draft' })),
-      notice: availableTasks.length ? 'Local practice only. Public tests and a self-review checklist; no OCR marks or verified mastery.' : 'Coding tasks are being prepared for independent academic review. No draft bank is published.' });
-  });
-  app.get('/api/coding/tasks/:id',requireUser,gate,(req,res) => res.json({task:publicTask(req.codingTask)}));
-  app.get('/api/coding/tasks/:id/solution',requireUser,gate,(req,res) => res.json({version:req.codingTask.version,solution:req.codingTask.solutions[0],notice:'One possible solution, not the only correct algorithm. Its use is recorded as assistance.'}));
+  app.get('/api/coding/tasks', (req,res) => res.json({ interpreterVersion: VERSION, preview: false, evaluation: 'local',
+    tasks: TASKS.map(publicTask), locked: [], notice: 'Write and run code inside RecallStride. Practice checks compare the stated examples; they do not award exam marks.' }));
+  app.get('/api/coding/tasks/:id',gate,(req,res) => res.json({task:publicTask(req.codingTask)}));
+  app.get('/api/coding/tasks/:id/solution',gate,(req,res) => res.json({version:req.codingTask.version,solution:req.codingTask.solutions[0],notice:'One possible solution. Your own code is preserved.'}));
   app.get('/api/coding/attempts',requireUser,(req,res) => res.json({ attempts:store.list(req.user.id), evaluation:'local' }));
   app.delete('/api/coding/attempts',requireUser,(req,res) => {store.clear(req.user.id);res.json({deleted:true});});
   app.post('/api/coding/tasks/:id/attempts',requireUser,rateLimit,gate,(req,res) => {
