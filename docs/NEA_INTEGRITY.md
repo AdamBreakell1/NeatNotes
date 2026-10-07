@@ -1,6 +1,6 @@
 # NEA Integrity Policy
 
-Neat Notes supports learning about programming-project principles but must not generate assessed H446 project submissions.
+RecallStride supports learning about programming-project principles but must not generate assessed H446 project submissions.
 
 ## Allowed
 

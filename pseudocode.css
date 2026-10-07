@@ -1,0 +1,66 @@
+/* Fits the existing RecallStride tokens; no global redesign. */
+#coding-practice-section { width: min(1240px, calc(100% - 48px)); margin: 18px auto 32px; padding: 24px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); color: var(--text); min-width: 0; }
+#coding-practice-section[hidden] { display: none !important; }
+#coding-practice-section * { box-sizing: border-box; }
+#coding-practice-section p { line-height: 1.55; margin: 8px 0 14px; color: var(--text-secondary); }
+#coding-practice-section h3 { margin: 4px 0 12px; font-size: 1.5rem; }
+#coding-practice-section h4 { margin: 8px 0 12px; font-size: 1rem; }
+#coding-practice-section label { display: block; font-weight: 600; margin-bottom: 8px; text-transform: none; letter-spacing: 0; color: var(--text); }
+#coding-practice-section button { min-height: 44px; padding: 9px 13px; white-space: normal; }
+#coding-practice-section textarea, #coding-practice-section select { max-width: 100%; width: 100%; min-width: 0; font-size: 16px; color: var(--text); background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+#coding-practice-section input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 18px; margin: 2px 8px 0 0; }
+#coding-practice-section pre { overflow: auto; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; border-radius: 8px; background: var(--surface-subtle); color: var(--text); }
+.coding-catalogue, .coding-task-head { display: flex; justify-content: space-between; gap: 20px; align-items: start; }
+.coding-catalogue > :first-child { flex: 1; }
+.coding-catalogue > :last-child { flex: 0 1 280px; }
+.coding-task-head { margin-top: 24px; }
+.coding-preview-note, .coding-badge { color: var(--text) !important; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: .85rem; }
+.coding-badge { flex: 0 0 auto; }
+.coding-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 310px); gap: 24px; margin-top: 24px; }
+.coding-main, .coding-side { min-width: 0; }
+.coding-side > section, .coding-side > details { border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+.coding-side button { margin: 4px 0; }
+.coding-side dd { margin: 0 0 14px; line-height: 1.5; }
+.coding-side dt { font-weight: 700; margin-bottom: 5px; }
+#coding-practice-section summary { cursor: pointer; padding: 8px 0; line-height: 1.5; }
+.coding-mode-row { display: flex; gap: 16px; align-items: center; margin-top: 16px; }
+.coding-mode-row label { flex: 0 0 auto; margin: 0 !important; }
+.coding-editor-heading { display: flex; gap: 12px; justify-content: space-between; align-items: center; margin-top: 22px; }
+.coding-inline-label { display: flex !important; align-items: center; font-size: .85rem; }
+.coding-edit-tools, .coding-runbar, .coding-general-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.coding-editor { display: grid; grid-template-columns: 48px minmax(0,1fr); background: #101b2a; color: #edf3ff; border: 1px solid #54708e; border-radius: 10px; overflow: hidden; }
+.coding-code-layers { position: relative; height: 360px; min-width: 0; }
+#coding-practice-section #coding-source, #coding-practice-section #coding-highlight, #coding-practice-section #coding-lines { font: 15px/24px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-variant-ligatures: none; letter-spacing: 0; tab-size: 2; white-space: pre; overflow-wrap: normal; margin: 0; padding: 12px; border: 0; border-radius: 0; }
+#coding-practice-section #coding-lines { height: 360px; text-align: right; overflow: hidden; color: #b3c6de; background: #19283c; user-select: none; padding-inline: 8px; }
+#coding-practice-section #coding-source, #coding-practice-section #coding-highlight { position: absolute; inset: 0; width: 100%; height: 360px; resize: none; overflow: scroll; }
+#coding-practice-section #coding-highlight { pointer-events: none; background: #101b2a; color: #edf3ff; }
+#coding-practice-section #coding-source { color: transparent; caret-color: #fff; background: transparent; -webkit-text-fill-color: transparent; }
+#coding-source::selection { background: #54708e88; }
+#coding-practice-section .coding-plain #coding-source { color: #edf3ff; -webkit-text-fill-color: #edf3ff; background: #101b2a; }
+.coding-plain #coding-highlight { visibility: hidden; }
+.coding-keyword { color: #c5afff; font-weight: 600; }
+.coding-string { color: #a4e9c7; }
+.coding-number { color: #ffce8a; }
+.coding-comment { color: #a8b8ce; }
+.coding-runbar { margin-top: 18px; padding-block: 8px; }
+#coding-status { min-height: 3em; font-weight: 600; color: var(--text) !important; }
+.coding-diagnostics { padding-left: 18px; }
+.coding-diagnostics button { text-align: left; }
+.coding-output-panel { border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+#coding-output { min-height: 64px; max-height: 220px; }
+#coding-results { margin-top: 18px; }
+#coding-results details { padding: 6px 12px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px; }
+#coding-trace-values { max-height: 260px; }
+.coding-review { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border); }
+.coding-review label { display: flex !important; align-items: start; font-weight: 400 !important; line-height: 1.5; min-height: 36px; }
+.coding-data { margin-top: 16px; }
+#coding-practice-section button:focus-visible, #coding-practice-section textarea:focus-visible, #coding-practice-section select:focus-visible, #coding-practice-section summary:focus-visible { outline: 3px solid #5baef5; outline-offset: 3px; }
+#coding-practice-section button:disabled { opacity: .55; cursor: not-allowed; }
+@media (max-width: 850px) { .coding-grid { grid-template-columns: minmax(0,1fr); } .coding-catalogue, .coding-task-head { flex-direction: column; } .coding-catalogue > :last-child { flex: auto; width: 100%; } }
+@media (max-width: 540px) { #coding-practice-section { width: calc(100% - 20px); padding: 14px; margin-top: 12px; } .coding-grid { gap: 16px; } .coding-code-layers, #coding-practice-section #coding-source, #coding-practice-section #coding-highlight, #coding-practice-section #coding-lines { height: 300px; } .coding-editor-heading { flex-wrap: wrap; } .coding-runbar { position: sticky; bottom: 6px; z-index: 4; border: 1px solid var(--border); border-radius: 10px; padding: 8px; background: var(--surface); } }
+@media (forced-colors: active) { #coding-practice-section #coding-source { color: CanvasText; -webkit-text-fill-color: CanvasText; background: Canvas; caret-color: CanvasText; } #coding-highlight { visibility: hidden; } }
+
+#coding-practice-section :is(h3,h4,summary,dt,dd) { color: var(--text); }
+#coding-practice-section .coding-inline-diagnostic { padding: 10px; border-left: 3px solid var(--danger); color: var(--danger); background: var(--danger-soft); }
+#coding-practice-section .coding-diag-gutter { color: #ffb5bb !important; }
+#coding-practice-section .coding-recovery { border: 1px solid var(--warning); padding: 12px; border-radius: 8px; }

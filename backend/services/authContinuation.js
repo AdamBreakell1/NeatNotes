@@ -11,7 +11,7 @@ function normaliseTask(value, topics) {
     section: value.section,
     topicId: topic.id,
     componentId: topic.componentId || "h446-01",
-    practiceMode: ["quick", "exam", "mock", "labs"].includes(value.practiceMode) ? value.practiceMode : "quick",
+    practiceMode: ["quick", "exam", "mock", "labs", "coding"].includes(value.practiceMode) ? value.practiceMode : "quick",
   };
 }
 

@@ -2,13 +2,15 @@
 
 ## Student-only direction
 
-The current local increment removes classroom workflows and introduces authored quizzes, worked-example repairs and account return-to-task. Quick Practice offers self-assessed recall from released flashcards while authored questions await review, with account-isolated local draft resume. Read the [practice journey audit](docs/STUDENT_PRACTICE_AUDIT.md), [learning increment](docs/STUDENT_LEARNING_INCREMENT.md), [student-only brief](docs/STUDENT_ONLY_BRIEF.md) and [checkpoint](docs/STUDENT_RELAUNCH.md). RecallStride is the selected provisional local brand; trademark screening is incomplete. New quizzes, repairs and Component 2 require recorded human academic review. Do not push or deploy this increment without approval; older classroom and release documentation is historical.
+The current 7 October increment adds bounded pseudocode practice, commercial policy drafts, review packets and pilot measurement. Start with the [release report](docs/RELEASE_REPORT.md), [deployment record](docs/DEPLOYMENT_2026_10_07.md) and [continuation checkpoint](docs/CONTINUE_RECALLSTRIDE.md). Existing classroom retirement, account return-to-task and recall practice are preserved. C1 and C2 material is published under the earlier owner's permission with independent academic review pending; new coding tasks, C1 quizzes and repairs are draft gated. RecallStride is the selected brand; naming clearance remains incomplete. The user subsequently authorised this guarded deployment; academic/legal and provider checks remain pending.
 
 RecallStride is a BreakellSystems OCR A-Level Computer Science revision and notes platform. The current app is a vanilla frontend served by an Express backend with SQLite persistence. Existing Neat Notes account identifiers, storage keys, support inbox and provider configuration remain compatible.
 
 ## Student Relaunch Checkpoint
 
-The guarded student-centric relaunch has been promoted to `main`. Start with [the checkpoint](docs/STUDENT_RELAUNCH.md), [content coverage](docs/H446_COVERAGE.md) and [release gates](docs/STUDENT_RELEASE_RUNBOOK.md). Component 2 is implemented as review-pending original content: local preview is available, production release requires recorded human academic approval. Generate local editorial packs with `npm run review:content -- --component h446-02`; see [the content model](docs/OCR_CONTENT_MODEL.md). Engineering deployment is not academic approval or permission to alter live billing.
+The earlier guarded relaunch was promoted to `main`. Its history is in [the checkpoint](docs/STUDENT_RELAUNCH.md); current [coverage](docs/H446_COVERAGE.md) and [release gates](docs/STUDENT_RELEASE_RUNBOOK.md) distinguish owner-authorised publication from academic approval. Generate local editorial packs with `npm run review:content -- --component h446-02` and `npm run review:coding`. Engineering deployment is not academic approval or permission to alter live billing.
+
+Pseudocode preview is explicit and non-production only: `RECALLSTRIDE_CODING_PREVIEW=true`. Keep `pseudocode-review.json` empty until a named reviewer approves the exact task version and hash. Use the isolated fixture commands in the continuation checkpoint to demonstrate the draft loop without reading local credentials or using real accounts.
 
 ## Local Setup
 

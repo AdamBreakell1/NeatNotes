@@ -1,0 +1,39 @@
+{
+  "measuredAt": "2026-10-07T11:12:19.046Z",
+  "nodeVersion": "v26.3.0",
+  "sqliteVersion": "3.53.2",
+  "workload": {
+    "students": 30,
+    "attempts": 1200,
+    "events": 3000,
+    "sourceStored": false
+  },
+  "baseline": {
+    "bytes": 36864,
+    "pages": 9,
+    "pageSize": 4096
+  },
+  "afterAttempts": {
+    "bytes": 1114112,
+    "pages": 272,
+    "pageSize": 4096
+  },
+  "afterEvents": {
+    "bytes": 1720320,
+    "pages": 420,
+    "pageSize": 4096
+  },
+  "incrementalBytes": {
+    "attempts": 1077248,
+    "events": 606208,
+    "total": 1683456
+  },
+  "averageAttemptJsonBytes": 679,
+  "elapsedMilliseconds": 40,
+  "limitations": [
+    "Synthetic account, attempt and enum event fixtures only; no real database or credentials read.",
+    "WAL truncated at each measurement. File growth includes these tables/indexes and page slack; excludes other application data, backups and transient WAL growth.",
+    "Batched local inserts are not request throughput, a production capacity test or a hosting invoice.",
+    "No hosted student-code execution; CPU for Run/Check remains on the student's device."
+  ]
+}

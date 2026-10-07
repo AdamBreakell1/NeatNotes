@@ -1,0 +1,20 @@
+{
+  "date": "2026-10-07",
+  "base": "3f8b02e14881ca3ccacdd04f3d0b5b69c5b7d01d",
+  "files": {
+    "app.js": "05403889a4a39a08cbd79fd35fc2650a28d0be0e9fc441a1fd09da5887e4bde9",
+    "index.html": "c0cc28741b9aba2459ae81fc44b37a755e28fcd7680feea98cc4149dbcc2d352",
+    "server.js": "63ce55ecbb4803f1474a0460b84afc3820c79a9d9b0605666b390b2752c8e093",
+    "service-worker.js": "d4e0d44d974572667f63ef2f33d67a276fc0be448d74a67fa340bbe7d2b53a09",
+    "policy-content.js": "60e3eb6bbc10321234c229ada68a052d08d2b7977fb94de28da1413a342c3269",
+    "pseudocode-engine.js": "6ee62a2e83d6509e975348f313c02d5fd168266e99497f9b8ab5cd623952dee0",
+    "pseudocode-worker.js": "5ffe3964f2931396bdc3192129c2fdbf0c905abd03366b32f670973c4dcbd4c8",
+    "pseudocode-practice.js": "aab2544fb05ed665b124433945598cb8cf3a14d8f1ef87abc92609cb0a51ec66",
+    "pseudocode-drafts.js": "56e4baaba18135713187df7dac8a1392dbc08c58907d9a140b7219cab9ae15dc",
+    "pseudocode.css": "5952d50be417b8121b173f380d29704a43d55830ea89ce93020e92cf74f5ac6a",
+    "pseudocode-review.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+    "backend/services/pseudocodePractice.js": "7277fe644c95d7620093ee9d89ba11aaade139645d6c66ef8a911f4b39d96181",
+    "backend/services/pseudocodeTasks.js": "dcb0f9e10ddc5a7461574201d241a5ab5c3338412313e1d77f352b27126e5639",
+    "backend/services/pilotTelemetry.js": "8db1cb49a1dece935a3b97838b08bf9cfbcacab6f70d92b53790d45f2610fc3a"
+  }
+}

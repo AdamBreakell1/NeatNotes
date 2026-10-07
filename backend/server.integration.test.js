@@ -19,7 +19,7 @@ before(async () => {
   serverProcess = spawn(process.execPath, [path.join(__dirname, "..", "server.js")], {
     cwd: path.join(__dirname, ".."),
     env: {
-      ...process.env,
+      ...process.env, RECALLSTRIDE_SKIP_DOTENV: "true", RECALLSTRIDE_CODING_PREVIEW: "true", AUTH_RATE_LIMIT: "150",
       PORT: String(port),
       BASE_URL: baseUrl,
       CORS_ORIGIN: baseUrl,
@@ -400,7 +400,7 @@ test("an isolated SQLite backup restores accounts, evidence and curriculum throu
   const restoreUrl = `http://127.0.0.1:${port + 1000}`;
   const child = spawn(process.execPath, [path.join(__dirname, "..", "server.js")], {
     cwd: path.join(__dirname, ".."), stdio: "ignore",
-    env: { ...process.env, PORT: String(port + 1000), BASE_URL: restoreUrl, CORS_ORIGIN: restoreUrl, DATABASE_PATH: backupPath, NODE_ENV: "development", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" },
+    env: { ...process.env, RECALLSTRIDE_SKIP_DOTENV: "true", RECALLSTRIDE_CODING_PREVIEW: "true", AUTH_RATE_LIMIT: "150", PORT: String(port + 1000), BASE_URL: restoreUrl, CORS_ORIGIN: restoreUrl, DATABASE_PATH: backupPath, NODE_ENV: "development", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" },
   });
   try {
     let ready = false;
@@ -438,7 +438,7 @@ test("production delivery releases authorized C2, preserves C1 draft gates and d
   const url = `http://127.0.0.1:${port + 1100}`;
   const child = spawn(process.execPath, [path.join(__dirname, "..", "server.js")], {
     cwd: path.join(__dirname, ".."), stdio: "ignore",
-    env: { ...process.env, PORT: String(port + 1100), BASE_URL: url, CORS_ORIGIN: url, DATABASE_PATH: snapshot, NODE_ENV: "production", ALLOW_MOCK_BILLING: "true", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" },
+    env: { ...process.env, RECALLSTRIDE_SKIP_DOTENV: "true", RECALLSTRIDE_CODING_PREVIEW: "true", AUTH_RATE_LIMIT: "150", PORT: String(port + 1100), BASE_URL: url, CORS_ORIGIN: url, DATABASE_PATH: snapshot, NODE_ENV: "production", ALLOW_MOCK_BILLING: "true", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" },
   });
   try {
     let ready = false;
@@ -483,9 +483,46 @@ test("production delivery releases authorized C2, preserves C1 draft gates and d
     assert.equal((await fetch(`${url}/api/revision/decks/cs-2-1-1`, { headers: freeHeaders })).status, 200);
     assert.equal((await fetch(`${url}/api/revision/decks/cs-2-1-2`, { headers: freeHeaders })).status, 402);
     assert.equal((await fetch(`${url}/api/revision/free-deck`, { method: "POST", headers: freeHeaders, body: JSON.stringify({ deckId: "cs-2-1-2" }) })).status, 402);
+    const coding = await fetch(`${url}/api/coding/tasks`, { headers }).then(r => r.json());
+    assert.deepEqual(coding.tasks, []);
+    assert.equal(coding.preview, false);
+    assert.equal((await fetch(`${url}/api/coding/tasks/minutes-to-seconds`, { headers })).status, 404);
     assert.equal((await fetch(`${url}/api/billing/mock-upgrade`, { method: "POST", headers, body: JSON.stringify({ plan: "pro" }) })).status, 403);
   } finally {
     child.kill("SIGTERM");
     if (child.exitCode === null) await once(child, "exit");
   }
+});
+
+
+test("coding draft access, attempt identity, tampered scores, pilot consent, export and deletion", async () => {
+  const codingCookie = await createVerifiedAccount({ name: "Coding API Fixture", email: "coding-api@example.test", password: "CodingPass123" });
+  const headers = { Cookie: codingCookie, "Content-Type": "application/json" };
+  assert.equal((await fetch(`${baseUrl}/api/coding/tasks`)).status, 401);
+  assert.equal((await fetch(`${baseUrl}/api/coding/tasks/minutes-to-seconds`, { headers })).status, 402);
+  assert.equal((await fetch(`${baseUrl}/api/revision/free-deck`, { method:"POST",headers,body:JSON.stringify({deckId:"cs-2-2-1"}) })).status,200);
+  const tasks = await fetch(`${baseUrl}/api/coding/tasks`,{headers}).then(r=>r.json());
+  assert.equal(tasks.tasks.length,7);assert.equal(tasks.preview,true);assert.equal(tasks.tasks[0].solutions,undefined);
+  assert.equal((await fetch(`${baseUrl}/api/coding/tasks/first-match`,{headers})).status,402);
+  assert.equal((await fetch(`${baseUrl}/api/coding/tasks/first-match/solution`,{headers})).status,402);
+  const task=tasks.tasks[0],payload={id:"synthetic-attempt-12345678",taskId:task.id,taskVersion:task.version,interpreterVersion:task.interpreterVersion,mode:"independent",firstCheck:true,assistance:{runs:0,hints:0,checks:0,solution:false},outcomes:task.cases.map(c=>({id:c.id,outcome:"passed"}))};
+  const endpoint=`${baseUrl}/api/coding/tasks/${task.id}/attempts`;
+  for(const invalid of [{...payload,score:100},{...payload,trusted:true},{...payload,source:"do not store"}])assert.equal((await fetch(endpoint,{method:"POST",headers,body:JSON.stringify(invalid)})).status,400);
+  const saved=await fetch(endpoint,{method:"POST",headers,body:JSON.stringify(payload)});assert.equal(saved.status,201);assert.equal((await saved.json()).record.masteryEligible,false);
+  assert.equal((await fetch(endpoint,{method:"POST",headers,body:JSON.stringify(payload)})).status,200);
+  assert.equal((await fetch(endpoint,{method:"POST",headers,body:JSON.stringify({...payload,mode:"learn"})})).status,409);
+  assert.equal((await fetch(endpoint,{method:"POST",headers,body:JSON.stringify({...payload,id:"stale-attempt-12345678",taskVersion:"old"})})).status,400);
+  const event={id:"synthetic-event-12345678",name:"coding_session_started",sessionId:"synthetic-session-12345678",taskId:task.id,mode:"learn"};
+  assert.equal((await fetch(`${baseUrl}/api/pilot/events`,{method:"POST",headers,body:JSON.stringify(event)})).status,204);
+  assert.equal((await fetch(`${baseUrl}/api/pilot/events`,{method:"POST",headers,body:JSON.stringify({...event,source:"private"})})).status,400);
+  await fetch(`${baseUrl}/api/profile`,{method:"PATCH",headers,body:JSON.stringify({notificationPreferences:{usageAnalytics:true}})});
+  assert.equal((await fetch(`${baseUrl}/api/pilot/events`,{method:"POST",headers,body:JSON.stringify(event)})).status,202);
+  assert.equal((await fetch(`${baseUrl}/api/pilot/events`,{method:"POST",headers,body:JSON.stringify(event)})).status,202);
+  assert.equal((await fetch(`${baseUrl}/api/internal/pilot-metrics`,{headers})).status,403);
+  const exported=await fetch(`${baseUrl}/api/account/export`,{headers}).then(r=>r.json());assert.equal(exported.codingPractice.length,1);assert.equal(exported.revisionEvidence.length,0);assert.equal(exported.pilotEvents.length,1);
+  // This module is never directly served, even with a paid session.
+  const raw=await fetch(`${baseUrl}/backend/services/pseudocodeTasks.js`,{headers});assert.doesNotMatch(await raw.text(),/const TASKS =/);
+  const worker=await fetch(`${baseUrl}/pseudocode-worker.js`);assert.match(worker.headers.get("Content-Security-Policy"),/connect-src 'none'/);
+  const d=await fetch(`${baseUrl}/api/account`,{method:"DELETE",headers,body:JSON.stringify({confirmation:"DELETE MY ACCOUNT",password:"CodingPass123"})});assert.equal(d.status,200);
+  const db=new DatabaseSync(path.join(tempDir,"integration.sqlite"));assert.equal(db.prepare("SELECT COUNT(*) AS n FROM coding_practice_attempts WHERE user_id=?").get(exported.account.id).n,0);assert.equal(db.prepare("SELECT COUNT(*) AS n FROM pilot_events WHERE user_id=?").get(exported.account.id).n,0);db.close();
 });

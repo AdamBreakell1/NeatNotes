@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-07",
+  "baseRevision": "3f8b02e14881ca3ccacdd04f3d0b5b69c5b7d01d",
+  "localWorkingTree": true,
+  "unitApi": {
+    "passed": 85,
+    "failed": 0,
+    "skipped": 0
+  },
+  "syntax": {
+    "files": 64,
+    "passed": true
+  },
+  "content": {
+    "topics": 24,
+    "concepts": 474,
+    "passed": true
+  },
+  "existingBrowser": {
+    "groups": 44,
+    "javascriptErrors": 0
+  },
+  "codingBrowser": {
+    "groups": 29,
+    "javascriptErrors": 0,
+    "sourcePayloadLeaks": 0
+  },
+  "benchmark": {
+    "tasks": 8,
+    "cases": 45,
+    "alternatives": 17,
+    "seededFaults": 17,
+    "falseNegatives": 0,
+    "falsePositives": 0,
+    "independentReview": false
+  },
+  "gitDiffCheck": true,
+  "environment": "Node v26.3.0, Playwright with headless Brave on macOS; temporary synthetic databases/accounts; dotenv/provider connections disabled",
+  "externalChecks": "provider, real-device/screen-reader, independent academic and owner/legal review pending"
+}

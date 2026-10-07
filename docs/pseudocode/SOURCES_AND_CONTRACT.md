@@ -1,0 +1,44 @@
+# H446 sources and executable contract
+
+Researched 13 September 2026. Contract: **rs-h446-1.0.0**. This is a small RecallStride execution dialect, not the set of answers OCR examiners may credit. Parser failure is not an exam mark. No J277 assessment rules are imported.
+
+Revalidated 7 October 2026: fetched the official H446 specification again; version 3.0 / April 2026 and the SHA-256 below remain unchanged. Current ICO/GOV.UK policy guidance and its review limitations are separately linked in [POLICY_REVIEW.md](../POLICY_REVIEW.md). Library alternatives were inspected on 13 September and have not been adopted; no later maintenance claim is made.
+
+## Source register
+
+| Source | Version / inspected location | Use and evidence |
+| --- | --- | --- |
+| [OCR H446 specification](https://www.ocr.org.uk/images/170844-specification-accredited-a-level-gce-computer-science-h446.pdf) | Version 3.0, April 2026; §5d, printed pp.32–37 (PDF pp.38–43); §2.2.1 and §2.3.1 | Retrieved directly from OCR after web-text retrieval failed. Extracted using pypdf and visually inspected PDF pp.39–42. SHA-256 `8551bc2636fa4d8718d97901b462b0642b4bb6148e06407f662c507750764a44`. Search indexing still advertised 2.7: the downloaded cover and footers establish 3.0. |
+| [OCR assessment-format support](https://support.ocr.org.uk/hc/en-gb/articles/14509726681362-In-what-format-will-pseudocode-programming-questions-be-presented-in-the-exam) | Updated 20 January 2026, main answer | The paper style is guidance; memorising it is unnecessary. Candidates may use it under the same assessment principles as high-level languages. |
+| [H446/02 specimen and mark scheme](https://www.ocr.org.uk/images/170853-unit-h446-2-algorithms-and-programming-sample-assessment-materials.pdf) | ©2014 specimen, Q8 and Q10; PDF pp.43–47, mark-scheme printed pp.18–22 | Method and annotated reasoning are distinct assessment considerations. Historical specimen, not a current question bank. No questions copied. |
+| [OCR ERL interpreter](https://github.com/Lauriethefish/ocr-erl) | README, Cargo workspace and licence listing, inspected 13 September | Rust lexer/parser/bytecode CLI; explicitly GCSE ERL; GPL-3.0. No verified browser isolation or accessibility contract; maintenance SLA unknown. Not adopted. |
+| [Pseudonaja](https://github.com/PseudocodeEditor/editor) | README and repository structure, inspected 13 September | CIE dialect; CodeMirror 6 browser editor and PS2 interpreter. Documentation described as in development. No licence confirmed in inspected root listing; no licence permission assumed. Not copied or adopted. |
+| [CodeMirror](https://codemirror.net/) and [view source](https://github.com/codemirror/view) | Project documentation/source, inspected 13 September | MIT, browser editor, accessible editing support. GitHub view/dev repositories were archived on 15 April 2026 and point to code.haverbeke.berlin; archival is a move, not evidence of abandonment. Current maintenance SLA unverified. Viable future editor adapter; still needs a custom dialect. No third-party editor code used in this increment. |
+| [Monaco](https://github.com/microsoft/monaco-editor) | README FAQ, inspected 13 September | MIT, browser editor; officially excludes mobile browsers. Poor fit for the required phone journey. |
+| [ICO privacy information](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/individual-rights/the-right-to-be-informed/what-privacy-information-should-we-provide/) | Current web guidance, inspected 13 September | Policy review checklist: identity, purpose, lawful basis, recipients, retention and rights. Generated policy drafts require owner facts and legal review. |
+
+The official appendix supplies spelling and examples, not a complete executable semantics specification. The conventions below belong to RecallStride. Source positions use one-based lines and UTF-16 columns.
+
+## Supported matrix
+
+| Area | Supported in 1.0.0 | Boundary / execution convention | OCR location |
+| --- | --- | --- | --- |
+| Layout / case | One statement per line, blank lines, `//` comments; case-insensitive keywords and built-ins; case-sensitive variable and routine names | ASCII identifiers, letter/underscore then letters/digits/underscores, maximum 64 characters; indentation cosmetic. Separate word operators from adjacent operands (`12 MOD 5`, not `12MOD5`). ASCII single/double quoted strings; no multiline literals or escapes. Smart quotes get a helpful diagnostic. | pp.33,36; case/lexical details are local conventions |
+| Values | Numbers, strings, `true`, `false`; inferred variable type on assignment | No null/object literals, undefined reads fail. Reassignment must keep the value type. Booleans are not numbers. | p.33; strictness local |
+| Assignment / tests | `=` assignment; `== != < <= > >=` comparisons | No chained comparisons; use AND. Same-type scalar equality; ordered comparisons on numbers or strings. | pp.33–34 |
+| Precedence high → low | `()` / calls / array access / string members; right-associative `^`; unary `+ -`; `* / DIV MOD`; `+ -`; comparisons; `NOT`; `AND`; `OR` | Exponentiation binds above numeric negation; AND/OR short-circuit with Boolean operands; no coercion. Parentheses recommended for clarity. | p.34 lists operators; precedence/short-circuit are local |
+| Numbers | Binary64 finite numbers; `/` real division; integer operands for DIV/MOD | Magnitudes above 2^53−1 rejected, including rounded integer results; no arbitrary precision. DIV truncates toward zero; MOD = a − trunc(a/b)×b, including negative operands. Zero divisor errors. Decimal rounding remains possible. | p.34; precision/negative behaviour local |
+| Casting | `int`, `float`, `str` | Full numeric string required (no partial parsing); int truncates toward zero; bool/array to number rejected. Leading/trailing whitespace on numeric input accepted. `str` scalar only. | p.33; details local |
+| I/O | `input(prompt)` returns next queued string; `print(value)` appends one line | Prompt shown separately from output. Missing input diagnoses the exact line; add fixtures then rerun. Stop cancels input/run. No prompt dialogs, networking or files. One fixture line per input, empty fixture lines explicit. | p.33 |
+| Selection | `if … then / elseif / else / endif` | Boolean condition required. Switch/case explicitly unsupported. | p.34 |
+| Iteration | `for i = start to end / next i`; `while / endwhile`; `do / until` | For endpoints evaluated once; inclusive integer range, step +1; descending range runs zero times. Modification of the counter in the body is rejected. Empty loop iterations consume work. No `step`, `break` or `continue`. | p.33; local details labelled |
+| Strings | `+`, `.length`, `.subString(start,count)` (any member-name case) | Zero-based UTF-16 code units; strict bounds, empty substring allowed at end; length never normalises Unicode. Strings immutable. | p.35; UTF-16/bounds local |
+| Arrays | `array items[size]`, `items[index] = value`, `items[index]` | One dimension, fixed zero-based bounds, 0-sized allowed; uninitialised reads fail; scalar cells with per-cell stable type; no array literals, resizing or whole-array assignment. | p.36; one dimension subset |
+| Routines | Top-level functions/procedures, positional parameters, optional `:byVal`, `return expression` in functions | Isolated local scope; no implicit access to main variables. Scalars and arrays copied by value (allocation charged). Scalar returns only. Functions must return; procedures cannot return a value. No nested definitions, global/byRef, recursion or OOP in this version. | pp.33,35; subset explicit |
+| Trace | Bounded after-statement snapshots with source line, local variables and routine stack | Inspection of a completed/failed run, not an interactive debugger. First 120 events, first 12 variables, first 8 array cells and first 80 string characters. Truncation disclosed. | RecallStride feature |
+
+## Hard ceilings
+
+16,384 source UTF-16 units; 6,000 tokens; 64 parse/AST depth; 50,000 work units (statements, expressions, loops and size-based operations); 750ms runtime wall budget per case; 32 routine calls; recursion disallowed; 256 variable declarations per run; 4,096 cumulative array cells; 8,192 characters per string; 262,144 cumulative created/copied string characters; 200 output lines / 16,384 output characters; 100 input items / 1,024 characters each / 8,192 total. Worker parent terminates a Run after 2 seconds and each functional suite after 12 seconds; Stop terminates immediately and a subsequent Run creates a fresh worker. Parser and evaluator depth are checked before recursive descent. Limits may be lowered in tests, never raised by browser messages.
+
+Unsupported constructs are reported separately from malformed supported syntax. All limits are part of this version. No source/output is HTML, JavaScript, a URL to execute, or an instruction to the application.

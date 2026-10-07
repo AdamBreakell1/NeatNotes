@@ -20,6 +20,7 @@
     <script src="/theme-init.js?v=20260824-relaunch"></script>
     <link rel="stylesheet" href="/styles-relaunch.css?v=20260907-student-r1" />
     <link rel="stylesheet" href="/student-layout.css?v=20260913-ui-r1" />
+    <link rel="stylesheet" href="/pseudocode.css?v=20261007-readiness-r1" />
   </head>
   <body>
     <a class="skip-link" href="#app-view">Skip to main content</a>
@@ -97,8 +98,8 @@
           <h2>Independent revision with structure.</h2>
           <ul>
             <li>Daily review mission and streak tracking</li>
-            <li>Topic mastery across OCR Computer Science</li>
-            <li>Flashcards, Quick Practice and confidence scoring</li>
+            <li>Topic-by-topic retrieval progress</li>
+            <li>Flashcards, Quick Practice and guided self-review</li>
             <li>Exportable revision packs on paid plans</li>
           </ul>
         </div>
@@ -119,7 +120,7 @@
         <div class="section-title"><span>Pricing preview</span><span>Cancel anytime · Secure billing through Stripe</span></div>
         <div class="landing-plan-row">
           <article><span>Free</span><strong>£0</strong><p>25 notes and one OCR deck of your choice.</p></article>
-          <article class="featured-plan"><span>Pro</span><strong>£3.99/mo</strong><p>All released decks, mixed revision, unlimited notes and exports. New Component 2 material is in review.</p></article>
+          <article class="featured-plan"><span>Pro</span><strong>£3.99/mo</strong><p>Published Component 1 and 2 decks, mixed revision, unlimited notes and exports. Independent academic review remains pending.</p></article>
         </div>
       </section>
 
@@ -133,7 +134,7 @@
         <div class="landing-faq">
           <p class="eyebrow">FAQ</p>
           <details open><summary>Is RecallStride free?</summary><p>Yes. Free accounts can create notes and choose one OCR revision deck to try.</p></details>
-          <details><summary>What does Pro unlock?</summary><p>Pro unlocks every released OCR topic pack, cross-topic practice and supporting note tools. Component 2 is being prepared for academic review; a subscription does not bypass that review.</p></details>
+          <details><summary>What does Pro unlock?</summary><p>Pro unlocks all published Component 1 and Component 2 topic packs, cross-topic practice and supporting note tools. Both components are available with owner-authorised publication and are awaiting independent academic review. Separate draft questions and worked examples remain withheld from every plan.</p></details>
           <details><summary>Is it only for OCR A-Level Computer Science?</summary><p>The current product focus is OCR A-Level Computer Science. The structure can expand to other courses as the product grows.</p></details>
           <details><summary>Can I cancel anytime?</summary><p>Paid plans are managed securely through Stripe, including billing changes and cancellation.</p></details>
           <details><summary>How is student data handled?</summary><p>Your account stores your notes and study progress. Account settings include data export and deletion controls. Existing shared spaces retain their membership permissions; see the privacy information for details.</p></details>
@@ -610,8 +611,11 @@
             <button type="button" role="tab" aria-selected="false" data-practice-mode="exam">Exam Practice</button>
             <button type="button" role="tab" aria-selected="false" data-practice-mode="mock">Mini mock</button>
             <button type="button" role="tab" aria-selected="false" data-practice-mode="labs">CS Labs</button>
+            <button type="button" role="tab" aria-selected="false" data-practice-mode="coding">Pseudocode</button>
           </div>
         </section>
+
+        <section id="coding-practice-section" class="student-revision-section" aria-label="Pseudocode practice" hidden></section>
 
         <section id="quick-practice-section" class="neat-questions-section student-revision-section" aria-labelledby="neat-questions-title">
           <div class="neat-questions-head">
@@ -985,7 +989,7 @@
             <button class="plan-button" type="button" data-plan="pro">Choose Pro</button>
           </article>
         </div>
-        <p class="pricing-contract-note">£3.99 billed monthly. Cancel renewal in billing; paid access continues until the paid period ends. Your own notes and account data remain accessible after downgrade. Component 2 is in academic review, and no plan bypasses that release gate.</p>
+        <p class="pricing-contract-note">£3.99 billed monthly. Cancel renewal in billing; paid access continues until the paid period ends. Your own notes and account data remain accessible after downgrade. Published Component 1 and Component 2 packs are available under Pro, but neither component has independent academic approval. Separate draft activities remain withheld from every plan.</p>
         <div class="billing-footer">
           <p>Already subscribed? Manage invoices, payment methods, and cancellations securely in Stripe.</p>
           <button class="plan-button subtle" type="button" data-billing-portal>Manage billing</button>
@@ -1294,6 +1298,9 @@
     <script src="neat-questions.js?v=20260824-relaunch"></script>
     <script src="learning-model.js?v=20260911-student-only"></script>
     <script src="/practice-drafts.js?v=20260911-resume-r1"></script>
-    <script src="/app-relaunch.js?v=20260913-spec-r1"></script>
+    <script src="/policy-content.js?v=20261007-readiness-r1"></script>
+    <script src="/pseudocode-drafts.js?v=20261007-readiness-r1"></script>
+    <script src="/pseudocode-practice.js?v=20261007-readiness-r1"></script>
+    <script src="/app-relaunch.js?v=20261007-readiness-r1"></script>
   </body>
 </html>

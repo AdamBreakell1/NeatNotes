@@ -1,4 +1,5 @@
-require("dotenv").config();
+// Test fixtures explicitly bypass local provider configuration and real data.
+if (process.env.RECALLSTRIDE_SKIP_DOTENV !== "true") require("dotenv").config();
 
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -20,6 +21,8 @@ const { QUESTION_BANK, getPublicQuestion, markAnswer, validateQuestionBank } = r
 const { LABS, assessLab, getPublicLab, validateLabs } = require("./cs-labs");
 const { loadTopics, isReleased, hasAvailableConcepts } = require("./backend/services/contentRepository");
 const { createAuthContinuationStore } = require("./backend/services/authContinuation");
+const { registerPracticeRoutes } = require("./backend/services/pseudocodePractice");
+const { registerPilotRoutes } = require("./backend/services/pilotTelemetry");
 const { availableQuiz } = require("./component-one-quizzes");
 const { REPAIR_LESSONS, isRepairReleased, publicRepair, assessRepair } = require("./repair-lessons");
 const contentReviewState = require("./content-review.json");
@@ -946,6 +949,9 @@ app.delete("/api/account/sessions/others", requireUser, (req, res) => {
   res.json({ message: `${Number(result.changes)} other session${Number(result.changes) === 1 ? "" : "s"} signed out.` });
 });
 
+const codingPracticeStore = registerPracticeRoutes(app, { db, requireUser, rateLimit: revisionRateLimiter, canAccess: canAccessRevisionDeck });
+const pilotTelemetry = registerPilotRoutes(app, { db, requireUser, requireAdmin, rateLimit: revisionRateLimiter, consented: (owner) => normalizeNotificationPreferences(parseJsonValue(getStudentProfile(owner)?.notification_preferences, {})).usageAnalytics });
+
 app.get("/api/account/export", requireUser, (req, res) => {
   const workspaces = db.prepare(`
     SELECT workspaces.id, workspaces.name, workspaces.kind, workspace_members.role,
@@ -957,6 +963,9 @@ app.get("/api/account/export", requireUser, (req, res) => {
   const placeholders = workspaceIds.map(() => "?").join(",");
   const exportData = {
     exportedAt: new Date().toISOString(),
+    codingPractice: codingPracticeStore.list(req.user.id),
+    pilotEvents: pilotTelemetry.export(req.user.id),
+    codingDraftsNotice: "Source, input fixtures and predictions stay in browser storage. Use Export coding data in Practice to include this device's drafts.",
     account: publicUser(req.user),
     profile: getAccountProfiles(req.user.id),
     workspaces,
@@ -1806,6 +1815,12 @@ function registerPublicAssetRoutes() {
     ["/learning-model.js", "application/javascript"],
     ["/revision-session.js", "application/javascript"],
     ["/practice-drafts.js", "application/javascript"],
+    ["/policy-content.js", "application/javascript"],
+    ["/pseudocode-engine.js", "application/javascript"],
+    ["/pseudocode-worker.js", "application/javascript"],
+    ["/pseudocode-practice.js", "application/javascript"],
+    ["/pseudocode-drafts.js", "application/javascript"],
+    ["/pseudocode.css", "text/css"],
     ["/ocr-content.js", "application/javascript"],
     ["/service-worker.js", "application/javascript"],
     ["/manifest.webmanifest", "application/manifest+json"],
@@ -1819,6 +1834,7 @@ function registerPublicAssetRoutes() {
 
   publicAssets.forEach((contentType, publicPath) => {
     app.get(publicPath, (req, res) => {
+      if (publicPath === "/pseudocode-worker.js") res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'self'; connect-src 'none'");
       res.type(contentType);
       res.sendFile(path.join(__dirname, publicPath.slice(1)));
     });
@@ -1867,10 +1883,10 @@ function renderPublicTopicPage(topic) {
     <meta property="og:title" content="${escapeHtml(topic.code)} ${escapeHtml(topic.title)} | RecallStride"><meta property="og:description" content="${escapeHtml(description)}">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"></head>
     <body class="public-topic-page"><header><a class="public-topic-brand" href="/"><span class="brand-mark">RS</span><span><strong>RecallStride</strong><small>A BreakellSystems product</small></span></a><a class="primary-account-button" href="/?signup=1">Start free</a></header>
-    <main><p class="eyebrow">OCR H446 · Component 01</p><h1>${escapeHtml(topic.code)} ${escapeHtml(topic.title)}</h1><p class="public-topic-summary">${escapeHtml(description)}</p>
+    <main><p class="eyebrow">OCR H446 · Component ${topic.code.startsWith("2.") ? "02" : "01"}</p><h1>${escapeHtml(topic.code)} ${escapeHtml(topic.title)}</h1><p class="public-topic-summary">${escapeHtml(description)}</p>
     <section><div><p class="eyebrow">Topic overview</p><h2>Build accurate recall, then apply it.</h2><p>RecallStride combines active flashcards, quick checks, exam practice and scheduled review. Progress is based on learning evidence rather than passive completion.</p></div><ul>${concepts}</ul></section>
     <aside><div><strong>${Number(topic.cards?.length || 0)} original retrieval cards</strong><span>Mapped to stable OCR concepts</span></div><a href="/?demo=1">Try the interactive demo</a><a href="/?signup=1">Create a free account</a></aside>
-    <p class="public-topic-disclaimer">RecallStride is independently produced and is not endorsed by OCR. OCR is a registered trademark of OCR.</p></main></body></html>`;
+    <p class="public-topic-disclaimer">Published with owner authorisation; awaiting independent academic review. RecallStride is independently produced and is not endorsed by OCR. OCR is a registered trademark of OCR.</p></main></body></html>`;
 }
 
 function getOptionalSessionUser(req) {
@@ -2299,7 +2315,7 @@ function normalizeNotificationPreferences(value) {
 function sanitizeEventMetadata(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const safe = {};
-  const blocked = /email|name|answer|message|body|content|password|token/i;
+  const blocked = /email|name|answer|message|body|content|password|token|source|code|comment|input|prediction|text/i;
   Object.entries(value).slice(0, 20).forEach(([key, item]) => {
     if (blocked.test(key)) return;
     if (["string", "number", "boolean"].includes(typeof item)) {

@@ -1,0 +1,105 @@
+{
+  "generatedOn": "2026-10-07",
+  "status": "awaiting_independent_review",
+  "interpreterVersion": "rs-h446-1.0.0",
+  "reviewer": null,
+  "qualificationExperience": null,
+  "tasks": [
+    {
+      "taskId": "minutes-to-seconds",
+      "version": "2026-10-07.1",
+      "sha256": "e9fcb5e61f60692f0173f9e0df6ed1fd75180ea42d6f960c15bb17fd93e1dd0f",
+      "file": "minutes-to-seconds.md",
+      "reviewer": null,
+      "reviewedAt": null,
+      "decision": "pending",
+      "expectedOutputsChecked": false,
+      "alternativesChecked": false,
+      "mutationsChecked": false
+    },
+    {
+      "taskId": "temperature-range",
+      "version": "2026-10-07.1",
+      "sha256": "156379c4c499cc15d5636ada020347f87c60167c8cac68e282345bfecdc01f1e",
+      "file": "temperature-range.md",
+      "reviewer": null,
+      "reviewedAt": null,
+      "decision": "pending",
+      "expectedOutputsChecked": false,
+      "alternativesChecked": false,
+      "mutationsChecked": false
+    },
+    {
+      "taskId": "running-total",
+      "version": "2026-10-07.1",
+      "sha256": "b04b61dba3392540af3dc96b17a085c6e073a3f08d049c6dcc37beecd7fccf09",
+      "file": "running-total.md",
+      "reviewer": null,
+      "reviewedAt": null,
+      "decision": "pending",
+      "expectedOutputsChecked": false,
+      "alternativesChecked": false,
+      "mutationsChecked": false
+    },
+    {
+      "taskId": "code-length",
+      "version": "2026-10-07.1",
+      "sha256": "bec5c6c8420b9c28a4b2fda049b94441419a3a21d6b36044cc3d0d4536b28ed7",
+      "file": "code-length.md",
+      "reviewer": null,
+      "reviewedAt": null,
+      "decision": "pending",
+      "expectedOutputsChecked": false,
+      "alternativesChecked": false,
+      "mutationsChecked": false
+    },
+    {
+      "taskId": "count-letter",
+      "version": "2026-10-07.1",
+      "sha256": "14998985aa5eb040538099527833f970cf339b7d80e7c9b0e308244988fad2b2",
+      "file": "count-letter.md",
+      "reviewer": null,
+      "reviewedAt": null,
+      "decision": "pending",
+      "expectedOutputsChecked": false,
+      "alternativesChecked": false,
+      "mutationsChecked": false
+    },
+    {
+      "taskId": "first-match",
+      "version": "2026-10-07.1",
+      "sha256": "3eec317ed1a99d2868e35af11a31d901b9a019452603298a50369e01b4470fe0",
+      "file": "first-match.md",
+      "reviewer": null,
+      "reviewedAt": null,
+      "decision": "pending",
+      "expectedOutputsChecked": false,
+      "alternativesChecked": false,
+      "mutationsChecked": false
+    },
+    {
+      "taskId": "countdown-trace",
+      "version": "2026-10-07.1",
+      "sha256": "2527dd5e8864efb4ffd1b0d2d90e53c7034c8cc006db5df988411b6b2471c106",
+      "file": "countdown-trace.md",
+      "reviewer": null,
+      "reviewedAt": null,
+      "decision": "pending",
+      "expectedOutputsChecked": false,
+      "alternativesChecked": false,
+      "mutationsChecked": false
+    },
+    {
+      "taskId": "ticket-total",
+      "version": "2026-10-07.1",
+      "sha256": "60585870f2845b4ec37c5b5fc7c20d0df6b1c2cf15b41fb60f1c1c52ece970ea",
+      "file": "ticket-total.md",
+      "reviewer": null,
+      "reviewedAt": null,
+      "decision": "pending",
+      "expectedOutputsChecked": false,
+      "alternativesChecked": false,
+      "mutationsChecked": false
+    }
+  ]
+}

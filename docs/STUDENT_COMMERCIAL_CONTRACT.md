@@ -1,5 +1,9 @@
 # Student relaunch: commercial and legacy contract
 
+**Later owner instruction, 7 October:** “deploy it” authorises this guarded engineering rollout; see [DEPLOYMENT_2026_10_07.md](DEPLOYMENT_2026_10_07.md). Academic/legal approval and provider verification remain outstanding. This supersedes the earlier local-only scope below, not the protected content or financial boundaries.
+
+**Current scope, 7 October 2026:** the commercial-readiness/pseudocode brief authorises local implementation only. Earlier deployment permission below is historical and does not apply to this increment. Provider checks remain pending by the user's instruction. [The current audit](COMMERCIAL_READINESS.md), [policy facts and review questions](POLICY_REVIEW.md) and [release report](RELEASE_REPORT.md) take precedence. C1/C2 owner-authorised publication is preserved, with academic review pending; new coding tasks remain withheld in production. Legacy classroom endpoints now return authenticated 410, while retained records, price mappings and export/deletion safeguards remain. This supersedes the earlier promise of reachable classroom workflows below.
+
 **Release decision, 12 September:** the user now explicitly authorises the student-only retirement and deployment. Existing paid student access, billed prices and provider IDs are retained. Account settings explains retirement and links to existing Billing/Contact pathways. Owned historical classes/assignments and personal attempts/completions are exportable; deletion blocks owned archived groups/centres to prevent cascading data loss. Production aggregate inspection found zero class groups/assignments before rollout. No cancellation, refund, new price or customer email is part of this release. C2 publication is separately owner-authorised without claiming independent academic approval. See the current checkpoint for backup and deployment evidence; earlier workflow assumptions below are historical.
 
 7 September 2026. Implementation facts and proposals, not approved legal terms.
@@ -49,13 +53,13 @@ Before any sunset, obtain approval for:
 
 ## Brand decision
 
-Neat Notes remains the public brand and all stable identity/billing/content IDs remain unchanged.
+RecallStride is the selected brand, a BreakellSystems product. Existing `neatnotes.onrender.com` and `neatnotescontact@gmail.com` remain the domain and support inbox; stable account/billing/content IDs are unchanged. Naming clearance is pending. The candidate comparison below records the earlier selection research.
 
 | Candidate | Benefit | Risk / validation |
 | --- | --- | --- |
 | Neat Revision | Continuity and immediate category clarity | Descriptive; test distinctiveness and recognition |
 | RecallStride | Broader retrieval/progress positioning | Less immediately academic; test pronunciation and comprehension |
 
-Neither candidate has legal, domain or handle clearance. Obtain UKIPO/domain/social checks and student comprehension feedback before selection. Do not buy or rename anything automatically.
+Legal, domain and handle clearance is still pending. Complete UKIPO/confusion/domain/social checks and student comprehension feedback before promotion. Do not buy or rename anything automatically.
 
 Rebrand checklist: reversible brand configuration and asset references; old-domain redirects; topic URLs/canonicals/sitemap/social cards; sender SPF/DKIM/DMARC; verification/reset URLs; OAuth callbacks; Stripe portal/checkout/receipt URLs; support and policy links; manifest/icons and service-worker cache version. Preserve account, concept, customer and subscription IDs. Stage, test old links and obtain explicit DNS/deployment approval.

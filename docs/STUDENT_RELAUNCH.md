@@ -1,6 +1,12 @@
 # Student relaunch checkpoint
 
-## Current release: student-only and Component 2, 12 September 2026
+## Current checkpoint: commercial readiness and pseudocode, 7 October 2026
+
+**Later instruction:** the user requested “deploy it”. Follow [DEPLOYMENT_2026_10_07.md](DEPLOYMENT_2026_10_07.md) for the guarded production rollout and evidence. Earlier local-only statements below record the completed preparation phase. Coding approvals remain empty and provider checks pending.
+
+Start with [CONTINUE_RECALLSTRIDE.md](CONTINUE_RECALLSTRIDE.md) and [RELEASE_REPORT.md](RELEASE_REPORT.md). This local increment continues from `3f8b02e`; existing accounts/data/access remain intact. Earlier deployment permissions and C2 locks below are historical: this brief permits local work only, preserves owner-authorised C1/C2 publication with academic review pending, and withholds the eight new coding drafts in production. Provider checks are pending by the user's explicit decision. No push, deployment or production/provider change was performed. Do not repeat the relaunch, migrations or branding selection when continuing.
+
+## Historical release: student-only and Component 2, 12 September 2026
 
 This section supersedes the historical no-deploy and C2-lock instructions below. The user explicitly authorised commit, push and deployment to the EXISTING https://neatnotes.onrender.com/ site, and confirmed: "Component 2 content all needs to be shipped onto live as its ready."
 

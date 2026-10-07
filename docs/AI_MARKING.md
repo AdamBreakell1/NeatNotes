@@ -8,6 +8,8 @@ Original and improved submissions remain in `exam_attempts`. Its legacy NOT NULL
 
 ## Evidence boundary
 
+The 7 October pseudocode increment similarly provides local functional checks plus an unscored reasoning checklist. No runtime LLM is called. Browser outcome metadata is explicitly untrusted, stored separately in `coding_practice_attempts`, and cannot update verified mastery, schedules or entitlements. The development corpus and exact task hashes are documented in `pseudocode/benchmark.json` and `pseudocode/review/`; independent academic approval remains pending.
+
 New guided responses do not create strong learning evidence. Historic `exam_response` records remain stored but are excluded from current mastery calculations. Scheduling projections containing old keyword marks are rebuilt in memory from retained non-exam evidence (`trustedSchedule.js`). Original records are not destructively migrated. Reconstruction is heuristic, not recovery of an examiner-validated mark.
 
 The benchmark tests paraphrases, negated claims, keyword stuffing, partial reasoning, irrelevant material, spelling, units and repeated calls. Passing means these never receive validated marks; it does not establish semantic marking accuracy.

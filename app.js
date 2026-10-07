@@ -105,6 +105,7 @@ let adaptivePlanPreview = null;
 let accountProfile = null;
 let focusBeforeGlobalSearch = null;
 let focusBeforeSettings = null;
+let focusBeforeLegal = null;
 let globalSearchSelection = 0;
 let onboardingStep = 1;
 let focusBeforeOnboarding = null;
@@ -633,7 +634,7 @@ function handlePracticeModeChange(event) {
   const button = event.target.closest("[data-practice-mode]");
   if (!button) return;
   practiceRequestId += 1;
-  activePracticeMode = ["exam", "mock", "labs"].includes(button.dataset.practiceMode) ? button.dataset.practiceMode : "quick";
+  activePracticeMode = ["exam", "mock", "labs", "coding"].includes(button.dataset.practiceMode) ? button.dataset.practiceMode : "quick";
   renderPracticeMode();
   clearInterval(miniMockTimer);
   elements.examLoadQuestionButton.disabled = false;
@@ -652,6 +653,10 @@ function renderPracticeMode() {
   if (!elements.practiceModeBar) return;
   updatePracticeFocus();
   const inPractice = activeAppSection === "practice";
+  const codingActive = inPractice && activePracticeMode === "coding";
+  document.querySelector("#coding-practice-section").hidden = !codingActive;
+  if (codingActive) window.CodingPractice.show({ owner: !isGuestMode ? currentUser?.id : null, analytics: parseClientJson(accountProfile?.studentProfile?.notification_preferences, {}).usageAnalytics === true, login: () => openAuthModal("login"), decks: () => setAppSection("revise") });
+  else window.CodingPractice.hide();
   elements.practiceModeBar.hidden = !inPractice;
   if (!inPractice) {
     elements.quickPracticeSection.hidden = true;
@@ -659,7 +664,7 @@ function renderPracticeMode() {
     return;
   }
   elements.quickPracticeSection.hidden = activePracticeMode !== "quick";
-  elements.examPracticeSection.hidden = activePracticeMode === "quick";
+  elements.examPracticeSection.hidden = ["quick", "coding"].includes(activePracticeMode);
   if (activePracticeMode === "mock") {
     document.querySelector("#exam-practice-title").textContent = "Timed mini mock";
     document.querySelector("#exam-practice-description").textContent = "Practise a short mixed-topic set at your own pace, then review your reasoning. Drafts resume on this device for seven days.";
@@ -1983,6 +1988,7 @@ async function deleteAccount() {
   try {
     const ownerId = currentUser.id;
     await api("/api/account", { method: "DELETE", body: { confirmation, password } });
+    window.CodingPractice.sessionChanged(ownerId, true);
     try {
       const ownedKeys = window.PracticeDrafts.accountStorageKeys(Object.keys(localStorage), ownerId,
         [CARD_ATTEMPTS_KEY, ACTIVITY_EVENTS_KEY, REVIEW_SCHEDULES_KEY, MISTAKE_JOURNAL_KEY, STUDY_HISTORY_KEY, REVISION_BADGES_KEY, NEAT_QUIZ_PROGRESS_KEY]);
@@ -2055,66 +2061,25 @@ function handleLegalModalClick(event) {
 }
 
 function openLegalModal(page = "privacy") {
+  if (elements.legalModal.hidden) focusBeforeLegal = document.activeElement;
   const legalPage = getLegalPageContent(page);
   elements.legalTitle.textContent = legalPage.title;
   elements.legalContent.innerHTML = legalPage.html;
   elements.legalModal.hidden = false;
   document.body.classList.add("modal-open");
+  elements.legalModal.querySelector("button[data-close-legal]").focus();
   trackEvent("legal_page_opened", { page });
 }
 
 function closeLegalModal() {
   elements.legalModal.hidden = true;
   document.body.classList.remove("modal-open");
+  focusBeforeLegal?.focus?.();
+  focusBeforeLegal = null;
 }
 
 function getLegalPageContent(page) {
-  const pages = {
-    privacy: {
-      title: "Privacy Policy",
-      html: `<p>RecallStride uses account details, notes and revision activity to provide the workspace, save progress and support enquiries.</p>
-        <ul>
-          <li>Contact enquiries are routed to the RecallStride support inbox.</li>
-          <li>Student workspace data is used to run personal notes and revision features.</li>
-          <li>Recall and worked-example drafts are saved for your account in this browser, not synced to other devices. They stop resuming after 30 days without an update and are removed when next checked.</li>
-          <li>Payment processing is handled securely by Stripe when subscriptions are enabled.</li>
-        </ul>
-        <p>This is a summary of how your personal revision workspace handles data.</p>`,
-    },
-    terms: {
-      title: "Terms of Service",
-      html: `<p>RecallStride is a personal OCR A-Level Computer Science revision workspace.</p>
-        <ul>
-          <li>Users are responsible for the content they add to notes and collaboration spaces.</li>
-          <li>Accounts may be limited or suspended if the service is misused.</li>
-          <li>Subscription features depend on the active plan attached to the account.</li>
-        </ul>`,
-    },
-    cookies: {
-      title: "Cookie Policy",
-      html: `<p>RecallStride uses essential cookies and local browser storage to keep users signed in, remember preferences and save local guest progress and account-scoped practice drafts.</p>
-        <p>Analytics and marketing cookies should only be added with clear consent controls.</p>`,
-    },
-    "data-protection": {
-      title: "Data Protection",
-      html: `<p>BreakellSystems is building RecallStride with UK education workflows in mind.</p>
-        <ul>
-          <li>Only collect data needed to run accounts, notes, revision progress, payments and support.</li>
-          <li>Review your account data and export personal notes and revision history in Settings.</li>
-        </ul>`,
-    },
-    billing: {
-      title: "Cancellation and Billing",
-      html: `<p>Subscriptions use Stripe Checkout and the Stripe billing portal when payment settings are active.</p>
-        <ul>
-          <li>Students can start on the Free plan and upgrade to Pro.</li>
-          <li>Subscribers manage payment methods, invoices and cancellation through Stripe.</li>
-          <li>Contact support if you need help with an existing subscription.</li>
-        </ul>`,
-    },
-  };
-
-  return pages[page] || pages.privacy;
+  return window.RecallPolicies.get(page);
 }
 
 function switchSettingsTab(event) {
@@ -2344,6 +2309,7 @@ async function signup(event) {
 }
 
 async function logout() {
+  window.CodingPractice.sessionChanged(currentUser?.id, true);
   await api("/api/auth/logout", { method: "POST" }).catch(() => {});
   currentUser = null;
   isGuestMode = true;
@@ -2351,6 +2317,7 @@ async function logout() {
 }
 
 function applyAuthenticatedSession(user, nextPlans = null) {
+  if (currentUser?.id && currentUser.id !== user.id) window.CodingPractice.sessionChanged(currentUser.id, true);
   currentUser = user;
   selectAccountLearningState();
   plans = nextPlans || plans;
@@ -3243,6 +3210,16 @@ function handlePricingModalClick(event) {
 }
 
 function handleGlobalKeydown(event) {
+  if (!elements.legalModal.hidden && event.key === "Tab") {
+    const controls = [...elements.legalModal.querySelectorAll("button, a[href], [tabindex='0']")].filter((node) => !node.disabled && node.getClientRects().length);
+    const first = controls[0], last = controls.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault(); last?.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault(); first?.focus();
+    }
+    return;
+  }
   const target = event.target;
   const isTyping = target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target?.isContentEditable;
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
@@ -3924,7 +3901,7 @@ function renderRevisionTopicList() {
 }
 
 function renderRevisionAccessPanel(topic, access) {
-  if (topic.contentAvailable === false) return `<section class="revision-paywall-panel"><p class="eyebrow">Academic review</p><h3>This topic is being reviewed</h3><p>Component 2 material is prepared, but has not yet passed its publication review. A paid plan does not bypass this review.</p><button type="button" data-component="h446-01">Browse Component 1</button></section>`;
+  if (topic.contentAvailable === false) return `<section class="revision-paywall-panel"><p class="eyebrow">Content availability</p><h3>This topic is unavailable</h3><p>This pack is withheld for review or correction. Published Component 1 and 2 packs remain available with independent academic review pending. A paid plan does not bypass a withheld-content gate.</p><button type="button" data-component="h446-01">Browse Component 1</button></section>`;
   const title = access.canClaim ? "Choose your free revision deck" : "This deck is part of Pro";
   const copy = access.canClaim
     ? "Free accounts can unlock one complete OCR topic deck with flashcards, instant marking and streak tracking. Pick carefully: Pro unlocks every released deck."
@@ -6608,7 +6585,9 @@ async function downloadWorkspaceData() {
         const payload = await response.json().catch(() => ({}));
         throw new Error(payload.error || "The account export could not be prepared.");
       }
-      const blob = await response.blob();
+      const exportData = await response.json();
+      exportData.localCodingData = window.CodingPractice.exportLocal(currentUser.id);
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
       downloadBlob(blob, `neat-notes-account-export-${new Date().toISOString().slice(0, 10)}.json`);
       elements.settingsMessage.textContent = "Account export downloaded.";
       elements.settingsMessage.className = "status-message success";

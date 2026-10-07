@@ -1,6 +1,12 @@
 # Student relaunch: release and rollback
 
-## 12 September release override
+## Current local scope, 7 October 2026
+
+**Later instruction:** the user explicitly requested this guarded deployment. [DEPLOYMENT_2026_10_07.md](DEPLOYMENT_2026_10_07.md) is the current rollout/rollback record; it supersedes the no-deployment scope below without changing review/provider gates.
+
+The commercial-readiness/pseudocode brief does **not** authorise production deployment. Earlier deployment permissions below apply to historical releases only. Use [RELEASE_REPORT.md](RELEASE_REPORT.md) and [OPERATIONAL_VALIDATION.md](OPERATIONAL_VALIDATION.md) for this increment's promotion/rollback steps. The user's provider decision is **pending**. Preserve existing owner-authorised C1/C2 publication with independent review pending; do not re-lock C2 based on the superseded September 7 instructions. New coding tasks require exact-version independent review before production serving; the explicit development preview cannot override that gate in production. Current schema additions are `coding_practice_attempts` and `pilot_events`, with account cascade/30-day retention. No destructive migration or provider changes.
+
+## Historical 12 September release override
 
 Deployment to the existing Render service and publication of all prepared C2 material are explicitly owner-authorised. C2 version-specific publication records are separate from independent academic approval. C1 authored MCQs/repairs remain gated. The current release removes classroom endpoints (authenticated 410) without dropping historic records. Account export includes owned archival material and personal attempts; deletion blocks owned archival groups/centres. Legacy paid subscriptions retain student access and billed prices, with an explanatory account-settings notice. No customer cancellations or refunds are performed.
 

@@ -13,6 +13,10 @@
     "validate:content": "node scripts/validate-content.js",
     "test": "node --test backend/*.test.js backend/**/*.test.js",
     "test:browser": "node scripts/browser-smoke.cjs",
+    "test:coding-browser": "node scripts/browser-pseudocode.cjs",
+    "benchmark:coding": "node scripts/benchmark-pseudocode.js",
+    "benchmark:storage": "node scripts/benchmark-storage.js",
+    "review:coding": "node scripts/review-pseudocode.js",
     "coverage:content": "node scripts/report-coverage.js",
     "review:content": "node scripts/review-content.js"
   },
