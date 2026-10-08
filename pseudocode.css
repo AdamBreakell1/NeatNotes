@@ -8,7 +8,7 @@
 #coding-practice-section h4 { margin: 12px 0; }
 #coding-practice-section p { font-size: .9rem; color: var(--text-secondary); line-height: 1.6; margin: 7px 0 14px; }
 #coding-practice-section .eyebrow { font-size: .72rem; margin: 0; }
-#coding-practice-section button { min-height: 40px; border: 1px solid var(--border); border-radius: 7px; padding: 8px 12px; background: var(--surface-subtle); color: var(--text); cursor: pointer; font: inherit; font-size: .85rem; white-space: normal; }
+#coding-practice-section button { min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius-control,10px); padding: 8px 12px; background: var(--surface-subtle); color: var(--text); cursor: pointer; font: inherit; font-size: .85rem; white-space: normal; }
 #coding-practice-section button:hover { border-color: var(--text-secondary); }
 #coding-practice-section button[aria-pressed=true] { color: var(--text); background: var(--surface); border-color: #648eb9; box-shadow: inset 0 -2px #648eb9; }
 #coding-practice-section :is(button,input,textarea,select,summary):focus-visible { outline: 3px solid #5baef5; outline-offset: 2px; }
@@ -20,9 +20,8 @@
 #coding-practice-section details { border-top: 1px solid var(--border); }
 #coding-practice-section pre { font: 13px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background: var(--surface-subtle); color: var(--text); border-radius: 7px; padding: 10px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; margin: 8px 0 12px; }
 #coding-practice-section code { font-family: ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
-.coding-studio-head { display: flex; justify-content: space-between; gap: 24px; align-items: center; padding: 22px 24px; border-bottom: 1px solid var(--border); }
-.coding-studio-head p:last-child { margin-bottom: 0 !important; }
-.coding-studio-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; justify-content: end; max-width: 380px; }
+.coding-studio-head { padding: 14px 24px; border-bottom: 1px solid var(--border); }
+.coding-studio-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; width: 100%; }
 .coding-studio-actions .coding-select-label { width: 100%; margin: 4px 0 0 !important; }
 .coding-select-label select { margin-top: 5px; font-size: 14px !important; }
 .coding-library { background: var(--surface-subtle); padding: 20px 24px; border-bottom: 1px solid var(--border); }
@@ -32,8 +31,15 @@
 #coding-practice-section .coding-task-card { background: var(--surface); text-align: left; display: grid; gap: 6px; padding: 16px; }
 .coding-task-card span, .coding-task-card small { color: var(--text-secondary); font-size: .75rem; }
 .coding-task-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; gap: 16px; border-bottom: 1px solid var(--border); }
+.coding-task-head > div { min-width: 0; }
+.coding-task-head > button { flex: 0 0 auto; }
+#coding-practice-section .coding-task-head h2 { font-size: 1.2rem; line-height: 1.4; margin: 3px 0; }
+#coding-practice-section .coding-task-summary { display: none; }
 .coding-workbench { display: grid; grid-template-columns: minmax(250px,320px) minmax(0,1fr); }
-.coding-guide { border-right: 1px solid var(--border); padding: 14px 18px 22px; min-width: 0; max-height: 960px; overflow: auto; }
+.coding-guide-disclosure { min-width: 0; border-right: 1px solid var(--border); background: var(--surface-subtle); }
+#coding-practice-section .coding-guide-disclosure { border-top: 0; }
+#coding-practice-section .coding-guide-disclosure > summary { display: none; }
+.coding-guide { padding: 14px 18px 22px; min-width: 0; max-height: 960px; overflow: auto; }
 .coding-main { padding: 14px 20px 20px; min-width: 0; }
 .coding-tabs { display: flex; gap: 5px; flex-wrap: wrap; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 12px; }
 #coding-practice-section .coding-tabs button { flex: 1; padding-inline: 8px; }
@@ -62,8 +68,10 @@
 .coding-string { color: #a4e9c7; }
 .coding-number { color: #ffce8a; }
 .coding-comment { color: #a8b8ce; }
-.coding-runbar { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin: 12px 0 6px; }
-#coding-practice-section #coding-run { color: #fff; background: #245b97; border-color: #245b97; font-weight: 700; min-width: 100px; }
+.coding-runbar { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; margin: 10px 0 12px; }
+#coding-practice-section #coding-run { color: var(--on-accent,#fff); background: var(--accent); border-color: var(--accent); font-weight: 700; min-width: 100px; }
+#coding-practice-section .coding-editor-tools { border-top: 0; }
+#coding-practice-section .coding-editor-tools > summary { display: none; }
 #coding-assistance { margin-left: auto; font-size: .75rem; color: var(--text-secondary); }
 #coding-practice-section #coding-editor-help { font-size: .75rem; margin: 8px 0; }
 #coding-practice-section #coding-status { font-size: .85rem; color: var(--text); margin: 10px 0; min-height: 25px; }
@@ -92,35 +100,32 @@
 #coding-trace-values { max-height: 260px; }
 .coding-data { padding: 0 24px 14px; }
 .coding-data button { margin: 4px 6px 8px 0; }
-#revision-view.coding-workspace-active > .curriculum-context { display: none; }
-#revision-view.coding-workspace-active #practice-mode-bar > div:first-child { display: none; }
-#revision-view.coding-workspace-active #practice-mode-bar { padding-block: 12px; margin-bottom: 0; }
-@media (max-width: 1000px) { .coding-workbench { grid-template-columns: minmax(230px,280px) minmax(0,1fr); } .coding-main { padding: 12px; } .coding-studio-head { padding: 18px; } }
+@media (max-width: 1000px) { .coding-workbench { grid-template-columns: minmax(230px,280px) minmax(0,1fr); } .coding-main { padding: 12px; } .coding-studio-head { padding: 14px 18px; } }
 @media (max-width: 760px) {
   #coding-practice-section { width: calc(100% - 20px); }
-  .coding-studio-head { flex-direction: column; align-items: stretch; gap: 12px; }
-  .coding-studio-actions { justify-content: start; max-width: none; }
+  .coding-studio-head { padding: 12px 16px; }
   .coding-workbench { grid-template-columns: minmax(0,1fr); }
-  .coding-guide { border-right: 0; border-bottom: 1px solid var(--border); max-height: 440px; }
-  .coding-task-head { padding: 14px 18px; }
+  .coding-guide-disclosure { border-right: 0; border-bottom: 1px solid var(--border); }
+  #coding-practice-section .coding-guide-disclosure > summary { display: list-item; list-style-position: inside; padding: 12px 16px; }
+  .coding-guide { max-height: 500px; }
+  .coding-task-head { padding: 14px 16px; align-items: start; }
+  #coding-practice-section .coding-task-summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; font-size: .8rem; margin: 7px 0 0; }
+  .coding-task-head > button { max-width: 95px; }
   .coding-library { padding: 14px; }
   .coding-library-filters { grid-template-columns: 1fr 1fr; gap: 10px; }
   #coding-task-count { grid-column: 1/-1; padding: 0; }
   .coding-editor-heading { flex-wrap: wrap; gap: 8px; }
   #coding-assistance { width: 100%; margin: 2px 0; }
-  #coding-practice-section :is(#coding-source,#coding-highlight,#coding-lines), .coding-code-layers { height: 340px; }
+  #coding-practice-section .coding-editor-tools > summary { display: list-item; list-style-position: inside; padding: 8px 0 12px; font-size: .8rem; }
+  #coding-practice-section :is(#coding-source,#coding-highlight,#coding-lines), .coding-code-layers { height: 280px; }
+  #coding-practice-section .coding-edit-tools button { min-height: 44px; }
+  .coding-main { padding: 12px 14px 18px; }
   .coding-data { padding-inline: 14px; }
 }
 @media (max-width: 420px) { .coding-library-filters, .coding-comparison { grid-template-columns: 1fr; } .coding-task-head { align-items: start; } #coding-task-list { grid-template-columns: 1fr; } }
 @media (forced-colors: active) { #coding-practice-section #coding-source { color: CanvasText; -webkit-text-fill-color: CanvasText; background: Canvas; caret-color: CanvasText; } #coding-highlight { visibility: hidden; } }
-/* Keep the mode switch compact so the coding workspace starts near the top. */
-#revision-view.coding-workspace-active #practice-mode-bar { justify-content: center; }
-#revision-view.coding-workspace-active .practice-mode-tabs { display: flex; flex-wrap: wrap; max-width: none; width: auto; }
-#revision-view.coding-workspace-active .practice-mode-tabs button { flex: 0 0 auto; }
 @media (min-width: 1001px) {
-  .coding-studio-head { padding: 16px 24px; }
-  .coding-studio-actions { flex: 0 1 650px; max-width: 650px; }
-  .coding-studio-actions .coding-select-label { flex: 1 1 220px; width: auto; }
+  .coding-studio-actions .coding-select-label { flex: 0 1 440px; width: auto; margin-left: auto !important; }
 }
 @media (min-width: 761px) {
   #coding-practice-section :is(#coding-source,#coding-highlight,#coding-lines), .coding-code-layers { height: clamp(260px,32vh,410px); }

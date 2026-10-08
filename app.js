@@ -77,8 +77,13 @@ let activeWorkspaceId = null;
 let activeTag = "all";
 let selectedId = null;
 let saveTimer = null;
+let isCreatingNote = false;
 let isGuestMode = true;
 let activeAppSection = "home";
+let activeStudyView = "topics";
+let activeCodingTaskId = null;
+let navigationReady = false;
+let lastRenderedRoute = "";
 let activeRevisionTopicId = "cs-1-1-1";
 let activeComponentId = localStorage.getItem("neat-active-component") === "h446-02" ? "h446-02" : "h446-01";
 let revisionCardOrder = {};
@@ -107,9 +112,10 @@ let focusBeforeGlobalSearch = null;
 let focusBeforeSettings = null;
 let focusBeforeLegal = null;
 let globalSearchSelection = 0;
+let globalSearchRequestId = 0;
 let onboardingStep = 1;
 let focusBeforeOnboarding = null;
-let activePracticeMode = "quick";
+let activePracticeMode = "hub";
 let examPracticeState = null;
 let miniMockState = null;
 let miniMockTimer = null;
@@ -163,6 +169,8 @@ function changeComponent(componentId) {
   csLabState = null;
   clearInterval(miniMockTimer);
   renderRevisionPage();
+  updateWorkspaceHeader();
+  writeWorkspaceRoute("replace");
   if (activeAppSection === "practice") {
     if (activePracticeMode === "exam") loadExamPracticeQuestion();
     if (activePracticeMode === "mock") loadMiniMock();
@@ -485,15 +493,18 @@ elements.neatQuestionsCurrentLink.addEventListener("click", startActiveTopicQuiz
 elements.neatQuestionsGrid.addEventListener("click", handleNeatQuestionsClick);
 elements.neatQuizPanel.addEventListener("click", handleNeatQuizPanelClick);
 elements.practiceModeBar.addEventListener("click", handlePracticeModeChange);
-elements.practiceModeBar.addEventListener("keydown", (event) => {
-  const tabs = [...elements.practiceModeBar.querySelectorAll("[data-practice-mode]")];
-  const index = tabs.indexOf(event.target);
-  if (index < 0 || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+document.querySelector("#workspace-page-header").addEventListener("click", switchAppSection);
+document.querySelector("#study-activity-navigation").addEventListener("click", switchAppSection);
+document.querySelector("#practice-activity-navigation").addEventListener("click", switchAppSection);
+document.querySelector("#workspace-new-note-button").addEventListener("click", createNote);
+document.addEventListener("click", (event) => {
+  const link = event.target.closest("[data-workspace-route]");
+  if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
-  const next = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (index + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-  tabs[next].focus();
-  tabs[next].click();
+  setAppSection(link.dataset.workspaceRoute);
 });
+window.addEventListener("popstate", restoreWorkspaceRoute);
+window.addEventListener("hashchange", restoreWorkspaceRoute);
 elements.examLoadQuestionButton.addEventListener("click", () => {
   if (activePracticeMode === "mock") loadMiniMock({ restart: true });
   else if (activePracticeMode === "labs") loadCsLabs(true);
@@ -503,9 +514,12 @@ elements.examPracticePanel.addEventListener("submit", submitExamPracticeAnswer);
 elements.examPracticePanel.addEventListener("submit", submitCsLab);
 elements.examPracticePanel.addEventListener("click", handleExamPracticeClick);
 elements.examPracticePanel.addEventListener("input", handleMiniMockInput);
+elements.examPracticePanel.addEventListener("input", (event) => {
+  if (csLabState && event.target.closest("[data-lab-form]")) csLabState.answer = event.target.value;
+});
 document.querySelectorAll("[data-global-action]").forEach((button) => button.addEventListener("click", () => {
   button.closest("details").open = false;
-  const actions = { settings: () => openSettingsModal(), plans: openPlansModal, contact: () => setAppSection("contact"), login: () => openAuthModal("login"), signup: () => openAuthModal("signup"), logout: () => elements.topbarLogoutButton.click(), theme: () => document.querySelector(".theme-toggle").click() };
+  const actions = { settings: () => openSettingsModal(), plans: openPlansModal, contact: () => setAppSection("contact"), website: exitDemoWorkspace, login: () => openAuthModal("login"), signup: () => openAuthModal("signup"), logout: () => elements.topbarLogoutButton.click(), theme: () => document.querySelector(".theme-toggle").click() };
   actions[button.dataset.globalAction]?.();
 }));
 document.addEventListener("click", (event) => {
@@ -534,6 +548,8 @@ document.querySelector("#component-topic-select").addEventListener("change", (ev
   neatQuizState = createEmptyNeatQuizState();
   examPracticeState = null;
   renderRevisionPage();
+  updateWorkspaceHeader();
+  writeWorkspaceRoute("replace");
   if (activeAppSection === "practice" && activePracticeMode === "exam") loadExamPracticeQuestion();
 });
 elements.examPracticePanel.addEventListener("input", (event) => {
@@ -571,26 +587,115 @@ renderSettingsControls();
 renderAchievementSummary();
 renderDailyStudyPanel();
 renderRevisionPage();
-setAppSection(activeAppSection);
+setAppSection(activeAppSection, { history: "none", focus: false });
 
 boot();
 
 function switchAppSection(event) {
   const button = event.target.closest("[data-app-section]");
-  if (!button) return;
-
-  setAppSection(button.dataset.appSection);
+  if (!button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  setAppSection(button.dataset.appSection, { studyView: button.dataset.studyView, mode: button.dataset.practiceRoute });
 }
 
-function setAppSection(section) {
+function currentWorkspaceRoute() {
+  return { section: activeAppSection, studyView: activeStudyView, mode: activePracticeMode,
+    componentId: activeComponentId, topicId: activeRevisionTopicId, taskId: activeCodingTaskId };
+}
+
+function rememberWorkspacePosition() {
+  if (!navigationReady) return;
+  const panels = Object.fromEntries([elements.revisionView, elements.editorPanel, elements.notesColumn].map((panel) => [panel.id, panel.scrollTop]));
+  history.replaceState({ ...history.state, scrollY: window.scrollY, panels }, "");
+}
+
+function writeWorkspaceRoute(method = "push") {
+  if (!navigationReady || method === "none") return;
+  const hash = window.WorkspaceNavigation.format(currentWorkspaceRoute());
+  if (location.hash !== hash) history[method === "replace" ? "replaceState" : "pushState"]({ scrollY: 0 }, "", `${location.pathname}${location.search}${hash}`);
+  lastRenderedRoute = hash;
+}
+
+function restoreWorkspaceRoute() {
+  if (!navigationReady || location.hash === lastRenderedRoute) return;
+  const route = window.WorkspaceNavigation.parse(location.hash);
+  if (!route) {
+    window.CodingPractice.hide();
+    clearInterval(miniMockTimer);
+    showLandingPage();
+    lastRenderedRoute = location.hash;
+    return;
+  }
+  const scrollY = history.state?.scrollY || 0;
+  const panels = history.state?.panels || {};
+  elements.landingView.hidden = true;
+  elements.appView.hidden = false;
+  setAppSection(route.section, { ...route, history: "none" });
+  lastRenderedRoute = location.hash;
+  requestAnimationFrame(() => {
+    window.scrollTo({ top: scrollY, behavior: "auto" });
+    Object.entries(panels).forEach(([id, top]) => { const panel = document.getElementById(id); if (panel) panel.scrollTop = top; });
+  });
+}
+
+function updateWorkspaceHeader() {
+  const topic = getActiveRevisionTopic();
+  const titles = { home: ["Today", "Pick up your work or choose your next activity."],
+    revise: activeStudyView === "cards" ? [topic?.title || "Flashcards", "Recall first, check the explanation, then decide what needs another look."] : ["Course topics", "Your OCR course, with flashcards, questions and personal notes in one place."],
+    practice: ({ hub: ["Practice", "Choose how you want to apply what you know."], quick: ["Quick practice", "Check your recall, one question at a time."], exam: ["Exam questions", "Build a written answer and improve it against the rubric."], mock: ["Mini mock", "Practise a mixed-topic set, then review your reasoning."], labs: ["CS Labs", "Explore computing through practical tasks and predictions."] })[activePracticeMode],
+    coding: ["Code studio", "Write, run and debug OCR pseudocode. Choose from 60 tasks or use your own scratchpad."],
+    progress: ["Your progress", "See the evidence from your practice and choose what to revisit."],
+    notes: ["My notes", "Keep your ideas, explanations and revision material alongside the course."],
+    contact: ["Help & contact", "Get help with your account or study workspace."] };
+  const [title, description] = titles[activeAppSection] || titles.home;
+  document.querySelector("#workspace-page-title").textContent = title;
+  document.querySelector("#workspace-page-description").textContent = description;
+  document.querySelector(".workspace-eyebrow").textContent = activeAppSection === "notes" ? "Revise / My notes" : activeAppSection === "revise" && activeStudyView === "cards" ? `Revise / ${topic?.code || "Flashcards"}` : "OCR A-Level Computer Science · H446";
+  const notesLink = document.querySelector("#workspace-notes-link");
+  notesLink.hidden = !["home", "revise", "notes"].includes(activeAppSection);
+  notesLink.textContent = activeAppSection === "notes" ? "← Course topics" : "My notes";
+  notesLink.href = activeAppSection === "notes" ? "#/revise" : "#/revise/notes";
+  notesLink.dataset.appSection = activeAppSection === "notes" ? "revise" : "notes";
+  notesLink.dataset.studyView = "topics";
+  document.querySelector("#workspace-new-note-button").hidden = activeAppSection !== "notes";
+  document.querySelector("#study-activity-navigation").hidden = activeAppSection !== "revise" || activeStudyView !== "cards";
+  document.querySelector("#course-library-section").hidden = activeAppSection !== "revise" || activeStudyView !== "topics";
+  document.title = `${title} · RecallStride`;
+}
+
+function setAppSection(section, options = {}) {
+  const previousRoute = window.WorkspaceNavigation.format(currentWorkspaceRoute());
+  if (options.history !== "none") rememberWorkspacePosition();
   closeMobileNotesSidebar();
   const previousSection = activeAppSection;
-  const normalizedSection = section === "revision" ? "revise" : section;
-  activeAppSection = ["home", "revise", "practice", "progress", "notes", "contact"].includes(normalizedSection)
+  const previousMode = activePracticeMode;
+  const normalizedSection = section === "revision" ? "revise" : section === "practice" && options.mode === "coding" ? "coding" : section;
+  const topic = REVISION_TOPICS.find((item) => item.id === options.topicId);
+  if (topic) {
+    activeRevisionTopicId = topic.id;
+    activeComponentId = topic.componentId || "h446-01";
+  } else if (["h446-01", "h446-02"].includes(options.componentId)) {
+    activeComponentId = options.componentId;
+    if (!getComponentTopics().some((item) => item.id === activeRevisionTopicId)) activeRevisionTopicId = getComponentTopics()[0]?.id;
+  }
+  activeAppSection = ["home", "revise", "practice", "coding", "progress", "notes", "contact"].includes(normalizedSection)
     ? normalizedSection
     : "home";
+  if (activeAppSection === "revise") activeStudyView = options.studyView === "topics" ? "topics" : "cards";
+  if (activeAppSection === "practice") activePracticeMode = ["hub", "quick", "exam", "mock", "labs"].includes(options.mode) ? options.mode : "quick";
+  if (activeAppSection === "practice" && activePracticeMode === "quick") {
+    if (repairState?.topicId !== activeRevisionTopicId) repairState = null;
+    if (recallPracticeState?.topicId !== activeRevisionTopicId) recallPracticeState = null;
+    if (neatQuizState.quizId && neatQuizState.quizId !== activeRevisionTopicId) neatQuizState = createEmptyNeatQuizState();
+  }
+  if (activeAppSection === "coding" && Object.hasOwn(options, "taskId")) activeCodingTaskId = options.taskId;
+  if (previousRoute !== window.WorkspaceNavigation.format(currentWorkspaceRoute())) setRevisionFocusMode(false);
+  if (previousSection !== activeAppSection || previousMode !== activePracticeMode) {
+    practiceRequestId += 1;
+    clearInterval(miniMockTimer);
+  }
   const isNotes = activeAppSection === "notes";
-  const isStudent = ["home", "revise", "practice", "progress"].includes(activeAppSection);
+  const isStudent = ["home", "revise", "practice", "coding", "progress"].includes(activeAppSection);
   const isRevision = isStudent;
   const isContact = activeAppSection === "contact";
 
@@ -603,69 +708,78 @@ function setAppSection(section) {
   elements.appView.classList.toggle("revision-mode", isRevision);
   elements.appView.classList.toggle("contact-mode", isContact);
   elements.revisionView.dataset.studentView = isStudent ? activeAppSection : "";
+  elements.revisionView.dataset.studyView = activeStudyView;
+  elements.revisionView.dataset.practiceMode = activePracticeMode;
 
   document.querySelectorAll("[data-app-section]").forEach((button) => {
     const buttonSection = button.dataset.appSection === "revision" ? "revise" : button.dataset.appSection;
-    const isActiveSection = buttonSection === activeAppSection;
+    const isActiveSection = buttonSection === activeAppSection || (buttonSection === "revise" && isNotes && button.closest(".topbar-section-switch"));
     button.classList.toggle("active", isActiveSection);
     if (button.closest(".topbar-section-switch")) {
-      button.setAttribute("aria-current", isActiveSection ? "page" : "false");
+      if (isActiveSection) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
     }
   });
 
   if (isRevision) {
-    recordActivityEvent({ type: "revision_started", topicId: activeRevisionTopicId });
     renderRevisionPage();
   }
+  else renderPracticeMode();
+  updateWorkspaceHeader();
+  if (activeAppSection === "practice" && (previousSection !== "practice" || previousMode !== activePracticeMode)) activatePracticeActivity();
+  writeWorkspaceRoute(options.history);
 
   if (isContact) {
     renderContactPage();
   }
 
-  if (previousSection !== activeAppSection) {
+  if (previousRoute !== window.WorkspaceNavigation.format(currentWorkspaceRoute())) {
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     [elements.revisionView, elements.contactView, elements.editorPanel, elements.notesColumn]
       .filter(Boolean)
       .forEach((panel) => { panel.scrollTop = 0; });
   }
+  if (navigationReady && options.focus !== false && !elements.appView.hidden) requestAnimationFrame(() => document.querySelector("#workspace-page-title").focus({ preventScroll: true }));
 }
 
 function handlePracticeModeChange(event) {
   const button = event.target.closest("[data-practice-mode]");
   if (!button) return;
-  practiceRequestId += 1;
-  activePracticeMode = ["exam", "mock", "labs", "coding"].includes(button.dataset.practiceMode) ? button.dataset.practiceMode : "quick";
-  renderPracticeMode();
+  setAppSection("practice", { mode: button.dataset.practiceMode });
+}
+
+function activatePracticeActivity() {
   clearInterval(miniMockTimer);
   elements.examLoadQuestionButton.disabled = false;
   elements.examPracticePanel.removeAttribute("aria-busy");
-  if (activePracticeMode === "exam") examPracticeState ? renderExamPracticeQuestion() : loadExamPracticeQuestion();
+  if (activePracticeMode === "exam") examPracticeState?.question.topicId === activeRevisionTopicId ? renderExamPracticeQuestion() : loadExamPracticeQuestion();
   if (activePracticeMode === "mock") {
-    if (miniMockState) {
+    if (miniMockState && getQuizTopicById(miniMockState.questions[0]?.topicId)?.componentId === activeComponentId) {
       renderMiniMock();
       if (!miniMockState.submitted) miniMockTimer = window.setInterval(updateMiniMockTimer, 1000);
     } else loadMiniMock();
   }
-  if (activePracticeMode === "labs") csLabState ? renderCsLab() : loadCsLabs();
+  if (activePracticeMode === "labs") csLabState && getQuizTopicById(csLabState.current?.topicId)?.componentId === activeComponentId ? renderCsLab() : loadCsLabs();
 }
 
 function renderPracticeMode() {
   if (!elements.practiceModeBar) return;
   updatePracticeFocus();
   const inPractice = activeAppSection === "practice";
-  const codingActive = inPractice && activePracticeMode === "coding";
+  const codingActive = activeAppSection === "coding";
   document.querySelector("#revision-view").classList.toggle("coding-workspace-active", codingActive);
   document.querySelector("#coding-practice-section").hidden = !codingActive;
-  if (codingActive) window.CodingPractice.show({ owner: !isGuestMode ? currentUser?.id : null, analytics: parseClientJson(accountProfile?.studentProfile?.notification_preferences, {}).usageAnalytics === true, login: () => openAuthModal("login"), decks: () => setAppSection("revise") });
+  if (codingActive) window.CodingPractice.show({ owner: !isGuestMode ? currentUser?.id : null, analytics: parseClientJson(accountProfile?.studentProfile?.notification_preferences, {}).usageAnalytics === true, login: () => openAuthModal("login"), taskId: activeCodingTaskId, onTaskChange: (id) => { rememberWorkspacePosition(); activeCodingTaskId = id; writeWorkspaceRoute(); } });
   else window.CodingPractice.hide();
-  elements.practiceModeBar.hidden = !inPractice;
+  elements.practiceModeBar.hidden = !inPractice || activePracticeMode !== "hub";
+  document.querySelector("#practice-activity-navigation").hidden = !inPractice || activePracticeMode === "hub";
   if (!inPractice) {
     elements.quickPracticeSection.hidden = true;
     elements.examPracticeSection.hidden = true;
     return;
   }
   elements.quickPracticeSection.hidden = activePracticeMode !== "quick";
-  elements.examPracticeSection.hidden = ["quick", "coding"].includes(activePracticeMode);
+  elements.examPracticeSection.hidden = ["quick", "hub"].includes(activePracticeMode);
   if (activePracticeMode === "mock") {
     document.querySelector("#exam-practice-title").textContent = "Timed mini mock";
     document.querySelector("#exam-practice-description").textContent = "Practise a short mixed-topic set at your own pace, then review your reasoning. Drafts resume on this device for seven days.";
@@ -679,12 +793,6 @@ function renderPracticeMode() {
     document.querySelector("#exam-practice-description").textContent = "Write an answer, compare its reasoning with a rubric, then improve the same response.";
     elements.examLoadQuestionButton.textContent = "Start exam practice";
   }
-  elements.practiceModeBar.querySelectorAll("[data-practice-mode]").forEach((button) => {
-    const active = button.dataset.practiceMode === activePracticeMode;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-selected", String(active));
-    button.tabIndex = active ? 0 : -1;
-  });
 }
 
 function toggleMobileNotesSidebar() {
@@ -998,6 +1106,7 @@ function openNextAdaptiveSessionTopic() {
   completedRevisionCards.delete(nextItem.cardId);
   startRevisionSession(nextItem.topicId, "adaptive", topicCardIds);
   revisionReviewMode = { topicId: nextItem.topicId, cardIds: topicCardIds, mode: "adaptive" };
+  if (activeAppSection === "revise" && activeStudyView === "cards") writeWorkspaceRoute("replace");
   return true;
 }
 
@@ -2106,6 +2215,7 @@ function selectSettingsTab(tabName = "general") {
 }
 
 async function boot() {
+  const initialRoute = window.WorkspaceNavigation.parse(location.hash);
   api("/api/auth/providers").then((providers) => {
     document.querySelector(".google-button").hidden = !providers.google;
   }).catch(() => {});
@@ -2142,7 +2252,7 @@ async function boot() {
     }
     if (passwordResetToken) openPasswordReset(passwordResetToken);
   } catch {
-    loadGuestApp({ showLanding: !publicDemo && !localStorage.getItem(LANDING_DISMISSED_KEY) && !emailWasVerified });
+    loadGuestApp({ showLanding: !initialRoute && !publicDemo && !localStorage.getItem(LANDING_DISMISSED_KEY) && !emailWasVerified });
     if (publicDemo) openDemoWorkspace({ section: "home" });
     if (publicSignup) openAuthModal("signup");
     if (emailWasVerified) {
@@ -2151,6 +2261,10 @@ async function boot() {
     }
     if (passwordResetToken) openPasswordReset(passwordResetToken);
   }
+  navigationReady = true;
+  if (initialRoute && !emailWasVerified) setAppSection(initialRoute.section, { ...initialRoute, history: "replace", focus: false });
+  else if (!elements.appView.hidden) setAppSection(activeAppSection, { mode: activePracticeMode, studyView: activeStudyView, history: "replace", focus: false });
+  lastRenderedRoute = location.hash;
 }
 
 function handleLandingClick(event) {
@@ -2183,7 +2297,7 @@ function handleLandingClick(event) {
     return;
   }
 
-  openDemoWorkspace({ section: "home" });
+  openDemoWorkspace({ section: action === "coding" ? "coding" : ["demo", "revision", "session"].includes(action) ? "revise" : "home" });
 }
 
 function showLandingPage() {
@@ -2194,16 +2308,16 @@ function showLandingPage() {
 }
 
 function handleTopbarBrandAction() {
-  if (isGuestMode || !currentUser) {
-    exitDemoWorkspace();
-    return;
-  }
-
   setAppSection("home");
 }
 
 function exitDemoWorkspace() {
   localStorage.removeItem(LANDING_DISMISSED_KEY);
+  window.CodingPractice.hide();
+  clearInterval(miniMockTimer);
+  rememberWorkspacePosition();
+  if (location.hash.startsWith("#/")) history.pushState({}, "", `${location.pathname}${location.search}`);
+  lastRenderedRoute = location.hash;
   activeAppSection = "home";
   elements.authView.hidden = true;
   elements.appView.hidden = true;
@@ -2218,9 +2332,9 @@ function openDemoWorkspace(options = {}) {
   ensureDemoWorkspace({ reset: false });
   elements.landingView.hidden = true;
   elements.appView.hidden = false;
-  activeComponentId = "h446-01";
-  setAppSection(options.section === "contact" ? "contact" : "revise");
-  if (options.section !== "contact") {
+  setAppSection(options.section || "home");
+  if (options.section === "revise") {
+    activeComponentId = "h446-01";
     const plan = getAdaptiveSessionPlan(5);
     activeAdaptiveSession = window.NEAT_REVISION_SESSION.create({ ...plan, items: plan.items.slice(0, 4) }, createLocalId("demo"));
     openNextAdaptiveSessionTopic();
@@ -2433,6 +2547,8 @@ function openAuthModal(mode = "login", { captureTask = true } = {}) {
     section: activeAppSection,
     topicId: activeRevisionTopicId,
     practiceMode: activePracticeMode,
+    studyView: activeStudyView,
+    ...(activeAppSection === "coding" ? { codingTaskId: document.querySelector("#coding-task-select")?.value || activeCodingTaskId } : {}),
   } : null;
   setAuthMode(mode);
   elements.authView.hidden = false;
@@ -2617,9 +2733,8 @@ async function restoreAuthDestination() {
   if (topic) {
     activeComponentId = topic.componentId || "h446-01";
     activeRevisionTopicId = topic.id;
-    activePracticeMode = task.practiceMode;
     // Only navigation crosses verification. Guest answers and notes are never imported.
-    setAppSection(task.section);
+    setAppSection(task.section, { mode: task.practiceMode, studyView: task.studyView, ...(task.section === "coding" ? { taskId: task.codingTaskId || null } : {}) });
   }
   await api("/api/auth/continuation", { method: "DELETE" });
   authReturnTask = null;
@@ -3068,7 +3183,7 @@ async function addCollaborator(event) {
 }
 
 async function createNote() {
-  if (!activeWorkspaceId) return;
+  if (!activeWorkspaceId || isCreatingNote) return;
 
   if (isGuestMode) {
     const now = new Date().toISOString();
@@ -3094,6 +3209,13 @@ async function createNote() {
     return;
   }
 
+  isCreatingNote = true;
+  const creationOwner = currentUser?.id;
+  const creationWorkspace = activeWorkspaceId;
+  const creationButtons = [elements.newButton, document.querySelector("#workspace-new-note-button")];
+  creationButtons.forEach((button) => { button.disabled = true; button.setAttribute("aria-busy", "true"); });
+  elements.noteBody.disabled = true;
+  elements.editorPanel.setAttribute("aria-busy", "true");
   try {
     const response = await api("/api/notes", {
       method: "POST",
@@ -3104,14 +3226,20 @@ async function createNote() {
       },
     });
 
+    if (currentUser?.id !== creationOwner || activeWorkspaceId !== creationWorkspace) return;
     notes.unshift(response.note);
     selectedId = response.note.id;
     recordActivityEvent({ type: "note_created" });
     trackEvent("note_created", { mode: "account" });
     render();
-    elements.noteBody.focus();
+    if (activeAppSection === "notes") elements.noteBody.focus();
   } catch (error) {
     showWorkspaceMessage(error.message, "error");
+  } finally {
+    isCreatingNote = false;
+    creationButtons.forEach((button) => { button.disabled = false; button.removeAttribute("aria-busy"); });
+    elements.editorPanel.removeAttribute("aria-busy");
+    renderEditor();
   }
 }
 
@@ -3292,14 +3420,20 @@ function closeGlobalSearch() {
   focusBeforeGlobalSearch?.focus?.();
 }
 
-function renderGlobalSearchResults() {
+async function renderGlobalSearchResults() {
+  const requestId = ++globalSearchRequestId;
   const query = elements.globalSearchInput.value.trim().toLowerCase();
-  if (!query) {
-    elements.globalSearchResults.innerHTML = `<div class="global-search-empty"><strong>Search the OCR course and your current workspace</strong><p>Use a topic code, concept, card prompt, note title or folder tag.</p></div>`;
-    return;
-  }
-
   const results = buildGlobalSearchResults(query);
+  paintGlobalSearchResults(results);
+  if (!query) return;
+  try {
+    const tasks = await window.CodingPractice.searchTasks(query);
+    if (requestId !== globalSearchRequestId || elements.globalSearchModal.hidden) return;
+    paintGlobalSearchResults([...results, ...tasks.map((task) => ({ ...task, kind: "coding-task", type: "Coding task" }))].slice(0, 16));
+  } catch { /* Course and note search remain available if the task catalogue is offline. */ }
+}
+
+function paintGlobalSearchResults(results) {
   globalSearchSelection = Math.min(globalSearchSelection, Math.max(0, results.length - 1));
   elements.globalSearchResults.innerHTML = results.length
     ? results.map((result, index) => `<button class="global-search-result ${index === globalSearchSelection ? "selected" : ""}" type="button" data-search-kind="${escapeHtml(result.kind)}" data-search-id="${escapeHtml(result.id)}" data-search-index="${index}">
@@ -3311,7 +3445,16 @@ function renderGlobalSearchResults() {
 }
 
 function buildGlobalSearchResults(query) {
-  const results = [];
+  const destinations = [
+    { id: "home", title: "Today", detail: "Resume work and choose your next activity", terms: "home dashboard today" },
+    { id: "revise", title: "Course topics", detail: "Browse OCR topics and flashcards", terms: "revise revision study course topics flashcards" },
+    { id: "practice", title: "Practice", detail: "Quick questions, exam answers, mini mocks and CS Labs", terms: "practice quiz exam questions mocks labs sql" },
+    { id: "coding", title: "Code studio", detail: "60 tasks · Write and run OCR pseudocode", terms: "code coding programming pseudocode interpreter scratchpad tasks" },
+    { id: "progress", title: "Your progress", detail: "Learning evidence, topic map and mistake repair", terms: "progress mastery mistakes" },
+    { id: "notes", title: "My notes", detail: "Your personal notes alongside the course", terms: "notes notebook folders" },
+  ];
+  const results = destinations.filter((item) => !query || `${item.title} ${item.terms}`.toLowerCase().includes(query)).map((item) => ({ ...item, kind: "destination", type: "Workspace" }));
+  if (!query) return results;
   const aliases = {
     mar: "memory address register",
     mdr: "memory data register",
@@ -3393,6 +3536,14 @@ function openGlobalSearchResult(result) {
   const kind = result.dataset.searchKind;
   const id = result.dataset.searchId;
   closeGlobalSearch();
+  if (kind === "destination") {
+    setAppSection(id, { studyView: "topics", mode: "hub" });
+    return;
+  }
+  if (kind === "coding-task") {
+    setAppSection("coding", { taskId: id });
+    return;
+  }
   if (kind === "note") {
     setAppSection("notes");
     selectedId = id;
@@ -3401,8 +3552,7 @@ function openGlobalSearchResult(result) {
     elements.noteBody.focus();
     return;
   }
-  activeRevisionTopicId = id;
-  setAppSection("revise");
+  setAppSection("revise", { topicId: id });
   renderRevisionPage();
   document.querySelector(".revision-stage")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -3626,8 +3776,8 @@ function renderAccountChrome() {
   document.querySelector('[data-global-action="logout"]').hidden = !isSignedIn;
   elements.guestAccountActions.hidden = isSignedIn;
   elements.signedInAccountActions.hidden = !isSignedIn;
-  elements.topbarBrandButton.setAttribute("aria-label", isSignedIn ? "Return to Today" : "Exit demo and return to the RecallStride homepage");
-  elements.topbarBrandButton.title = isSignedIn ? "Return to Today" : "Exit demo";
+  elements.topbarBrandButton.setAttribute("aria-label", "RecallStride — Today");
+  elements.topbarBrandButton.title = "Today";
   renderProfileAvatar(elements.topbarProfileAvatar);
 
   if (isSignedIn) {
@@ -3735,6 +3885,7 @@ function renderRevisionPage() {
   }
 
   const access = getRevisionTopicAccessState(topic.id);
+  updateWorkspaceHeader();
 
   renderAchievementSummary();
   renderDailyStudyPanel();
@@ -3873,7 +4024,7 @@ function handleMistakeJournalClick(event) {
   activeRevisionTopicId = topic.id;
   startRevisionSession(topic.id, "mistake", [entry.conceptId]);
   revisionReviewMode = { topicId: topic.id, cardIds: [entry.conceptId], mode: "mistake" };
-  setAppSection("revise");
+  setAppSection("revise", { topicId: topic.id });
 }
 
 function renderRevisionTopicList() {
@@ -4023,13 +4174,13 @@ async function handleDeckSummaryAction(action) {
       neatQuizState = createEmptyNeatQuizState();
       clearRevisionAutoReset();
       startRevisionSession(recommendation.topicId);
-      renderRevisionPage();
+      setAppSection("revise", { topicId: recommendation.topicId });
     }
     return;
   }
 
   if (action === "topic-list") {
-    elements.quickPracticeSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    setAppSection("revise", { studyView: "topics" });
   }
 }
 
@@ -4046,7 +4197,7 @@ function startWeakCardReview(topicId) {
   });
   activeRevisionTopicId = topic.id;
   startRevisionSession(topic.id, "weak", weakCardIds);
-  renderRevisionPage();
+  setAppSection("revise", { topicId: topic.id });
 }
 
 function recordDeckCompleted(topic) {
@@ -4121,7 +4272,12 @@ function renderStudentDashboard(topic) {
         </li>`).join("") : `<li><strong>Choose a topic to begin</strong><small>Your first completed activity creates the learning baseline.</small></li>`}
       </ol></details>
     </section>
-    <details class="today-tools"><summary>More study tools${openMistakes.length ? ` · ${openMistakes.length} mistake${openMistakes.length === 1 ? "" : "s"} to revisit` : ""}</summary><div class="student-home-sections">
+    <section class="today-workspace" aria-labelledby="today-workspace-title"><div class="section-title"><h2 id="today-workspace-title">Your workspace</h2><span>Choose an activity</span></div><div class="today-workspace-grid">
+      <a href="#/revise" data-app-section="revise" data-study-view="topics"><span class="activity-mark" aria-hidden="true">▤</span><strong>Study a topic</strong><p>Explore the OCR course and revise with flashcards.</p><b>Browse course topics →</b></a>
+      <a class="today-code-card" href="#/code" data-app-section="coding"><span class="activity-mark" aria-hidden="true">&lt;/&gt;</span><strong>Write and run pseudocode</strong><p>60 coding tasks, an interpreter and your saved projects.</p><b>Open Code studio →</b></a>
+      <a href="#/practice" data-app-section="practice" data-practice-route="hub"><span class="activity-mark" aria-hidden="true">✓</span><strong>Put knowledge into practice</strong><p>Quick questions, written answers, mini mocks and CS Labs.</p><b>Choose practice →</b></a>
+    </div></section>
+    <section class="today-tools" aria-label="Continue and plan"><div class="student-home-sections">
       <section>
         <div class="section-title"><span>Due for review</span><span>${dueItems.length}</span></div>
         ${dueItems.length ? `<p><strong>${escapeHtml(dueItems[0].code)} ${escapeHtml(dueItems[0].topicTitle)}</strong><br>${dueItems.length} concept${dueItems.length === 1 ? " is" : "s are"} ready for retrieval.</p>` : `<p>Nothing is overdue. New activity will be scheduled as you revise.</p>`}
@@ -4142,7 +4298,7 @@ function renderStudentDashboard(topic) {
         <p>${examCountdown ? `<strong>${escapeHtml(examCountdown.label)}</strong><br>${escapeHtml(examCountdown.message)}` : "Add exam dates to shape the balance of retrieval and exam practice."}</p>
         <button type="button" data-student-action="exam-settings">${examCountdown ? "Review exam plan" : "Add exam dates"}</button>
       </section>
-    </div></details>`;
+    </div></section>`;
 }
 
 function getNearestExamCountdown() {
@@ -4175,6 +4331,7 @@ function getMostRecentQuizProgress() {
 }
 
 async function handleStudentDashboardClick(event) {
+  if (event.target.closest("[data-app-section]")) { switchAppSection(event); return; }
   const sessionButton = event.target.closest("[data-session-duration]");
   if (sessionButton) {
     startAdaptiveRevisionSession(Number(sessionButton.dataset.sessionDuration) || 15);
@@ -4189,8 +4346,7 @@ async function handleStudentDashboardClick(event) {
     if (!saved) return;
     changeComponent(saved.topic.componentId);
     activeRevisionTopicId = saved.topic.id;
-    activePracticeMode = "quick";
-    setAppSection("practice");
+    setAppSection("practice", { mode: "quick" });
     if (saved.kind === "repair") await openRepairLessons();
     else startRecallPractice(saved.topic, 10);
     return;
@@ -4213,7 +4369,8 @@ async function handleStudentDashboardClick(event) {
   }
 
   if (action === "quick") {
-    setAppSection("practice");
+    const recent = getMostRecentQuizProgress();
+    setAppSection("practice", { mode: "quick", topicId: recent?.topic.id });
     await startActiveTopicQuiz();
     elements.quickPracticeSection.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
@@ -4267,7 +4424,7 @@ async function handleMasteryMapClick(event) {
   neatQuizState = createEmptyNeatQuizState();
   clearRevisionAutoReset();
   startRevisionSession(activeRevisionTopicId);
-  renderRevisionPage();
+  setAppSection("revise", { topicId });
 }
 
 function renderNeatQuestions() {
@@ -4801,6 +4958,7 @@ async function loadExamPracticeQuestion({ next = false } = {}) {
     renderExamPracticeQuestion();
     trackEvent("exam_question_started", { questionId: question.id, topicId: question.topicId });
   } catch (error) {
+    if (requestId !== practiceRequestId || activeAppSection !== "practice" || activePracticeMode !== "exam") return;
     elements.examPracticePanel.innerHTML = `<div class="exam-empty-state error-state"><strong>Exam Practice could not load</strong><p>${escapeHtml(error.message)}</p><button type="button" data-exam-retry>Try again</button></div>`;
   } finally {
     if (requestId === practiceRequestId) {
@@ -4821,7 +4979,7 @@ function renderExamPracticeQuestion() {
     return;
   }
 
-  elements.examPracticePanel.innerHTML = `<article class="exam-question-card"><header><div><span>${escapeHtml(question.objectives?.join(", ") || question.topicCode)}</span><strong>${escapeHtml(question.topicTitle)}</strong></div><div class="exam-question-meta"><span>${question.marks} marks</span><span>About ${question.expectedMinutes} min</span></div></header><div class="exam-command-row"><span>${escapeHtml(question.commandWord)}</span><details><summary>Command-word help</summary><p>${escapeHtml(getCommandWordHelp(question.commandWord))}</p></details></div><h3>${escapeHtml(question.prompt)}</h3><form class="exam-answer-form" data-exam-answer-form><label for="exam-answer">Your answer</label><textarea id="exam-answer" name="answer" rows="8" maxlength="4000" required placeholder="Build a clear answer before checking the rubric.">${escapeHtml(state.answer || "")}</textarea><div class="exam-answer-footer"><label for="exam-confidence">Confidence<select id="exam-confidence" name="confidence"><option value="">Prefer not to say</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label><button class="primary-button" type="submit">${state.originalAttemptId ? "Submit improved answer" : "Check against rubric"}</button></div><p class="status-message" data-exam-status role="status" aria-live="polite"></p></form></article>`;
+  elements.examPracticePanel.innerHTML = `<article class="exam-question-card"><header><div><span>${escapeHtml(question.objectives?.join(", ") || question.topicCode)}</span><strong>${escapeHtml(question.topicTitle)}</strong></div><div class="exam-question-meta"><span>${question.marks} marks</span><span>About ${question.expectedMinutes} min</span></div></header><div class="exam-command-row"><span>${escapeHtml(question.commandWord)}</span><details><summary>Command-word help</summary><p>${escapeHtml(getCommandWordHelp(question.commandWord))}</p></details></div><h3>${escapeHtml(question.prompt)}</h3><form class="exam-answer-form" data-exam-answer-form><label for="exam-answer">Your answer</label><textarea id="exam-answer" name="answer" rows="8" maxlength="4000" required placeholder="Build a clear answer before checking the rubric.">${escapeHtml(state.answer || "")}</textarea><div class="exam-answer-footer"><label for="exam-confidence">Confidence<select id="exam-confidence" name="confidence"><option value="">Prefer not to say</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label><button class="primary-button" type="submit" ${state.submitting ? "disabled" : ""}>${state.submitting ? "Checking…" : state.originalAttemptId ? "Submit improved answer" : "Check against rubric"}</button></div><p class="status-message ${state.submitError ? "error" : ""}" data-exam-status role="status" aria-live="polite">${escapeHtml(state.submitError || "")}</p></form></article>`;
 }
 
 function getCommandWordHelp(commandWord) {
@@ -4841,27 +4999,36 @@ function getCommandWordHelp(commandWord) {
 
 async function submitExamPracticeAnswer(event) {
   const form = event.target.closest("[data-exam-answer-form]");
-  if (!form || !examPracticeState?.question) return;
+  if (!form || !examPracticeState?.question || examPracticeState.submitting) return;
+  const state = examPracticeState;
+  const userId = currentUser?.id;
   event.preventDefault();
   const formData = new FormData(form);
   const answer = String(formData.get("answer") || "").trim();
   const status = form.querySelector("[data-exam-status]");
   const button = form.querySelector("button[type='submit']");
-  examPracticeState.answer = answer;
+  state.answer = answer;
+  state.submitting = true;
+  state.submitError = "";
   button.disabled = true;
   button.textContent = "Checking...";
   status.textContent = "";
   try {
-    const response = await api("/api/exam/attempts", { method: "POST", body: { questionId: examPracticeState.question.id, answer, confidence: formData.get("confidence"), originalAttemptId: examPracticeState.originalAttemptId, responseTimeMs: Math.round(performance.now() - examPracticeState.startedAt) } });
-    examPracticeState.originalAttemptId ||= response.attemptId;
-    examPracticeState.result = response;
-    renderExamPracticeQuestion();
-    trackEvent("exam_question_submitted", { questionId: examPracticeState.question.id, mark: response.result.proposedMark, maximum: response.result.maximumMark });
+    const response = await api("/api/exam/attempts", { method: "POST", body: { questionId: state.question.id, answer, confidence: formData.get("confidence"), originalAttemptId: state.originalAttemptId, responseTimeMs: Math.round(performance.now() - state.startedAt) } });
+    if (examPracticeState !== state || currentUser?.id !== userId) return;
+    state.originalAttemptId ||= response.attemptId;
+    state.result = response;
+    trackEvent("exam_question_submitted", { questionId: state.question.id, mark: response.result.proposedMark, maximum: response.result.maximumMark });
   } catch (error) {
+    if (examPracticeState !== state || currentUser?.id !== userId) return;
+    state.submitError = error.message;
     status.textContent = error.message;
     status.className = "status-message error";
     button.disabled = false;
-    button.textContent = examPracticeState.originalAttemptId ? "Submit improved answer" : "Check against rubric";
+    button.textContent = state.originalAttemptId ? "Submit improved answer" : "Check against rubric";
+  } finally {
+    state.submitting = false;
+    if (examPracticeState === state && currentUser?.id === userId && activeAppSection === "practice" && activePracticeMode === "exam") renderExamPracticeQuestion();
   }
 }
 
@@ -4872,6 +5039,7 @@ function handleExamPracticeClick(event) {
   if (event.target.closest("[data-lab-picker]")) return renderCsLabPicker();
   const labChoice = event.target.closest("[data-lab-id]");
   if (labChoice && csLabState) {
+    if (csLabState.current?.id !== labChoice.dataset.labId) csLabState.answer = "";
     csLabState.current = csLabState.labs.find((labItem) => labItem.id === labChoice.dataset.labId) || csLabState.current;
     csLabState.result = null;
     csLabState.startedAt = performance.now();
@@ -4915,7 +5083,7 @@ function handleExamPracticeClick(event) {
   if (reviewTopic) {
     activeRevisionTopicId = reviewTopic.dataset.topicId;
     startRevisionSession(activeRevisionTopicId);
-    setAppSection("revise");
+    setAppSection("revise", { topicId: activeRevisionTopicId });
     return;
   }
   if (event.target.closest("[data-exam-next]")) return loadExamPracticeQuestion({ next: true });
@@ -4932,7 +5100,8 @@ function handleExamPracticeClick(event) {
 function persistMiniMock() {
   if (!currentUser || !miniMockState) return;
   const { questions, flags, submitting, ...state } = miniMockState;
-  localStorage.setItem(`neat-mock-session:${currentUser.id}:${activeComponentId}`, JSON.stringify({
+  const componentId = getQuizTopicById(questions[0]?.topicId)?.componentId || activeComponentId;
+  localStorage.setItem(`neat-mock-session:${currentUser.id}:${componentId}`, JSON.stringify({
     ...state, questionIds: questions.map((question) => question.id),
     contentSignature: hashString(JSON.stringify(questions)), flags: [...flags],
   }));
@@ -4986,6 +5155,7 @@ async function loadMiniMock({ restart = false } = {}) {
     miniMockTimer = window.setInterval(updateMiniMockTimer, 1000);
     trackEvent("mini_mock_started", { questions: questions.length });
   } catch (error) {
+    if (requestId !== practiceRequestId || activeAppSection !== "practice" || activePracticeMode !== "mock") return;
     elements.examPracticePanel.innerHTML = `<div class="exam-empty-state error-state"><strong>Mini mock could not load</strong><p>${escapeHtml(error.message)}</p><button type="button" data-mock-retry>Try again</button></div>`;
   }
 }
@@ -5099,6 +5269,7 @@ async function loadCsLabs(showPicker = false) {
     if (showPicker || response.labs.length > 1 && !csLabState.current) renderCsLabPicker();
     else renderCsLab();
   } catch (error) {
+    if (requestId !== practiceRequestId || activeAppSection !== "practice" || activePracticeMode !== "labs") return;
     elements.examPracticePanel.innerHTML = `<div class="exam-empty-state error-state"><strong>CS Labs could not load</strong><p>${escapeHtml(error.message)}</p><button type="button" data-lab-retry>Try again</button></div>`;
   }
 }
@@ -5118,29 +5289,41 @@ function renderCsLab() {
     return;
   }
   const responseControl = labItem.responseType === "sql"
-    ? `<label for="cs-lab-response">SQL query</label><textarea id="cs-lab-response" name="response" rows="5" spellcheck="false" required placeholder="SELECT ..."></textarea><p class="cs-lab-schema">Available table: Student(Name, Score)</p>`
-    : `<fieldset><legend>Choose your prediction</legend>${labItem.options.map((option, index) => `<label><input type="radio" name="response" value="${escapeHtml(option)}" required><span>${String.fromCharCode(65 + index)}</span><strong>${escapeHtml(option)}</strong></label>`).join("")}</fieldset>`;
-  elements.examPracticePanel.innerHTML = `<article class="cs-lab-shell"><header><div><p class="eyebrow">Interactive practice</p><h3>${escapeHtml(labItem.title)}</h3></div><span>${escapeHtml(getQuizTopicById(labItem.topicId)?.code || "OCR H446")}</span></header><form data-lab-form><h4>${escapeHtml(labItem.prompt)}</h4>${responseControl}<button class="primary-button" type="submit">Check prediction</button><p class="status-message" data-lab-status role="status" aria-live="polite"></p></form></article>`;
+    ? `<label for="cs-lab-response">SQL query</label><textarea id="cs-lab-response" name="response" rows="5" spellcheck="false" required placeholder="SELECT ...">${escapeHtml(state.answer || "")}</textarea><p class="cs-lab-schema">Available table: Student(Name, Score)</p>`
+    : `<fieldset><legend>Choose your prediction</legend>${labItem.options.map((option, index) => `<label><input type="radio" name="response" value="${escapeHtml(option)}" ${state.answer === option ? "checked" : ""} required><span>${String.fromCharCode(65 + index)}</span><strong>${escapeHtml(option)}</strong></label>`).join("")}</fieldset>`;
+  elements.examPracticePanel.innerHTML = `<article class="cs-lab-shell"><header><div><p class="eyebrow">Interactive practice</p><h3>${escapeHtml(labItem.title)}</h3></div><span>${escapeHtml(getQuizTopicById(labItem.topicId)?.code || "OCR H446")}</span></header><form data-lab-form><h4>${escapeHtml(labItem.prompt)}</h4>${responseControl}<button class="primary-button" type="submit" ${state.submitting ? "disabled" : ""}>${state.submitting ? "Checking…" : "Check prediction"}</button><p class="status-message ${state.submitError ? "error" : ""}" data-lab-status role="status" aria-live="polite">${escapeHtml(state.submitError || "")}</p></form></article>`;
 }
 
 async function submitCsLab(event) {
   const form = event.target.closest("[data-lab-form]");
-  if (!form || !csLabState?.current) return;
+  if (!form || !csLabState?.current || csLabState.submitting) return;
+  const state = csLabState;
+  const userId = currentUser?.id;
+  const labId = state.current.id;
   event.preventDefault();
   const response = String(new FormData(form).get("response") || "").trim();
   const button = form.querySelector("button[type='submit']");
   const status = form.querySelector("[data-lab-status]");
   button.disabled = true;
   button.textContent = "Checking...";
+  state.submitting = true;
+  state.submitError = "";
   try {
-    csLabState.result = await api("/api/labs/attempts", { method: "POST", body: { labId: csLabState.current.id, response, responseTimeMs: Math.round(performance.now() - csLabState.startedAt) } });
-    renderCsLab();
-    trackEvent("cs_lab_completed", { labId: csLabState.current.id, correct: csLabState.result.assessment.correct });
+    const result = await api("/api/labs/attempts", { method: "POST", body: { labId, response, responseTimeMs: Math.round(performance.now() - state.startedAt) } });
+    if (csLabState !== state || state.current.id !== labId || currentUser?.id !== userId) return;
+    state.result = result;
+    if (activeAppSection === "practice" && activePracticeMode === "labs") renderCsLab();
+    trackEvent("cs_lab_completed", { labId, correct: result.assessment.correct });
   } catch (error) {
+    if (csLabState !== state || state.current.id !== labId || currentUser?.id !== userId) return;
+    state.submitError = error.message;
     status.textContent = error.message;
     status.className = "status-message error";
     button.disabled = false;
     button.textContent = "Check prediction";
+  } finally {
+    state.submitting = false;
+    if (csLabState === state && currentUser?.id === userId && activeAppSection === "practice" && activePracticeMode === "labs" && !state.result) renderCsLab();
   }
 }
 
@@ -5165,6 +5348,7 @@ async function startNeatQuiz(topicId, options = {}) {
   }
 
   activeRevisionTopicId = topic.id;
+  setAppSection("practice", { mode: "quick", topicId: topic.id });
   const length = Number(document.querySelector("#practice-length")?.value) || 10;
   const bank = buildNativeQuizQuestions(topic);
   if (!bank.length) {
@@ -5392,7 +5576,7 @@ async function selectRevisionTopic(event) {
   neatQuizState = createEmptyNeatQuizState();
   clearRevisionAutoReset();
   startRevisionSession(activeRevisionTopicId);
-  renderRevisionPage();
+  setAppSection("revise", { topicId });
 }
 
 async function flipRevisionCard(event) {

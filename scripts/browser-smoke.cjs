@@ -40,8 +40,21 @@ async function checkWidth(page, label) {
   evidence.push(`${label}: no document overflow`);
 }
 async function navigate(page, section) {
-  const buttons = page.locator(`button[data-app-section="${section}"]:visible`);
-  await buttons.first().click();
+  if (section === "notes" && !await page.locator('#workspace-notes-link').isVisible()) {
+    await navigate(page, "revise");
+  }
+  const link = section === "notes"
+    ? page.locator('#workspace-notes-link')
+    : page.locator(`.topbar-section-switch a[data-app-section="${section}"]:visible`);
+  await link.click();
+}
+async function practice(page, mode = "quick") {
+  await navigate(page, "practice");
+  await page.locator(`[data-practice-mode="${mode}"]:visible`).click();
+}
+async function flashcards(page, topicId) {
+  await navigate(page, "revise");
+  await page.locator(`#course-library-section [data-topic-id="${topicId}"]:visible`).click();
 }
 async function dismissLaunch(page) {
   await page.locator("#launch-overlay").waitFor({ state: "hidden", timeout: 10000 });
@@ -70,7 +83,7 @@ async function dismissLaunch(page) {
     assert.doesNotMatch(await page.locator("body").innerText(), /Neat Notes|Teacher dashboard|Create class|Join class/i);
     evidence.push("Student-only shell omits retired workflows and ignores old learning-mode preferences");
     await screenshot(page, "landing-desktop");
-    await page.getByRole("button", { name: "Try a revision session", exact: true }).click();
+    await page.locator('.landing-hero-actions [data-landing-action="demo"]').click();
     await page.locator(".focused-retrieval-card").waitFor();
     assert.equal(await page.locator(".focused-retrieval-card").count(), 1);
     assert.equal(await page.locator(".retrieval-answer").count(), 0);
@@ -124,24 +137,24 @@ async function dismissLaunch(page) {
     assert.equal(claim.status(), 200);
     await page.reload();
     await dismissLaunch(page);
-    await navigate(page, "practice");
+    await practice(page);
     await page.locator("[data-open-repair]").click();
     await page.locator('[data-repair-id="repair-address-data"]').click();
     assert.equal(await page.locator("#repair-response").count(), 0);
     await page.locator("[data-repair-step]").click();
     await page.reload();
     await dismissLaunch(page);
-    await navigate(page, "practice");
+    await practice(page);
     await page.locator("[data-open-repair]").click();
     assert.match(await page.locator(".repair-step-count").innerText(), /Step 2 of 3/);
     for (let step = 0; step < 2; step++) await page.locator("[data-repair-step]").click();
     await page.locator("#repair-response").fill("17");
     await navigate(page, "notes");
-    await navigate(page, "practice");
+    await practice(page);
     assert.equal(await page.locator("#repair-response").inputValue(), "17");
     await page.reload();
     await dismissLaunch(page);
-    await navigate(page, "practice");
+    await practice(page);
     await page.locator("[data-open-repair]").click();
     assert.equal(await page.locator("#repair-response").inputValue(), "17");
     await page.locator("[data-close-repair]").click();
@@ -163,7 +176,7 @@ async function dismissLaunch(page) {
     await page.locator("#repair-response").fill("93");
     await page.reload();
     await dismissLaunch(page);
-    await navigate(page, "practice");
+    await practice(page);
     await page.locator("[data-open-repair]").click();
     assert.match(await page.locator('#repair-answer-form label').innerText(), /value received by the MDR/);
     assert.equal(await page.locator("#repair-response").inputValue(), "93");
@@ -181,7 +194,7 @@ async function dismissLaunch(page) {
     await page.reload();
     await dismissLaunch(page);
     if (await page.locator("#onboarding-modal").isVisible()) await page.getByRole("button", { name: "Set up later" }).click();
-    await navigate(page, "practice");
+    await practice(page);
     await page.locator("[data-open-repair]").click();
     await page.locator('[data-repair-id="repair-address-data"]').waitFor();
     assert.equal(await page.locator("#repair-response").count(), 0);
@@ -189,7 +202,7 @@ async function dismissLaunch(page) {
     await context.request.post(`${base}/api/auth/login`, { data: { email: "browser@example.test", password: "BrowserPass123" } });
     await page.reload();
     await dismissLaunch(page);
-    await navigate(page, "practice");
+    await practice(page);
     await page.locator("[data-open-repair]").click();
     assert.equal(await page.locator("#repair-response").inputValue(), "93");
     await page.locator("[data-close-repair]").click();
@@ -218,17 +231,24 @@ async function dismissLaunch(page) {
     await navigate(page, "notes");
     assert.match(await page.locator("#note-body").inputValue(), /The MAR holds the address/);
     await navigate(page, "practice");
+    assert.equal(await page.locator('.topbar-section-switch a').count(), 5);
+    assert.equal(await page.locator('#practice-mode-bar button[data-practice-mode]:visible').count(), 4);
+    assert.equal(await page.locator('#practice-mode-bar button[data-practice-mode="coding"]').count(), 0);
+    assert.equal(await page.locator('#quick-practice-section').isVisible(), false);
     await page.locator('[data-practice-mode="quick"]').focus();
-    await page.keyboard.press("ArrowRight");
-    assert.equal(await page.locator('[data-practice-mode="exam"]').getAttribute("aria-selected"), "true");
-    await page.keyboard.press("Home");
-    assert.equal(await page.locator('[data-practice-mode="quick"]').getAttribute("aria-selected"), "true");
-    evidence.push("Account note edits persist through reload; practice tabs support arrow/Home keyboard navigation");
+    await page.keyboard.press("Tab");
+    assert.equal(await page.locator('[data-practice-mode="exam"]').evaluate(el => el === document.activeElement), true);
+    await page.keyboard.press("Enter");
+    await page.locator('#exam-practice-section:visible').waitFor();
+    assert.equal(await page.locator('#practice-mode-bar').isVisible(), false);
+    await page.locator('#practice-activity-navigation a').click();
+    await page.locator('[data-practice-mode="quick"]:visible').waitFor();
+    evidence.push("Account note edits persist through reload; visible practice choices support Tab/Enter and return to the activity overview");
     await navigate(page, "revise");
     await page.locator('[data-component="h446-02"]').first().click();
     assert.equal(await page.locator("#component-topic-select option").count(), 8);
-    assert.match(await page.locator("#revision-card-grid").innerText(), /Pro/);
-    evidence.push("Verified free account: profile replaces login; other component content is gated");
+    assert.match(await page.locator("#course-library-section").innerText(), /Pro/);
+    evidence.push("Verified free account: profile replaces login; other component topics show their Pro access requirement");
 
     const upgrade = await context.request.post(`${base}/api/billing/mock-upgrade`, { data: { plan: "pro" } });
     assert.equal(upgrade.status(), 200);
@@ -236,14 +256,15 @@ async function dismissLaunch(page) {
     await dismissLaunch(page);
     await navigate(page, "revise");
     await page.locator('[data-component="h446-02"]').first().click();
+    await flashcards(page, "cs-2-1-1");
     await page.locator(".focused-retrieval-card").waitFor();
     assert.match(await page.locator(".retrieval-meta").innerText(), /OCR 2\.[123]\.[1-5]\([a-f]\)/);
     assert.match(await page.locator("#component-content-status").innerText(), /8 topic packs/);
     assert.doesNotMatch(await page.locator("#component-content-status").innerText(), /review pending/i);
-    await page.locator("#component-topic-select").selectOption("cs-2-3-1");
+    await flashcards(page, "cs-2-3-1");
     assert.match(await page.locator("#revision-topic-title").innerText(), /Algorithms/);
     await screenshot(page, "component2-desktop");
-    await navigate(page, "practice");
+    await practice(page);
     await page.locator("#practice-length").selectOption("5");
     await page.locator("[data-start-current-quiz]").click();
     await page.locator(".neat-quiz-player").waitFor();
@@ -254,14 +275,14 @@ async function dismissLaunch(page) {
     const quizPrompt = await page.locator(".neat-quiz-question").innerText();
     await page.reload();
     await dismissLaunch(page);
-    await navigate(page, "practice");
+    await practice(page);
     await page.locator("#component-topic-select").selectOption("cs-2-3-1");
     await page.locator("[data-start-current-quiz]").click();
     assert.equal(await page.locator(".neat-quiz-question").innerText(), quizPrompt);
     assert.equal(await page.locator(".neat-quiz-feedback").count(), 1);
     assert.equal(await page.locator("[data-quiz-option]:enabled").count(), 0);
     evidence.push("Quiz reload restores the same marked question without allowing a duplicate answer");
-    await page.locator('[data-practice-mode="exam"]').click();
+    await practice(page, "exam");
     await page.locator("#exam-answer").waitFor();
     await page.locator("#exam-answer").fill("A partial explanation for guided review, not an automatic examiner mark.");
     const writtenPrompt = await page.locator(".exam-question-card > h3").innerText();
@@ -269,9 +290,8 @@ async function dismissLaunch(page) {
     evidence.push("Flashcards and written questions display their assessed OCR specification points");
     await page.reload();
     await dismissLaunch(page);
-    await navigate(page, "practice");
+    await practice(page, "exam");
     await page.locator("#component-topic-select").selectOption("cs-2-3-1");
-    await page.locator('[data-practice-mode="exam"]').click();
     await page.locator("#exam-answer").waitFor();
     assert.equal(await page.locator(".exam-question-card > h3").innerText(), writtenPrompt);
     assert.match(await page.locator("#exam-answer").inputValue(), /partial explanation/);
@@ -279,17 +299,16 @@ async function dismissLaunch(page) {
     await page.locator(".guided-answer-review").waitFor();
     assert.match(await page.locator(".guided-answer-review").innerText(), /not an examiner mark/);
     await screenshot(page, "written-review-desktop");
-    await page.locator('[data-practice-mode="mock"]').click();
+    await practice(page, "mock");
     await page.locator("#mini-mock-answer").fill("A draft answer that should survive a normal page refresh.");
     const mockPrompt = await page.locator(".mini-mock-question h3").innerText();
     await page.reload();
     await dismissLaunch(page);
-    await navigate(page, "practice");
-    await page.locator('[data-practice-mode="mock"]').click();
+    await practice(page, "mock");
     await page.locator("#mini-mock-answer").waitFor();
     assert.equal(await page.locator(".mini-mock-question h3").innerText(), mockPrompt);
     assert.match(await page.locator("#mini-mock-answer").inputValue(), /survive a normal page refresh/);
-    await page.locator('[data-practice-mode="exam"]').click();
+    await practice(page, "exam");
     await page.locator("#exam-answer").waitFor();
     assert.equal(await page.locator(".mini-mock-shell:visible").count(), 0);
     evidence.push("Written question/draft and timed paper/draft resume after reload; practice modes replace the correct panel");
@@ -320,7 +339,7 @@ async function dismissLaunch(page) {
 
     for (const width of [1280, 768, 390, 320]) {
       await page.setViewportSize({ width, height: 900 });
-      for (const section of ["home", "revise", "practice", "progress", "notes", "contact"]) {
+      for (const section of ["home", "revise", "practice", "coding", "progress", "notes", "contact"]) {
         if (section === "contact") {
           await page.locator(".global-account-menu summary").click();
           await page.locator('[data-global-action="contact"]').click();
@@ -355,7 +374,7 @@ async function dismissLaunch(page) {
         }
         await page.keyboard.press("Escape");
       }
-      await navigate(page, "revise");
+      await flashcards(page, "cs-2-3-1");
       await screenshot(page, `retrieve-${width}`);
     }
     await page.setViewportSize({ width: 390, height: 844 });
@@ -389,10 +408,9 @@ async function dismissLaunch(page) {
     }
     await page.reload();
     await dismissLaunch(page);
-    await navigate(page, "practice");
+    await practice(page);
     await page.locator('[data-component="h446-01"]').first().click();
     await page.locator("#component-topic-select").selectOption("cs-1-1-1");
-    await page.locator('[data-practice-mode="quick"]').click();
     await page.locator("#practice-length").selectOption("5");
     const { DatabaseSync } = require("node:sqlite");
     const evidenceDb = new DatabaseSync(path.join(temp, "fixture.sqlite"), { readOnly: true });
@@ -408,7 +426,6 @@ async function dismissLaunch(page) {
     await page.reload();
     await dismissLaunch(page);
     await navigate(page, "home");
-    await page.locator(".today-tools summary").click();
     await page.locator('[data-student-action="saved-practice"]').click();
     assert.match(await page.locator(".recall-position").innerText(), /Question 2 of 5/);
     assert.equal(await page.locator("#recall-response").inputValue(), "A saved second answer");

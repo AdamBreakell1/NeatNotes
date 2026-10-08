@@ -13,6 +13,19 @@ test("auth return destinations allow known navigation only, never URLs or guest 
   });
 });
 
+test("Code studio and course library survive authentication without moving student source", () => {
+  assert.deepEqual(normaliseTask({ section: "coding", topicId: "cs-1-1-1", source: "private" }, topics), {
+    section: "coding", topicId: "cs-1-1-1", componentId: "h446-01", practiceMode: "quick",
+  });
+  assert.equal(normaliseTask({ section: "practice", practiceMode: "coding", topicId: "cs-1-1-1" }, topics).section, "coding");
+  const codingTask = normaliseTask({ section: "coding", topicId: "cs-1-1-1", codingTaskId: "worksheet-01", source: "private" }, topics);
+  assert.equal(codingTask.codingTaskId, "worksheet-01");
+  assert.equal("source" in codingTask, false);
+  assert.equal("codingTaskId" in normaliseTask({ section: "coding", topicId: "cs-1-1-1", codingTaskId: "https://example.org" }, topics), false);
+  assert.equal(normaliseTask({ section: "revise", studyView: "topics", topicId: "cs-1-1-1" }, topics).studyView, "topics");
+  assert.equal(normaliseTask({ section: "practice", practiceMode: "hub", topicId: "cs-1-1-1" }, topics).practiceMode, "hub");
+});
+
 test("continuations are isolated by account, expire, and can be acknowledged", () => {
   const db = new DatabaseSync(":memory:");
   db.exec("CREATE TABLE auth_continuations (user_id TEXT PRIMARY KEY, task_json TEXT, expires_at TEXT)");

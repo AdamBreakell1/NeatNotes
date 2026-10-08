@@ -4,14 +4,16 @@ const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 function normaliseTask(value, topics) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  if (!["home", "revise", "practice", "progress", "notes"].includes(value.section)) return null;
+  if (!["home", "revise", "practice", "coding", "progress", "notes"].includes(value.section)) return null;
   const topic = topics.find((item) => item.id === value.topicId);
   if (!topic) return null;
   return {
-    section: value.section,
+    section: value.section === "practice" && value.practiceMode === "coding" ? "coding" : value.section,
     topicId: topic.id,
     componentId: topic.componentId || "h446-01",
-    practiceMode: ["quick", "exam", "mock", "labs", "coding"].includes(value.practiceMode) ? value.practiceMode : "quick",
+    practiceMode: ["hub", "quick", "exam", "mock", "labs", "coding"].includes(value.practiceMode) ? value.practiceMode : "quick",
+    ...(value.section === "revise" ? { studyView: value.studyView === "topics" ? "topics" : "cards" } : {}),
+    ...(["coding", "practice"].includes(value.section) && typeof value.codingTaskId === "string" && /^[a-zA-Z0-9_-]{1,100}$/.test(value.codingTaskId) ? { codingTaskId: value.codingTaskId } : {}),
   };
 }
 

@@ -14,6 +14,7 @@
     "test": "node --test backend/*.test.js backend/**/*.test.js",
     "test:browser": "node scripts/browser-smoke.cjs",
     "test:coding-browser": "node scripts/browser-pseudocode.cjs",
+    "test:navigation-browser": "node scripts/browser-navigation.cjs",
     "benchmark:coding": "node scripts/benchmark-pseudocode.js",
     "benchmark:storage": "node scripts/benchmark-storage.js",
     "review:coding": "node scripts/review-pseudocode.js",

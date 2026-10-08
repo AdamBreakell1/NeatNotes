@@ -1819,6 +1819,7 @@ function registerPublicAssetRoutes() {
     ["/pseudocode-engine.js", "application/javascript"],
     ["/pseudocode-worker.js", "application/javascript"],
     ["/pseudocode-practice.js", "application/javascript"],
+    ["/workspace-navigation.js", "application/javascript"],
     ["/pseudocode-drafts.js", "application/javascript"],
     ["/pseudocode.css", "text/css"],
     ["/ocr-content.js", "application/javascript"],

@@ -12,6 +12,9 @@
   let worker = null, watchdog = null, playback = null, session = null, job = 0, loadId = 0, loading = false;
   let history = [], historyIndex = 0, revision = 0, latestResult = null, trace = [], selectedFile = null;
   let sessionId = null, libraryOpen = false;
+  let catalogue = null, catalogueRequest = null;
+  let loadingId = 0;
+  const compactWorkspace = window.matchMedia('(max-width: 760px)');
   const scratch = {id:'scratch',title:'Scratchpad',category:'Your code',kind:'Explore',difficulty:'Open practice',version:'2026-10-07.2',interpreterVersion:VERSION,
     prompt:'Try an idea, practise a language feature or build your own program. Use input() for interactive questions and Files for text data.',
     starter:'// Your own program\nname=input("What is your name?")\nprint("Hello, "+name)\n',files:{},cases:[],example:{inputs:['Ada'],output:['Hello, Ada']},hints:[],rubric:[],transferId:'worksheet-1-1'};
@@ -21,6 +24,32 @@
     const data = await response.json().catch(()=>({}));
     if (!response.ok) throw new Error(data.error || 'Could not connect. Your draft remains saved on this device.');
     return data;
+  }
+  async function loadCatalogue() {
+    if (catalogue) return catalogue;
+    if (!catalogueRequest) {
+      catalogueRequest = request('/api/coding/tasks').then(response => {
+        if (!Array.isArray(response.tasks) || !response.tasks.length) throw new Error('The coding task catalogue could not load. Try again.');
+        catalogue = response.tasks;
+        return catalogue;
+      }).finally(() => { catalogueRequest = null; });
+    }
+    return catalogueRequest;
+  }
+  async function searchTasks(query) {
+    const term = typeof query === 'string' ? query.trim().toLowerCase().slice(0, 160) : '';
+    if (!term) return [];
+    const bank = await loadCatalogue();
+    const allCoding = ['code', 'coding', 'pseudocode', 'erl'].includes(term);
+    return bank.filter(task => allCoding || `${task.title} ${task.category} ${task.worksheet || ''} ${task.prompt}`.toLowerCase().includes(term))
+      .slice(0, 8).map(task => ({
+        id: task.id,
+        title: task.title,
+        detail: [task.worksheet, task.category, task.difficulty, task.minutes ? `${task.minutes} min` : ''].filter(Boolean).join(' · '),
+      }));
+  }
+  function validTaskId(id) {
+    return typeof id === 'string' && id.length <= 100 && (id === 'scratch' || tasks.some(task => task.id === id));
   }
   function message(text) { if ($('coding-status')) $('coding-status').textContent = text; }
   function event(name) {
@@ -109,6 +138,7 @@
     for (const view of panel.querySelectorAll('[data-coding-bottom-view]')) view.hidden = view.dataset.codingBottomView !== name;
   }
   function guideTab(name) {
+    if ($('coding-guidance')) $('coding-guidance').open = true;
     for (const button of panel.querySelectorAll('[data-coding-guide]')) button.setAttribute('aria-pressed',String(button.dataset.codingGuide===name));
     for (const view of panel.querySelectorAll('[data-coding-guide-view]')) view.hidden = view.dataset.codingGuideView !== name;
   }
@@ -287,25 +317,29 @@ greet("Ada")</pre><p>Arguments are copied by value; routine variables are local.
     <p>Programs run in a worker: 16,384 source characters, 1,000,000 work units per run, 4,096 array cells, 1,000 output lines, 20 virtual files/65,536 characters and 30 seconds of timed output. Use Stop at any time.</p>`;
   function renderTask() {
     $('coding-task-select').value=active.id;
-    $('coding-workspace').innerHTML=`<header class="coding-task-head"><div><p class="eyebrow">${escape(active.worksheet||active.category)} · ${escape(active.kind)} · ${escape(active.difficulty)}</p><h3>${escape(active.title)}</h3></div><button type="button" data-code-action="next">Next task →</button></header>
-      <div class="coding-workbench"><aside class="coding-guide" aria-label="Task instructions and files"><div class="coding-tabs" aria-label="Workspace guidance"><button type="button" data-coding-guide="task" aria-pressed="true">Task</button><button type="button" data-coding-guide="files" aria-pressed="false">Files <span id="coding-file-count">${Object.keys(draft.files).length}</span></button><button type="button" data-coding-guide="language" aria-pressed="false">Language</button></div>
+    $('coding-workspace').innerHTML=`<header class="coding-task-head"><div><p class="eyebrow">${escape(active.worksheet||active.category)} · ${escape(active.kind)} · ${escape(active.difficulty)}</p><h2>${escape(active.title)}</h2><p class="coding-task-summary">${escape(active.prompt.split('\n')[0].slice(0, 180))}${active.prompt.split('\n')[0].length > 180 ? '…' : ''}</p></div><button type="button" data-code-action="next">Next task →</button></header>
+      <div class="coding-workbench"><details id="coding-guidance" class="coding-guide-disclosure" ${compactWorkspace.matches?'':'open'}><summary>Instructions, files &amp; language</summary><aside class="coding-guide" aria-label="Task instructions and files"><div class="coding-tabs" aria-label="Workspace guidance"><button type="button" data-coding-guide="task" aria-pressed="true">Task</button><button type="button" data-coding-guide="files" aria-pressed="false">Files <span id="coding-file-count">${Object.keys(draft.files).length}</span></button><button type="button" data-coding-guide="language" aria-pressed="false">Language</button></div>
       <div data-coding-guide-view="task"><p class="coding-task-prompt">${escape(active.prompt)}</p>${active.fixtureNote?`<p class="coding-fixture-note">${escape(active.fixtureNote)}</p>`:''}<details open><summary>Example</summary><p>Input</p><pre>${escape(active.example.inputs.join('\n')||'(No input)')}</pre><p>Expected output</p><pre>${escape(active.example.output.join('\n')||'(No output)')}</pre><button type="button" data-code-action="example-input">Run with these inputs</button></details>
       <details><summary>Plan your approach</summary><label for="coding-plan">Notes or prediction</label><textarea id="coding-plan" rows="3" maxlength="2000">${escape(draft.plan)}</textarea><label for="coding-mode">Attempt label</label><select id="coding-mode"><option value="learn">Practice</option><option value="independent">First attempt</option></select><p>Your runs and help use are recorded with checks.</p></details>
       ${active.hints.length?`<details><summary>Hints and worked solution</summary><ol id="coding-hints">${active.hints.slice(0,draft.assistance.hints).map(h=>`<li>${escape(h)}</li>`).join('')}</ol><button id="coding-hint" type="button" data-code-action="hint">Next hint</button><button id="coding-solution" type="button" data-code-action="solution">Show solution</button><pre id="coding-solution-source" hidden></pre><button id="coding-solution-use" type="button" data-code-action="solution-use" hidden>Use solution in editor</button></details>`:''}
       ${active.rubric.length?`<details><summary>Review your work</summary>${active.rubric.map((r,i)=>`<label class="coding-checkbox"><input type="checkbox" data-coding-rubric="${i}" ${draft.rubric[i]?'checked':''}>${escape(r)}</label>`).join('')}<button id="coding-finish" type="button" data-code-action="finish" disabled>Mark reviewed</button><p>Task checks are practice feedback; they do not award exam marks.</p></details>`:''}</div>
-      <div id="coding-files" data-coding-guide-view="files" hidden></div><div data-coding-guide-view="language" hidden>${languageHelp}</div></aside>
-      <main class="coding-main"><div class="coding-editor-heading"><label for="coding-source">code.erl</label><span id="coding-save"></span><label class="coding-checkbox"><input id="coding-plain" type="checkbox">Plain text</label></div><div class="coding-edit-tools"><button type="button" data-code-action="undo">Undo</button><button type="button" data-code-action="redo">Redo</button><button type="button" data-code-action="indent">Indent</button><button type="button" data-code-action="outdent">Outdent</button><button type="button" data-code-action="reset">Reset code</button><button type="button" data-code-action="download">Download</button><button type="button" data-code-action="import">Open project</button><input id="coding-project-import" type="file" accept=".json,.erl,.txt" hidden></div>
+      <div id="coding-files" data-coding-guide-view="files" hidden></div><div data-coding-guide-view="language" hidden>${languageHelp}</div></aside></details>
+      <section class="coding-main" aria-label="Code editor and console"><div class="coding-editor-heading"><label for="coding-source">code.erl</label><span id="coding-save"></span><label class="coding-checkbox"><input id="coding-plain" type="checkbox">Plain text</label></div>
+      <div class="coding-runbar"><button id="coding-run" class="primary-button" type="button" data-code-action="run">▶ Run</button><button id="coding-stop" type="button" data-code-action="stop" disabled>■ Stop</button><button id="coding-check" type="button" data-code-action="check">Check task</button><span id="coding-assistance"></span></div>
+      <details id="coding-editor-tools" class="coding-editor-tools" ${compactWorkspace.matches?'':'open'}><summary>Editor tools &amp; projects</summary><div class="coding-edit-tools"><button type="button" data-code-action="undo">Undo</button><button type="button" data-code-action="redo">Redo</button><button type="button" data-code-action="indent">Indent</button><button type="button" data-code-action="outdent">Outdent</button><button type="button" data-code-action="reset">Reset code</button><button type="button" data-code-action="download">Download</button><button type="button" data-code-action="import">Open project</button><input id="coding-project-import" type="file" accept=".json,.erl,.txt" hidden></div></details>
       <div class="coding-editor"><pre id="coding-lines" aria-hidden="true"></pre><div class="coding-code-layers"><pre id="coding-highlight" aria-hidden="true"></pre><textarea id="coding-source" maxlength="16384" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" wrap="off" aria-describedby="coding-editor-help">${escape(draft.source)}</textarea></div></div>
-      <div class="coding-runbar"><button id="coding-run" class="primary-button" type="button" data-code-action="run">▶ Run</button><button id="coding-stop" type="button" data-code-action="stop" disabled>■ Stop</button><button id="coding-check" type="button" data-code-action="check">Check task</button><span id="coding-assistance"></span></div><p id="coding-editor-help">Ctrl/⌘ + Enter to run. Tab moves to the next control; use Indent for spacing.</p>
+      <p id="coding-editor-help">Ctrl/⌘ + Enter to run. Tab moves to the next control; use Indent for spacing.</p>
       <p id="coding-status" role="status" aria-live="polite" aria-atomic="true">Ready — write your program and press Run.</p><div id="coding-diagnostics" class="coding-diagnostics"></div>
       <section class="coding-console"><div class="coding-tabs"><button type="button" data-coding-bottom="console" aria-pressed="true">Console</button><button type="button" data-coding-bottom="checks" aria-pressed="false">Task checks</button><button type="button" data-coding-bottom="trace" aria-pressed="false">Variables</button></div>
       <div data-coding-bottom-view="console"><div id="coding-output" role="log" aria-label="Program output" tabindex="0"></div><form id="coding-terminal-form" hidden><label id="coding-terminal-prompt" for="coding-terminal-input">Input</label><div class="coding-field-row"><input id="coding-terminal-input" maxlength="1024" autocomplete="off"><button type="submit">Enter ↵</button></div></form><details class="coding-fixtures"><summary>Preload input values (optional)</summary><label for="coding-input">One value per line; use "" for an empty value</label><textarea id="coding-input" rows="3" maxlength="8192" spellcheck="false">${escape(draft.inputs)}</textarea><p>Run will ask interactively when these values run out.</p></details></div>
       <div id="coding-results" data-coding-bottom-view="checks" hidden><p>Check task runs the stated cases against the task’s original files.</p></div><div data-coding-bottom-view="trace" hidden><p id="coding-trace-note"></p><label for="coding-trace-select">Recorded step</label><select id="coding-trace-select"></select><button type="button" data-code-action="trace-line">Go to source line</button><pre id="coding-trace-values"></pre></div></section>
-      </main></div><footer class="coding-data"><details><summary>Saving and privacy</summary><p>Code, files and planning notes are saved on this device for 30 days after editing. Signed-in accounts can also keep check outcome metadata. Your source and file contents are never uploaded. Download a project to move it between devices. Export before signing out on a shared computer.</p><p id="coding-sync">${owner?'Checking pending outcomes…':'Guest drafts stay on this device.'}</p><button type="button" data-code-action="export">Export coding data</button><button type="button" data-code-action="sync">Retry outcome sync</button><button type="button" data-code-action="clear">Clear saved coding data</button></details></footer>`;
+      </section></div><footer class="coding-data"><details><summary>Saving and privacy</summary><p>Code, files and planning notes are saved on this device for 30 days after editing. Signed-in accounts can also keep check outcome metadata. Your source and file contents are never uploaded. Download a project to move it between devices. Export before signing out on a shared computer.</p><p id="coding-sync">${owner?'Checking pending outcomes…':'Guest drafts stay on this device.'}</p><button type="button" data-code-action="export">Export coding data</button><button type="button" data-code-action="sync">Retry outcome sync</button><button type="button" data-code-action="clear">Clear saved coding data</button></details></footer>`;
     $('coding-mode').value=draft.mode;renderFiles();highlight();renderTrace();controls();save();sync();
   }
-  function choose(id) {
-    stop(null); loadId++; active=id==='scratch'?scratch:tasks.find(t=>t.id===id); if(!active)return;
+  function choose(id, { notify = true } = {}) {
+    if (!validTaskId(id)) return false;
+    const previousId = active?.id;
+    stop(null); loadId++; active=id==='scratch'?scratch:tasks.find(t=>t.id===id);
     revision=0;latestResult=null;trace=[];selectedFile=null;
     const stored=drafts.draft(localOwner(),id),restored=window.CodingDrafts.restore(stored,active);
     draft=restored.draft||{source:active.starter,inputs:'',plan:'',mode:'learn',assistance:{runs:0,hints:0,checks:0,solution:false},rubric:[],files:{...active.files},completed:false,taskVersion:active.version,interpreterVersion:VERSION};
@@ -315,6 +349,9 @@ greet("Ada")</pre><p>Arguments are copied by value; routine variables are local.
     history=[draft.source];historyIndex=0;drafts.remember(localOwner(),id);renderTask();
     if(restored.stale)message('Your earlier code has been restored in the updated workspace. Review the task and run it again.');
     libraryOpen=false;$('coding-library').hidden=true;event('coding_task_opened');
+    panel.querySelector('[data-code-action="browse"]')?.setAttribute('aria-expanded', 'false');
+    if (notify && previousId !== id && typeof context.onTaskChange === 'function') context.onTaskChange(id);
+    return true;
   }
   async function sync(myOwner=owner) {
     if(!myOwner)return;
@@ -336,18 +373,21 @@ greet("Ada")</pre><p>Arguments are copied by value; routine variables are local.
   }
   async function show(options) {
     visible=true;context=options||{};const nextOwner=context.owner||null;
-    if(nextOwner!==owner){stop(null);loadId++;owner=nextOwner;active=null;draft=null;tasks=[];}
-    if(active&&$('coding-source'))return;
-    if(loading)return;loading=true;sessionId=crypto.randomUUID();const id=++loadId;
+    if(nextOwner!==owner){stop(null);loadId++;loading=false;owner=nextOwner;active=null;draft=null;tasks=[];}
+    if(active&&$('coding-source')){
+      if(validTaskId(context.taskId) && context.taskId !== active.id) choose(context.taskId, {notify:false});
+      return;
+    }
+    if(loading)return;loading=true;sessionId=crypto.randomUUID();const id=++loadId;loadingId=id;
     panel.innerHTML='<p role="status">Loading the coding workspace…</p>';
     try{
-      const response=await request('/api/coding/tasks');if(id!==loadId||!visible)return;
-      tasks=response.tasks;
-      panel.innerHTML=`<header class="coding-studio-head"><div><p class="eyebrow">Write · run · explore</p><h2>Pseudocode practice</h2><p>Real tasks and an interpreter, right here in RecallStride.</p></div><div class="coding-studio-actions"><button type="button" data-code-action="browse">Browse ${tasks.length} tasks</button><button type="button" data-code-action="scratch">Scratchpad</button><label class="coding-select-label" for="coding-task-select">Current task<select id="coding-task-select">${tasks.map(t=>`<option value="${escape(t.id)}">${escape(t.worksheet||'Extra')} · ${escape(t.title)}</option>`).join('')}<option value="scratch">Scratchpad</option></select></label></div></header>
+      const bank=await loadCatalogue();if(id!==loadId||!visible)return;
+      tasks=bank;
+      panel.innerHTML=`<header class="coding-studio-head" aria-label="Coding task tools"><div class="coding-studio-actions"><button type="button" data-code-action="browse" aria-controls="coding-library" aria-expanded="false">Browse ${tasks.length} tasks</button><button type="button" data-code-action="scratch">Scratchpad</button><label class="coding-select-label" for="coding-task-select">Current task<select id="coding-task-select">${tasks.map(t=>`<option value="${escape(t.id)}">${escape(t.worksheet||'Extra')} · ${escape(t.title)}</option>`).join('')}<option value="scratch">Scratchpad</option></select></label></div></header>
       <section id="coding-library" class="coding-library" aria-label="Coding task library" hidden><div class="coding-library-filters"><label for="coding-category">Topic<select id="coding-category"><option value="">All topics</option>${[...new Set(tasks.map(t=>t.category))].map(c=>`<option>${escape(c)}</option>`).join('')}</select></label><label for="coding-search">Find a task<input id="coding-search" type="search" placeholder="Search titles or task numbers"></label><span id="coding-task-count"></span></div><div id="coding-task-list"></div></section><div id="coding-workspace"></div>`;
-      renderLibrary();const resume=drafts.resume(localOwner());choose(resume==='scratch'||tasks.some(t=>t.id===resume)?resume:tasks[0].id);event('coding_session_started');
+      renderLibrary();const resume=drafts.resume(localOwner());choose(validTaskId(context.taskId)?context.taskId:validTaskId(resume)?resume:tasks[0].id,{notify:false});event('coding_session_started');
     }catch(error){if(id===loadId)panel.innerHTML=`<p role="status">${escape(error.message)}</p><button type="button" data-code-action="reload">Retry loading</button><button type="button" data-code-action="export">Export saved drafts</button>`;}
-    finally{loading=false;}
+    finally{if(loadingId===id)loading=false;}
   }
   panel.addEventListener('input',e=>{
     if(e.target.id==='coding-search'){renderLibrary();return;}if(!draft)return;
@@ -414,7 +454,7 @@ greet("Ada")</pre><p>Arguments are copied by value; routine variables are local.
     const action=button.dataset.codeAction;
     if(action==='reload'){stop(null);active=null;loading=false;show(context);return;}
     if(action==='export'){exportData();return;}
-    if(action==='browse'){libraryOpen=!libraryOpen;$('coding-library').hidden=!libraryOpen;if(libraryOpen){renderLibrary();$('coding-search').focus();}return;}
+    if(action==='browse'){libraryOpen=!libraryOpen;$('coding-library').hidden=!libraryOpen;button.setAttribute('aria-expanded',String(libraryOpen));if(libraryOpen){renderLibrary();$('coding-search').focus();}return;}
     if(action==='scratch'){choose('scratch');return;}
     if(!draft)return;
     if(action==='run'||action==='check'){execute(action);return;}
@@ -451,6 +491,10 @@ greet("Ada")</pre><p>Arguments are copied by value; routine variables are local.
     }
   });
   window.addEventListener('online',()=>{if(visible)sync();});
+  compactWorkspace.addEventListener('change', () => {
+    if ($('coding-guidance')) $('coding-guidance').open = !compactWorkspace.matches;
+    if ($('coding-editor-tools')) $('coding-editor-tools').open = !compactWorkspace.matches;
+  });
   window.addEventListener('storage',e=>{if(e.key==='recallstride-coding-session-change'){stop(null);owner=null;active=null;draft=null;tasks=[];loadId++;panel.innerHTML='<p role="status">The account session changed in another tab. Reload to continue.</p>';}});
-  window.CodingPractice={show,hide(){visible=false;stop(null);},sessionChanged(previousOwner,clear=false){stop(null);loadId++;loading=false;if(clear)drafts.clear(previousOwner);owner=null;active=null;draft=null;tasks=[];panel.replaceChildren();try{storage.setItem('recallstride-coding-session-change',crypto.randomUUID());}catch{}},exportLocal(id){return drafts.export(id);},clearLocal(id){drafts.clear(id);}};
+  window.CodingPractice={show,searchTasks,hide(){visible=false;stop(null);},sessionChanged(previousOwner,clear=false){stop(null);loadId++;loading=false;if(clear)drafts.clear(previousOwner);owner=null;active=null;draft=null;tasks=[];panel.replaceChildren();try{storage.setItem('recallstride-coding-session-change',crypto.randomUUID());}catch{}},exportLocal(id){return drafts.export(id);},clearLocal(id){drafts.clear(id);}};
 })();
