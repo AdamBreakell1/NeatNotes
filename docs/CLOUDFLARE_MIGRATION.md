@@ -2,7 +2,7 @@
 
 ## Status and architecture
 
-The owner authorised a suitable free migration. The application port and transfer tools are prepared on `codex/cloudflare-migration`. **Nothing has been migrated remotely.** Cloudflare account access is unavailable; Safari and Wrangler are signed out. Render still serves `d239cfe253f7` at https://neatnotes.onrender.com with its original persistent disk.
+The owner authorised a suitable free migration. Cloudflare and Wrangler are now authenticated. The app is deployed at https://recallstride.breakellsystems.workers.dev in maintenance mode, revision `99844836957d`; the protected transfer service is deployed. **Customer data has not moved.** Render now serves the same compatible revision and remains writable with its original disk. Next: finish the prepared temporary Render SSH-key registration, then follow the source-freeze/backup/import procedure. See [the current checkpoint](CONTINUE_RECALLSTRIDE.md).
 
 The target is a Cloudflare Worker for static assets/routes and one SQLite-backed Durable Object running the complete Express API. This preserves existing SQLite transactions, foreign keys, passwords and workspace relationships. Students' code runs in their browsers. Static assets avoid database requests. One database preserves joins and Stripe idempotency but does not provide horizontal database sharding.
 

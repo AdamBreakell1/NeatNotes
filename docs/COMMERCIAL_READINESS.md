@@ -6,9 +6,9 @@ The owner authorised the previous feature deployments and now a suitable free ho
 
 | Area | Current evidence | Remaining concrete work |
 | --- | --- | --- |
-| Live app | Render health 200, revision `d239cfe253f7`, persistent database, no fallback | Preserve service/disk through cutover |
-| Free hosting | Full Express/SQLite port, real-runtime checks and safe transfer tools | Cloudflare account authentication, remote deployment, actual customer export/import and cutover; see [runbook](CLOUDFLARE_MIGRATION.md) |
-| Signup/email | Generic500 after failed verification delivery fixed locally; retries preserve one account and valid links | Deploy fix and verify real sender/recipient delivery. School email domain/provider response unknown; no platform restriction established |
+| Live app | Render health 200, revision `99844836957d`, persistent database, no fallback | Preserve service/disk through cutover |
+| Free hosting | Full Express/SQLite port, real-runtime checks and safe transfer tools | Cloudflare app deployed closed; finish temporary Render SSH access, actual customer export/import and cutover; see [runbook](CLOUDFLARE_MIGRATION.md) |
+| Signup/email | Generic500 after failed verification delivery fixed locally; retries preserve one account and valid links | Fix is deployed on Render; verify real sender/recipient delivery. School email domain/provider response unknown; no platform restriction established |
 | Subscriptions | Signed/idempotent webhooks, state reconciliation and plan boundaries pass synthetic checks | Real Stripe prices, Checkout, portal, webhook delivery and cancellation/refund behaviour on the chosen origin remain unverified |
 | Student data | Account isolation/export/deletion and synthetic backup/transfer checks pass | Actual production backup, verified transfer and recovery evidence |
 | Domain | RecallStride/BreakellSystems displayed; no domain purchased | Confirm chosen domain/price, register with owner authority, configure DNS/TLS/sender records |
@@ -17,4 +17,4 @@ The owner authorised the previous feature deployments and now a suitable free ho
 | Accessibility | Previous automated navigation/interpreter checks and responsive layouts | Actual screen-reader/device feedback remains bounded; no universal claim |
 | Expansion | Static assets bypass database; indexes and fewer repeated writes | Measure real usage/latency/quota headroom; one database is not horizontal sharding or unlimited free scale |
 
-Next: authenticate the owner's Cloudflare account and complete the controlled migration. Do not restart a broad audit or redo computer-use feature tests when asked to deploy. Confirm the live revision and precisely which provider/customer-data/domain actions happened.
+Next: finish the prepared Render SSH access and complete the controlled data transfer/cutover. Cloudflare authentication/deployment are complete. Do not restart a broad audit or redo computer-use feature tests when asked to deploy. Confirm the live revision and precisely which provider/customer-data/domain actions happened.

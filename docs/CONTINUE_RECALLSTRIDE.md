@@ -2,9 +2,13 @@
 
 The owner authorised finding a suitable free host and migrating RecallStride. Continue from branch `codex/cloudflare-migration`; do not repeat the hosting research or navigation redesign.
 
-**The migration is not live.** The Cloudflare Workers / SQLite Durable Object port and safe data-transfer tools are implemented locally. Safari is on the Cloudflare login page and `wrangler whoami` reports unauthenticated. The owner has been asked to sign in; no confirmation has arrived. No remote database, production customer export, provider configuration or domain purchase has been created by this work.
+**Cloudflare is deployed in maintenance mode; customer data has not moved.** The owner signed in to Cloudflare and authorised Wrangler with account/user read plus Workers deployment access. Do not repeat that authorisation. The new app is https://recallstride.breakellsystems.workers.dev, code revision `99844836957d`, Worker version `c412fd1b-2e7d-494c-abec-2f067c08cc13`. Its API returns503 and public migration routes return404. The temporary protected transfer service is deployed and reports `not_started`.
 
-Render still serves https://neatnotes.onrender.com, release `d239cfe253f766a8de5dfffa07adef59c189a699` (health prefix `d239cfe253f7`). The 9 October health read returned HTTP 200, `ok:true`, persistent storage and no fallback. Its dashboard showed paid Starter hosting on 8 October. Preserve its disk and original data until cutover succeeds. Prior rollback release: `df4500f1b9c8c1232c49aa1d92934460b54e826b`.
+**Next required step:** the owner must finish the prepared Add SSH Public Key form in Safari/Render. Key name: `RecallStride temporary migration — 9 October 2026`; fingerprint `SHA256:z8GGZ8MnICxZjVuvz7/mlA01QUKEsJHFqBg5OYk2FPQ`. It has not been submitted. Confirmation is required by the computer-use policy for new security-sensitive access. The source has NOT been frozen; leave it writable until real access, size checks and backup are established. No production export, provider settings transfer or domain purchase has happened.
+
+Local private state is in ignored `cloudflare-state.migration-private.json`; it records staging/key paths and remote IDs without provider values. The transfer token is in owner-only ignored `.cloudflare-migration-token`. Provider-copy helper: `/tmp/recallstride-copy-providers.mjs` (not executed), accepting `--ssh-target`, `--key-file`, `--config`; it streams an explicit allowlist from remote process.env into Wrangler stdin without printing values or reading .env. After the key is registered, read the exact SSH target in Render Connect, connect, check actual size/rows, freeze source, snapshot/export, copy providers, import/verify, update the existing Stripe webhook URL, then open Cloudflare. Revoke this temporary access and delete the transfer Worker after completion.
+
+Render now serves https://neatnotes.onrender.com, revision `99844836957d`, after the compatible migration backend was pushed to main and auto-deployed. Health returned200 with email/Stripe configuration present and Google sign-in absent. This publishes the recoverable signup fix. It remains the writable production source on Starter with its original disk. Preserve it through cutover. The pre-migration rollback revision is `d239cfe253f766a8de5dfffa07adef59c189a699`.
 
 Prepared work:
 
@@ -30,7 +34,7 @@ npm run build:cloudflare
 git diff --check
 ```
 
-Do not use anonymous `wrangler deploy --temporary` for production/customer records. After account login, finish normal Wrangler OAuth, preserve provider settings without printing secrets, deploy closed, freeze and export Render, import/verify, then switch traffic. A domain purchase or paid hosting upgrade was not authorised by the request for a free migration.
+Do not use anonymous `wrangler deploy --temporary` for production/customer records. Wrangler OAuth is complete. Once Render SSH access is established, preserve provider settings without printing secrets, deploy closed, freeze and export Render, import/verify, then switch traffic. A domain purchase or paid hosting upgrade was not authorised by the request for a free migration.
 
 Preserve unrelated untracked historical evidence: `docs/validation/production-deployment.json`, `docs/validation/code-studio-deployment.json`, `docs/validation/navigation-redesign-deployment.json`.
 

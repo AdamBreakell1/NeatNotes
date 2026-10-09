@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-09",
+  "codeRevision": "99844836957d1ae2a65d5e95731bd4920e8cc7e4",
+  "cloudflare": {
+    "url": "https://recallstride.breakellsystems.workers.dev",
+    "version": "c412fd1b-2e7d-494c-abec-2f067c08cc13",
+    "mode": "maintenance",
+    "apiHealthStatus": 503,
+    "publicTransferRouteStatus": 404,
+    "transferStatus": "not_started"
+  },
+  "render": {
+    "url": "https://neatnotes.onrender.com",
+    "release": "99844836957d",
+    "healthStatus": 200,
+    "writable": true,
+    "emailConfigured": true,
+    "stripeConfigured": true,
+    "googleConfigured": false
+  },
+  "notPerformed": [
+    "Render SSH-key registration",
+    "source freeze or production database export",
+    "provider settings transfer",
+    "customer database import",
+    "Stripe webhook URL change",
+    "traffic cutover",
+    "domain purchase"
+  ],
+  "pendingAction": "Owner to submit prepared temporary Render SSH public key; new security-sensitive access requires confirmation."
+}
