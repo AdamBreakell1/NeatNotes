@@ -19,7 +19,11 @@
     "benchmark:storage": "node scripts/benchmark-storage.js",
     "review:coding": "node scripts/review-pseudocode.js",
     "coverage:content": "node scripts/report-coverage.js",
-    "review:content": "node scripts/review-content.js"
+    "review:content": "node scripts/review-content.js",
+    "build:cloudflare": "node scripts/build-cloudflare.js",
+    "dev:cloudflare": "CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false CLOUDFLARE_INCLUDE_PROCESS_ENV=false wrangler dev --local",
+    "deploy:cloudflare": "node scripts/deploy-cloudflare.mjs",
+    "test:cloudflare": "node scripts/test-cloudflare-compatibility.mjs && node scripts/test-cloudflare-app.mjs && node scripts/test-cloudflare-migration.mjs"
   },
   "keywords": [],
   "author": "",
@@ -28,7 +32,10 @@
   "dependencies": {
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "nodemailer": "^9.0.1",
+    "nodemailer": "10.0.16",
     "stripe": "^22.3.0"
+  },
+  "devDependencies": {
+    "wrangler": "4.149.0"
   }
 }

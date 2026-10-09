@@ -1,11 +1,7 @@
-// Test fixtures explicitly bypass local provider configuration and real data.
-if (process.env.RECALLSTRIDE_SKIP_DOTENV !== "true") require("dotenv").config();
-
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { DatabaseSync } = require("node:sqlite");
 const express = require("express");
 const nodemailer = require("nodemailer");
 const Stripe = require("stripe");
@@ -19,8 +15,9 @@ const {
 const { buildContentModel, flattenContent, validateContentModel } = require("./ocr-content");
 const { QUESTION_BANK, getPublicQuestion, markAnswer, validateQuestionBank } = require("./exam-content");
 const { LABS, assessLab, getPublicLab, validateLabs } = require("./cs-labs");
-const { loadTopics, isReleased, hasAvailableConcepts } = require("./backend/services/contentRepository");
+const { loadTopics, isReleased: isContentReleased, hasAvailableConcepts } = require("./backend/services/contentRepository");
 const { createAuthContinuationStore } = require("./backend/services/authContinuation");
+const { AuthEmailDeliveryError, smtpTransportOptions, sendAuthenticationEmail } = require("./backend/services/authEmail");
 const { registerPracticeRoutes } = require("./backend/services/pseudocodePractice");
 const { registerPilotRoutes } = require("./backend/services/pilotTelemetry");
 const { availableQuiz } = require("./component-one-quizzes");
@@ -30,53 +27,62 @@ const { trustedSchedule } = require("./backend/services/trustedSchedule");
 const { createSubscriptionEventProcessor, subscriptionAccess } = require("./backend/services/subscriptionEvents");
 const revisionGenerator = require("./revision-generator");
 
+// Each runtime owns its database and configuration; importing this module is inert.
+function createApplication({ db: injectedDb, environment = process.env, staticAssets = true, runtime = {} } = {}) {
+const environmentConfig = { ...environment };
+const maintenanceMode = environmentConfig.MIGRATION_MODE === "true";
+const migrationRedirect = environmentConfig.MIGRATION_REDIRECT_URL ? new URL(environmentConfig.MIGRATION_REDIRECT_URL) : null;
+if (migrationRedirect && (migrationRedirect.protocol !== "https:" || migrationRedirect.username || migrationRedirect.password || migrationRedirect.search || migrationRedirect.hash || migrationRedirect.pathname !== "/")) {
+  throw new Error("MIGRATION_REDIRECT_URL must be a canonical HTTPS origin.");
+}
 const app = express();
-const PORT = Number(process.env.PORT || 4173);
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+const startedAt = Date.now();
+const isReleased = (topic) => isContentReleased(topic, environmentConfig.NODE_ENV === "production");
+const PORT = Number(environmentConfig.PORT || 4173);
+const BASE_URL = environmentConfig.BASE_URL || `http://localhost:${PORT}`;
 const SESSION_COOKIE = "nn_session";
-const CONTACT_TO = process.env.CONTACT_TO || "neatnotescontact@gmail.com";
-const CONTACT_RETRY_INTERVAL_MS = Number(process.env.CONTACT_RETRY_INTERVAL_MS || 10 * 60 * 1000);
-const FREE_REVISION_DECK_LIMIT = Number(process.env.FREE_REVISION_DECK_LIMIT || 1);
-const MAX_NOTE_BODY_BYTES = Number(process.env.MAX_NOTE_BODY_BYTES || 96 * 1024);
-const MAX_NOTE_VERSIONS = Number(process.env.MAX_NOTE_VERSIONS || 40);
-const MAX_NOTE_VERSION_BYTES = Number(process.env.MAX_NOTE_VERSION_BYTES || 1024 * 1024);
+const CONTACT_TO = environmentConfig.CONTACT_TO || "neatnotescontact@gmail.com";
+const CONTACT_RETRY_INTERVAL_MS = Number(environmentConfig.CONTACT_RETRY_INTERVAL_MS || 10 * 60 * 1000);
+const FREE_REVISION_DECK_LIMIT = Number(environmentConfig.FREE_REVISION_DECK_LIMIT || 1);
+const MAX_NOTE_BODY_BYTES = Number(environmentConfig.MAX_NOTE_BODY_BYTES || 96 * 1024);
+const MAX_NOTE_VERSIONS = Number(environmentConfig.MAX_NOTE_VERSIONS || 40);
+const MAX_NOTE_VERSION_BYTES = Number(environmentConfig.MAX_NOTE_VERSION_BYTES || 1024 * 1024);
 const DEFAULT_FREE_REVISION_DECK_ID = "cs-1-1-1";
-const DATA_DIR = path.join(__dirname, "data");
-const REQUESTED_DB_PATH = process.env.DATABASE_PATH || path.join(DATA_DIR, "neat-notes.sqlite");
-const DATABASE_CONFIG = prepareDatabasePath(REQUESTED_DB_PATH);
+const REQUESTED_DB_PATH = injectedDb ? null : environmentConfig.DATABASE_PATH || path.join(__dirname, "data", "neat-notes.sqlite");
+const DATABASE_CONFIG = injectedDb ? { path: null, fallbackActive: false } : prepareDatabasePath(REQUESTED_DB_PATH);
 const DB_PATH = DATABASE_CONFIG.path;
 const DB_FALLBACK_ACTIVE = DATABASE_CONFIG.fallbackActive;
-const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN || BASE_URL)
+const ALLOWED_ORIGINS = (environmentConfig.CORS_ORIGIN || BASE_URL)
   .split(",")
   .map((origin) => normalizeOrigin(origin))
   .filter(Boolean);
 const authRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: Number(process.env.AUTH_RATE_LIMIT || 25),
+  max: Number(environmentConfig.AUTH_RATE_LIMIT || 25),
 });
 const contactRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: Number(process.env.CONTACT_RATE_LIMIT || 8),
+  max: Number(environmentConfig.CONTACT_RATE_LIMIT || 8),
 });
 const joinRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: Number(process.env.JOIN_RATE_LIMIT || 12),
+  max: Number(environmentConfig.JOIN_RATE_LIMIT || 12),
 });
 const revisionRateLimiter = createRateLimiter({
   windowMs: 60 * 1000,
-  max: Number(process.env.REVISION_RATE_LIMIT || 90),
+  max: Number(environmentConfig.REVISION_RATE_LIMIT || 90),
 });
 const billingRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: Number(process.env.BILLING_RATE_LIMIT || 12),
+  max: Number(environmentConfig.BILLING_RATE_LIMIT || 12),
 });
-const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null;
-const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
+const stripe = environmentConfig.STRIPE_SECRET_KEY ? new Stripe(environmentConfig.STRIPE_SECRET_KEY) : null;
+const STRIPE_WEBHOOK_SECRET = environmentConfig.STRIPE_WEBHOOK_SECRET || "";
 const STRIPE_PRICE_IDS = {
-  pro: process.env.STRIPE_PRICE_PRO || process.env.STRIPE_PRICE_PLUS || "",
-  proAnnual: process.env.STRIPE_PRICE_PRO_ANNUAL || "",
-  teacher: process.env.STRIPE_PRICE_TEACHER || "",
-  institution: process.env.STRIPE_PRICE_INSTITUTION || "",
+  pro: environmentConfig.STRIPE_PRICE_PRO || environmentConfig.STRIPE_PRICE_PLUS || "",
+  proAnnual: environmentConfig.STRIPE_PRICE_PRO_ANNUAL || "",
+  teacher: environmentConfig.STRIPE_PRICE_TEACHER || "",
+  institution: environmentConfig.STRIPE_PRICE_INSTITUTION || "",
 };
 const { PLAN_CATALOG, PUBLIC_PLAN_IDS, BRAND, BILLING } = require("./product-config");
 const PRODUCT_EVENT_NAMES = new Set([
@@ -90,12 +96,44 @@ const PRODUCT_EVENT_NAMES = new Set([
 ]);
 const REVISION_TOPICS = loadRevisionTopicsFromAssets();
 
-const db = new DatabaseSync(DB_PATH);
+const db = injectedDb || new (require("node:sqlite").DatabaseSync)(DB_PATH);
+if (typeof db.transactionSync !== "function") {
+  let transactionDepth = 0;
+  db.transactionSync = (callback) => {
+    const savepoint = `recallstride_transaction_${transactionDepth}`;
+    const nested = transactionDepth > 0;
+    db.exec(nested ? `SAVEPOINT ${savepoint}` : "BEGIN IMMEDIATE");
+    transactionDepth += 1;
+    try {
+      const result = callback();
+      if (result && typeof result.then === "function") throw new TypeError("Database transactions must be synchronous.");
+      db.exec(nested ? `RELEASE SAVEPOINT ${savepoint}` : "COMMIT");
+      return result;
+    } catch (error) {
+      db.exec(nested ? `ROLLBACK TO SAVEPOINT ${savepoint}; RELEASE SAVEPOINT ${savepoint}` : "ROLLBACK");
+      throw error;
+    } finally {
+      transactionDepth -= 1;
+    }
+  };
+}
 const authContinuations = createAuthContinuationStore(db, REVISION_TOPICS);
 db.exec("PRAGMA foreign_keys = ON");
-db.exec("PRAGMA journal_mode = WAL");
+if (!injectedDb) db.exec("PRAGMA journal_mode = WAL");
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS runtime_metadata (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS request_rate_limits (
+    key TEXT PRIMARY KEY,
+    count INTEGER NOT NULL,
+    reset_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS request_rate_limits_expiry_idx ON request_rate_limits(reset_at);
+
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     email TEXT NOT NULL UNIQUE,
@@ -519,7 +557,22 @@ db.exec(`
 `);
 
 migrateSchema();
-seedRevisionDecks();
+db.exec(`
+  CREATE INDEX IF NOT EXISTS notes_workspace_updated_idx ON notes(workspace_id, updated_at);
+  CREATE INDEX IF NOT EXISTS notes_owner_idx ON notes(owner_id);
+  CREATE INDEX IF NOT EXISTS note_versions_note_created_idx ON note_versions(note_id, created_at);
+  CREATE INDEX IF NOT EXISTS workspace_members_user_idx ON workspace_members(user_id, workspace_id);
+  CREATE INDEX IF NOT EXISTS workspaces_owner_idx ON workspaces(owner_id);
+  CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id);
+  CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions(expires_at);
+  CREATE INDEX IF NOT EXISTS product_events_user_time_idx ON product_events(user_id, created_at);
+  CREATE INDEX IF NOT EXISTS activity_user_time_idx ON student_activity_events(user_id, created_at);
+  CREATE INDEX IF NOT EXISTS learning_evidence_user_time_idx ON learning_evidence(user_id, created_at);
+  CREATE INDEX IF NOT EXISTS contact_delivery_time_idx ON contact_enquiries(status, created_at);
+  CREATE INDEX IF NOT EXISTS verification_user_expiry_idx ON email_verification_tokens(user_id, expires_at);
+  CREATE INDEX IF NOT EXISTS reset_user_expiry_idx ON password_reset_tokens(user_id, expires_at);
+`);
+if (!maintenanceMode) seedRevisionDecksIfChanged();
 validatePublishedContent();
 const processSubscriptionEvent = createSubscriptionEventProcessor({
   hasEvent: (id) => Boolean(db.prepare("SELECT 1 FROM stripe_events WHERE id = ?").get(id)),
@@ -536,8 +589,22 @@ app.use((req, res, next) => {
 });
 app.use(securityHeaders);
 app.use(corsMiddleware);
+app.use((req, res, next) => {
+  if (maintenanceMode && migrationRedirect && ["GET", "HEAD"].includes(req.method) && req.path !== "/api/health") {
+    return res.redirect(307, `${migrationRedirect.origin}${req.originalUrl}`);
+  }
+  next();
+});
+// Freeze account, callback and webhook writes while the source is transferred.
+// Health remains available to keep the existing service and rollback copy alive.
+app.use("/api", (req, res, next) => {
+  if (!maintenanceMode || (req.method === "GET" && req.path === "/health")) return next();
+  return res.status(503).set("Retry-After", "60").set("Cache-Control", "no-store").json({
+    error: "RecallStride is moving its database. Please try again shortly.",
+  });
+});
 app.post("/api/billing/stripe/webhook", express.raw({ type: "application/json" }), asyncHandler(handleStripeWebhook));
-app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "1mb" }));
+app.use(express.json({ limit: environmentConfig.JSON_BODY_LIMIT || "1mb" }));
 app.use("/api", enforceSameOriginMutation);
 app.use("/api", (req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
@@ -629,8 +696,8 @@ app.get("/api/health", (req, res) => {
     emailConfigured: !getSmtpConfigError(),
     googleConfigured: isGoogleConfigured(),
     stripeConfigured: isStripeConfigured(),
-    release: String(process.env.RENDER_GIT_COMMIT || process.env.RELEASE_SHA || "development").slice(0, 12),
-    uptimeSeconds: Math.round(process.uptime()),
+    release: String(environmentConfig.RENDER_GIT_COMMIT || environmentConfig.RELEASE_SHA || "development").slice(0, 12),
+    uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
     timestamp: new Date().toISOString(),
   });
 });
@@ -764,7 +831,7 @@ app.post("/api/billing/customer-portal", billingRateLimiter, requireUser, asyncH
 }));
 
 app.post("/api/billing/mock-upgrade", requireUser, (req, res) => {
-  if (process.env.ALLOW_MOCK_BILLING !== "true" || process.env.NODE_ENV === "production") {
+  if (environmentConfig.ALLOW_MOCK_BILLING !== "true" || environmentConfig.NODE_ENV === "production") {
     return res.status(403).json({ error: "Mock billing is disabled. Use Stripe Checkout." });
   }
 
@@ -792,17 +859,21 @@ app.post("/api/auth/signup", authRateLimiter, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Enter a name, valid email, and password between 8 and 128 characters." });
   }
 
+  ensureAuthenticationEmailAvailable();
+
   const existing = getUserByEmail(email);
   if (existing) {
     if (!existing.email_verified) {
       const passwordMatches = existing.password_hash
         && verifyPassword(password, existing.password_salt, existing.password_hash);
+      let verification = {};
       if (passwordMatches) {
         authContinuations.save(existing.id, req.body.returnTask);
-        await createAndSendVerification(existing.id, existing.email, existing.name);
+        verification = await createAndSendVerification(existing.id, existing.email, existing.name);
       }
       return res.status(202).json({
         message: "If an account can be created or verified for that email, a verification message is on its way.",
+        devVerificationUrl: verification.devVerificationUrl,
       });
     }
 
@@ -815,14 +886,15 @@ app.post("/api/auth/signup", authRateLimiter, asyncHandler(async (req, res) => {
   const userId = crypto.randomUUID();
   const passwordRecord = hashPassword(password);
 
-  db.prepare(`
-    INSERT INTO users (id, email, name, password_hash, password_salt, email_verified, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, 0, ?, ?)
-  `).run(userId, email, name, passwordRecord.hash, passwordRecord.salt, now, now);
-
-  ensurePersonalWorkspace(userId, name);
-  ensureAccountProfiles({ id: userId, role: "student" });
-  authContinuations.save(userId, req.body.returnTask);
+  db.transactionSync(() => {
+    db.prepare(`
+      INSERT INTO users (id, email, name, password_hash, password_salt, email_verified, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, 0, ?, ?)
+    `).run(userId, email, name, passwordRecord.hash, passwordRecord.salt, now, now);
+    ensurePersonalWorkspace(userId, name);
+    ensureAccountProfiles({ id: userId, role: "student" });
+    authContinuations.save(userId, req.body.returnTask);
+  });
   const verification = await createAndSendVerification(userId, email, name);
 
   res.status(201).json({
@@ -861,6 +933,7 @@ app.post("/api/auth/logout", requireUser, (req, res) => {
 app.post("/api/auth/forgot-password", authRateLimiter, asyncHandler(async (req, res) => {
   const responseNotBefore = Date.now() + 250;
   const email = normalizeEmail(req.body.email);
+  ensureAuthenticationEmailAvailable();
   const user = email ? getUserByEmail(email) : null;
 
   if (user?.password_hash && user.email_verified) {
@@ -870,17 +943,21 @@ app.post("/api/auth/forgot-password", authRateLimiter, asyncHandler(async (req, 
     const expiresAt = new Date(now.getTime() + 1000 * 60 * 30);
     const resetUrl = `${BASE_URL}/?reset=${encodeURIComponent(rawToken)}`;
 
-    db.prepare("DELETE FROM password_reset_tokens WHERE user_id = ?").run(user.id);
+    db.prepare("DELETE FROM password_reset_tokens WHERE user_id = ? AND (used_at IS NOT NULL OR expires_at <= ?)")
+      .run(user.id, now.toISOString());
     db.prepare(`
       INSERT INTO password_reset_tokens (token_hash, user_id, expires_at, created_at)
       VALUES (?, ?, ?, ?)
     `).run(tokenHash, user.id, expiresAt.toISOString(), now.toISOString());
 
     if (hasSmtpConfig()) {
-      sendPasswordResetEmail(user, resetUrl).catch((error) => {
+      const delivery = sendPasswordResetEmail(user, resetUrl).catch((error) => {
         console.error("Password reset email delivery failed:", sanitizeMailerError(error));
       });
-    } else if (process.env.NODE_ENV !== "production") {
+      // Serverless runtimes must keep this non-enumerating delivery alive after
+      // returning the same response for known and unknown email addresses.
+      runtime.waitUntil?.(delivery);
+    } else if (environmentConfig.NODE_ENV !== "production") {
       console.log(`Development password reset link for ${user.email}: ${resetUrl}`);
     }
     writeAuditLog(user.id, "password_reset_requested", "user", user.id);
@@ -890,7 +967,7 @@ app.post("/api/auth/forgot-password", authRateLimiter, asyncHandler(async (req, 
   if (remainingDelay > 0) await new Promise((resolve) => setTimeout(resolve, remainingDelay));
 
   res.status(202).json({
-    message: "If an eligible account exists for that email, a password reset link is on its way.",
+    message: "If an eligible account exists for that email, a password reset has been requested. Check your inbox and spam folder. If a link doesn't arrive, try again in a minute.",
   });
 }));
 
@@ -905,23 +982,18 @@ app.post("/api/auth/reset-password", authRateLimiter, (req, res) => {
     SELECT password_reset_tokens.* FROM password_reset_tokens
     WHERE token_hash = ?
   `).get(tokenHash);
-  if (!reset || reset.used_at || new Date(reset.expires_at) < new Date()) {
+  if (!reset || reset.used_at || Date.parse(reset.expires_at) <= Date.now()) {
     return res.status(400).json({ error: "That password reset link is invalid or has expired." });
   }
 
   const passwordRecord = hashPassword(password);
   const now = new Date().toISOString();
-  db.exec("BEGIN IMMEDIATE");
-  try {
+  db.transactionSync(() => {
     db.prepare("UPDATE users SET password_hash = ?, password_salt = ?, updated_at = ? WHERE id = ?")
       .run(passwordRecord.hash, passwordRecord.salt, now, reset.user_id);
-    db.prepare("UPDATE password_reset_tokens SET used_at = ? WHERE token_hash = ?").run(now, tokenHash);
+    db.prepare("UPDATE password_reset_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL").run(now, reset.user_id);
     db.prepare("DELETE FROM sessions WHERE user_id = ?").run(reset.user_id);
-    db.exec("COMMIT");
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
+  });
   writeAuditLog(reset.user_id, "password_reset_completed", "user", reset.user_id);
   clearSessionCookie(res);
   res.json({ message: "Password updated. Log in again on each device." });
@@ -949,8 +1021,8 @@ app.delete("/api/account/sessions/others", requireUser, (req, res) => {
   res.json({ message: `${Number(result.changes)} other session${Number(result.changes) === 1 ? "" : "s"} signed out.` });
 });
 
-const codingPracticeStore = registerPracticeRoutes(app, { db, requireUser, rateLimit: revisionRateLimiter, canAccess: canAccessRevisionDeck });
-const pilotTelemetry = registerPilotRoutes(app, { db, requireUser, requireAdmin, rateLimit: revisionRateLimiter, consented: (owner) => normalizeNotificationPreferences(parseJsonValue(getStudentProfile(owner)?.notification_preferences, {})).usageAnalytics });
+const codingPracticeStore = registerPracticeRoutes(app, { db, requireUser, rateLimit: revisionRateLimiter, canAccess: canAccessRevisionDeck, scheduleCleanup: !maintenanceMode && runtime.scheduleCleanup !== false, pruneOnStartup: !maintenanceMode });
+const pilotTelemetry = registerPilotRoutes(app, { db, requireUser, requireAdmin, rateLimit: revisionRateLimiter, scheduleCleanup: !maintenanceMode && runtime.scheduleCleanup !== false, pruneOnStartup: !maintenanceMode, consented: (owner) => normalizeNotificationPreferences(parseJsonValue(getStudentProfile(owner)?.notification_preferences, {})).usageAnalytics });
 
 app.get("/api/account/export", requireUser, (req, res) => {
   const workspaces = db.prepare(`
@@ -1034,13 +1106,15 @@ app.get("/api/auth/verify", (req, res) => {
     WHERE token_hash = ?
   `).get(tokenHash);
 
-  if (!row || row.used_at || new Date(row.expires_at) < new Date()) {
+  if (!row || row.used_at || Date.parse(row.expires_at) <= Date.now()) {
     return res.status(400).send(renderMessagePage("Verification failed", "That link is invalid or has expired."));
   }
 
   const now = new Date().toISOString();
-  db.prepare("UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?").run(now, row.user_id);
-  db.prepare("UPDATE email_verification_tokens SET used_at = ? WHERE token_hash = ?").run(now, tokenHash);
+  db.transactionSync(() => {
+    db.prepare("UPDATE users SET email_verified = 1, updated_at = ? WHERE id = ?").run(now, row.user_id);
+    db.prepare("UPDATE email_verification_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL").run(now, row.user_id);
+  });
 
   res.redirect("/?verified=1");
 });
@@ -1054,12 +1128,12 @@ app.get("/api/auth/google", authRateLimiter, (req, res) => {
   res.cookie("google_oauth_state", state, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: environmentConfig.NODE_ENV === "production",
     maxAge: 10 * 60 * 1000,
   });
 
   const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID,
+    client_id: environmentConfig.GOOGLE_CLIENT_ID,
     redirect_uri: googleRedirectUri(),
     response_type: "code",
     scope: "openid email profile",
@@ -1081,8 +1155,8 @@ app.get("/api/auth/google/callback", asyncHandler(async (req, res) => {
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
       code: String(req.query.code),
-      client_id: process.env.GOOGLE_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLIENT_SECRET,
+      client_id: environmentConfig.GOOGLE_CLIENT_ID,
+      client_secret: environmentConfig.GOOGLE_CLIENT_SECRET,
       redirect_uri: googleRedirectUri(),
       grant_type: "authorization_code",
     }),
@@ -1513,8 +1587,7 @@ app.post("/api/revision/attempts", revisionRateLimiter, requireUser, (req, res) 
     if (receipt.request_hash !== requestHash) return res.status(409).json({ error: "This attempt identifier was already used for a different answer." });
     return res.json(JSON.parse(receipt.response_json));
   }
-  db.exec("BEGIN IMMEDIATE");
-  try {
+  const response = db.transactionSync(() => {
   const quizCorrect = req.body.quizCorrect === undefined ? null : (req.body.quizCorrect ? 1 : 0);
   const responseTimeMs = req.body.responseTimeMs !== null && req.body.responseTimeMs !== undefined && Number.isFinite(Number(req.body.responseTimeMs))
     ? Math.max(0, Number(req.body.responseTimeMs))
@@ -1561,12 +1634,9 @@ app.post("/api/revision/attempts", revisionRateLimiter, requireUser, (req, res) 
     recommendations: getRevisionRecommendations(req.user.id, classId).slice(0, 3),
   };
   if (clientId) db.prepare("INSERT INTO revision_attempt_receipts VALUES (?, ?, ?, ?, ?)").run(req.user.id, clientId, requestHash, JSON.stringify(response), now);
-  db.exec("COMMIT");
+    return response;
+  });
   res.status(201).json(response);
-  } catch (error) {
-    db.exec("ROLLBACK");
-    throw error;
-  }
 });
 
 app.get("/api/revision/recommendations", requireUser, (req, res) => {
@@ -1707,12 +1777,12 @@ app.get("/api/revision/repairs", requireUser, (req, res) => {
   const topicId = String(req.query.topicId || "");
   if (!canAccessRevisionDeck(req.user, topicId)) return res.status(402).json({ error: "Choose this free deck or unlock the released library to practise this topic." });
   const lessons = REPAIR_LESSONS.filter((item) => item.topicId === topicId && !contentReviewState.quarantinedTopicIds.includes(topicId));
-  res.json({ lessons: lessons.filter((item) => isRepairReleased(item, contentReviewState)).map((item) => publicRepair(item)), pendingCount: lessons.filter((item) => !isRepairReleased(item, contentReviewState)).length });
+  res.json({ lessons: lessons.filter((item) => isRepairReleased(item, contentReviewState, environmentConfig.NODE_ENV === "production")).map((item) => publicRepair(item)), pendingCount: lessons.filter((item) => !isRepairReleased(item, contentReviewState, environmentConfig.NODE_ENV === "production")).length });
 });
 
 app.post("/api/revision/repairs/:id/check", revisionRateLimiter, requireUser, (req, res) => {
   const item = REPAIR_LESSONS.find((lesson) => lesson.id === req.params.id);
-  if (!item || !isRepairReleased(item, contentReviewState) || contentReviewState.quarantinedTopicIds.includes(item.topicId)) return res.status(404).json({ error: "This worked example is not released." });
+  if (!item || !isRepairReleased(item, contentReviewState, environmentConfig.NODE_ENV === "production") || contentReviewState.quarantinedTopicIds.includes(item.topicId)) return res.status(404).json({ error: "This worked example is not released." });
   if (!canAccessRevisionDeck(req.user, item.topicId)) return res.status(402).json({ error: "This topic is not available on your plan." });
   const variant = req.body.variant;
   if (!Number.isInteger(variant) || variant < 0 || variant >= item.checks.length) return res.status(400).json({ error: "Choose an available practice question." });
@@ -1741,7 +1811,7 @@ app.post("/api/labs/attempts", revisionRateLimiter, requireUser, (req, res) => {
     return res.status(402).json({ error: "Choose this as your free deck or upgrade to Pro to submit this task." });
   }
   if (!response) return res.status(400).json({ error: "Enter or choose an answer first." });
-  const assessment = assessLab(labItem, response);
+  const assessment = assessLab(labItem, response, db);
   const responseTimeMs = req.body.responseTimeMs !== null && req.body.responseTimeMs !== undefined && Number.isFinite(Number(req.body.responseTimeMs))
     ? Math.min(1000 * 60 * 60, Math.max(0, Number(req.body.responseTimeMs)))
     : null;
@@ -1761,10 +1831,15 @@ app.use((req, res, next) => {
     return res.status(404).json({ error: "API route not found." });
   }
 
+  if (!staticAssets) return res.status(404).type("text/plain").send("Route not found.");
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
 app.use((err, req, res, next) => {
+  if (err instanceof AuthEmailDeliveryError) {
+    res.setHeader("Retry-After", "60");
+    return res.status(err.status).json({ error: err.message, code: err.code });
+  }
   console.error("Request failed:", {
     method: req.method,
     path: req.path,
@@ -1775,33 +1850,12 @@ app.use((err, req, res, next) => {
   res.status(Number(err?.status || 500)).json({ error: "Something went wrong." });
 });
 
-app.listen(PORT, () => {
-  console.log(`RecallStride running at ${BASE_URL}`);
-  const smtpConfigError = getSmtpConfigError();
-  if (smtpConfigError) {
-    console.log(`${smtpConfigError} Development verification links are available only outside production.`);
-  }
-  if (!isGoogleConfigured()) {
-    console.log("Google OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable it.");
-  }
-  retryQueuedContactEnquiries().catch((error) => {
-    console.error("Initial contact enquiry retry failed:", sanitizeMailerError(error));
-  });
-});
-
-if (CONTACT_RETRY_INTERVAL_MS > 0) {
-  setInterval(() => {
-    retryQueuedContactEnquiries().catch((error) => {
-      console.error("Contact enquiry retry failed:", sanitizeMailerError(error));
-    });
-  }, CONTACT_RETRY_INTERVAL_MS).unref();
-}
-
 function asyncHandler(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 }
 
 function registerPublicAssetRoutes() {
+  if (staticAssets) {
   app.get("/app-relaunch.js", (req, res) => {
     res.type("application/javascript").sendFile(path.join(__dirname, "app.js"));
   });
@@ -1840,6 +1894,8 @@ function registerPublicAssetRoutes() {
       res.sendFile(path.join(__dirname, publicPath.slice(1)));
     });
   });
+
+  }
 
   app.get("/revision-topics.js", (req, res) => {
     const user = getOptionalSessionUser(req);
@@ -1994,7 +2050,7 @@ function prepareDatabasePath(requestedPath) {
       fallbackActive: false,
     };
   } catch (error) {
-    const fallbackPath = process.env.DATABASE_FALLBACK_PATH || path.join(os.tmpdir(), "neat-notes.sqlite");
+    const fallbackPath = environmentConfig.DATABASE_FALLBACK_PATH || path.join(os.tmpdir(), "neat-notes.sqlite");
     fs.mkdirSync(path.dirname(fallbackPath), { recursive: true });
     console.warn(
       `Could not prepare DATABASE_PATH directory "${requestedDir}" (${error.code || error.message}). ` +
@@ -2017,7 +2073,7 @@ function securityHeaders(req, res, next) {
     "Content-Security-Policy",
     "default-src 'self'; base-uri 'self'; form-action 'self' https://accounts.google.com; frame-ancestors 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'",
   );
-  if (process.env.NODE_ENV === "production") {
+  if (environmentConfig.NODE_ENV === "production") {
     res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   }
   next();
@@ -2087,6 +2143,22 @@ function createRateLimiter({ windowMs, max }) {
   return (req, res, next) => {
     const now = Date.now();
     requestCount += 1;
+    // An idle Durable Object can restart before an authentication limit expires.
+    // Persist the security-sensitive 15-minute limits; short practice limits stay
+    // in memory to avoid turning every learning request into another DB write.
+    if (runtime.persistentRateLimits && windowMs >= 15 * 60 * 1000) {
+      const key = crypto.createHash("sha256").update(`${req.ip}:${req.path}`).digest("hex");
+      if (requestCount % 250 === 0) db.prepare("DELETE FROM request_rate_limits WHERE reset_at <= ?").run(now);
+      const stored = db.prepare("SELECT count, reset_at FROM request_rate_limits WHERE key = ?").get(key);
+      const record = stored && stored.reset_at > now ? { count: stored.count, resetAt: stored.reset_at } : { count: 0, resetAt: now + windowMs };
+      if (record.count >= max) {
+        res.setHeader("Retry-After", String(Math.ceil((record.resetAt - now) / 1000)));
+        return res.status(429).json({ error: "Too many attempts. Please wait a few minutes and try again." });
+      }
+      db.prepare("INSERT INTO request_rate_limits (key,count,reset_at) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET count=excluded.count, reset_at=excluded.reset_at")
+        .run(key, record.count + 1, record.resetAt);
+      return next();
+    }
     if (requestCount % 250 === 0) {
       for (const [storedKey, storedRecord] of hits) {
         if (storedRecord.resetAt <= now) hits.delete(storedKey);
@@ -2141,8 +2213,10 @@ function migrateSchema() {
   addColumnIfMissing("student_profiles", "exam_dates", "TEXT NOT NULL DEFAULT '{}'");
   addColumnIfMissing("student_profiles", "notification_preferences", "TEXT NOT NULL DEFAULT '{}'");
   addColumnIfMissing("student_profiles", "onboarding_completed_at", "TEXT");
-  db.prepare("UPDATE workspaces SET kind = 'personal' WHERE kind = 'project' AND name LIKE ?").run("%'s Notes");
-  db.prepare("UPDATE users SET plan = 'pro' WHERE plan = 'plus'").run();
+  if (!maintenanceMode) {
+    db.prepare("UPDATE workspaces SET kind = 'personal' WHERE kind = 'project' AND name LIKE ?").run("%'s Notes");
+    db.prepare("UPDATE users SET plan = 'pro' WHERE plan = 'plus'").run();
+  }
 }
 
 function addColumnIfMissing(table, column, definition) {
@@ -2150,6 +2224,19 @@ function addColumnIfMissing(table, column, definition) {
   if (!columns.includes(column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   }
+}
+
+function seedRevisionDecksIfChanged() {
+  const fingerprint = crypto.createHash("sha256").update(JSON.stringify({
+    topics: REVISION_TOPICS, questions: QUESTION_BANK, labs: LABS, reviews: contentReviewState,
+  })).digest("hex");
+  const recorded = db.prepare("SELECT value FROM runtime_metadata WHERE key = ?").get("content_seed");
+  if (recorded?.value === fingerprint) return;
+  db.transactionSync(() => {
+    seedRevisionDecks();
+    db.prepare("INSERT INTO runtime_metadata (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run("content_seed", fingerprint);
+  });
 }
 
 function seedRevisionDecks() {
@@ -2337,7 +2424,7 @@ function parseJsonValue(value, fallback) {
 
 
 function ensureAccountProfiles(user) {
-  if (!user?.id) return;
+  if (!user?.id || getStudentProfile(user.id)) return;
 
   const now = new Date().toISOString();
   db.prepare(`
@@ -3040,9 +3127,15 @@ function requireUser(req, res, next) {
   req.sessionCreatedAt = session.session_created_at;
   req.user = session;
   ensureAccountProfiles(session);
-  const now = new Date().toISOString();
-  db.prepare("UPDATE users SET last_accessed_at = ? WHERE id = ?").run(now, session.id);
-  db.prepare("UPDATE sessions SET last_used_at = ? WHERE token_hash = ?").run(now, tokenHash);
+  const nowMs = Date.now();
+  const now = new Date(nowMs).toISOString();
+  // Presence timestamps need minute-level precision; avoid two writes on every API request.
+  if (!session.last_accessed_at || nowMs - Date.parse(session.last_accessed_at) >= 5 * 60 * 1000) {
+    db.prepare("UPDATE users SET last_accessed_at = ? WHERE id = ?").run(now, session.id);
+  }
+  if (!session.session_last_used_at || nowMs - Date.parse(session.session_last_used_at) >= 5 * 60 * 1000) {
+    db.prepare("UPDATE sessions SET last_used_at = ? WHERE token_hash = ?").run(now, tokenHash);
+  }
   next();
 }
 
@@ -3067,7 +3160,7 @@ function issueSession(res, userId, req = null) {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: environmentConfig.NODE_ENV === "production",
     maxAge: 1000 * 60 * 60 * 24 * 30,
   });
 }
@@ -3094,46 +3187,56 @@ function ensurePersonalWorkspace(userId, name) {
 }
 
 async function createAndSendVerification(userId, email, name) {
+  ensureAuthenticationEmailAvailable();
   const rawToken = crypto.randomBytes(32).toString("base64url");
   const tokenHash = hashToken(rawToken);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 1000 * 60 * 60 * 24);
   const verificationUrl = `${BASE_URL}/api/auth/verify?token=${encodeURIComponent(rawToken)}`;
 
-  db.prepare("DELETE FROM email_verification_tokens WHERE user_id = ?").run(userId);
+  // Preserve still-valid links when a resend fails or delivery is uncertain.
+  db.prepare("DELETE FROM email_verification_tokens WHERE user_id = ? AND (used_at IS NOT NULL OR expires_at <= ?)")
+    .run(userId, now.toISOString());
   db.prepare(`
     INSERT INTO email_verification_tokens (token_hash, user_id, expires_at, created_at)
     VALUES (?, ?, ?, ?)
   `).run(tokenHash, userId, expiresAt.toISOString(), now.toISOString());
 
   if (hasSmtpConfig()) {
-    const transport = createMailTransport();
-
-    await transport.sendMail({
-      from: getEmailFromAddress(),
-      to: email,
-      subject: "Verify your RecallStride account",
-      text: `Hi ${name},\n\nVerify your RecallStride account here:\n${verificationUrl}\n\nThis link expires in 24 hours.`,
-      html: `<p>Hi ${escapeHtml(name)},</p><p>Verify your RecallStride account here:</p><p><a href="${verificationUrl}">Verify email</a></p><p>This link expires in 24 hours.</p>`,
+    await sendAuthenticationEmail({
+      createTransport: createMailTransport,
+      kind: "verification",
+      onFailure: logAuthenticationEmailFailure,
+      message: {
+        from: getEmailFromAddress(),
+        to: email,
+        subject: "Verify your RecallStride account",
+        text: `Hi ${name},\n\nVerify your RecallStride account here:\n${verificationUrl}\n\nThis link expires in 24 hours.`,
+        html: `<p>Hi ${escapeHtml(name)},</p><p>Verify your RecallStride account here:</p><p><a href="${verificationUrl}">Verify email</a></p><p>This link expires in 24 hours.</p>`,
+      },
     });
 
     return {};
   }
 
-  if (process.env.NODE_ENV !== "production") {
+  if (environmentConfig.NODE_ENV !== "production") {
     console.log(`Development verification link for ${email}: ${verificationUrl}`);
   }
-  return process.env.NODE_ENV === "production" ? {} : { devVerificationUrl: verificationUrl };
+  return environmentConfig.NODE_ENV === "production" ? {} : { devVerificationUrl: verificationUrl };
 }
 
 async function sendPasswordResetEmail(user, resetUrl) {
-  const transport = createMailTransport();
-  await transport.sendMail({
-    from: getEmailFromAddress(),
-    to: user.email,
-    subject: "Reset your RecallStride password",
-    text: `Hi ${user.name},\n\nReset your RecallStride password here:\n${resetUrl}\n\nThis link expires in 30 minutes. If you did not request it, you can ignore this email.`,
-    html: `<p>Hi ${escapeHtml(user.name)},</p><p>Use the link below to reset your RecallStride password.</p><p><a href="${escapeHtml(resetUrl)}">Reset password</a></p><p>This link expires in 30 minutes. If you did not request it, you can ignore this email.</p>`,
+  await sendAuthenticationEmail({
+    createTransport: createMailTransport,
+    kind: "password_reset",
+    onFailure: logAuthenticationEmailFailure,
+    message: {
+      from: getEmailFromAddress(),
+      to: user.email,
+      subject: "Reset your RecallStride password",
+      text: `Hi ${user.name},\n\nReset your RecallStride password here:\n${resetUrl}\n\nThis link expires in 30 minutes. If you did not request it, you can ignore this email.`,
+      html: `<p>Hi ${escapeHtml(user.name)},</p><p>Use the link below to reset your RecallStride password.</p><p><a href="${escapeHtml(resetUrl)}">Reset password</a></p><p>This link expires in 30 minutes. If you did not request it, you can ignore this email.</p>`,
+    },
   });
 }
 
@@ -3171,23 +3274,30 @@ async function sendContactEmail({ name, email, reason, message }) {
 }
 
 function createMailTransport() {
-  const settings = getSmtpSettings();
-  return nodemailer.createTransport({
-    host: settings.host,
-    port: settings.port,
-    secure: settings.secure,
-    auth: settings.user
-      ? { user: settings.user, pass: settings.pass }
-      : undefined,
+  if (runtime.createMailTransport) return runtime.createMailTransport(environmentConfig);
+  return nodemailer.createTransport(smtpTransportOptions(getSmtpSettings()));
+}
+
+function ensureAuthenticationEmailAvailable() {
+  if (environmentConfig.NODE_ENV === "production" && !hasSmtpConfig()) {
+    throw new AuthEmailDeliveryError("configuration");
+  }
+}
+
+function logAuthenticationEmailFailure(error) {
+  console.error("Authentication email delivery failed:", {
+    code: String(error?.code || "EMAIL_DELIVERY_FAILED").slice(0, 60),
+    command: String(error?.command || "").slice(0, 40),
+    responseCode: Number(error?.responseCode || 0),
   });
 }
 
 function getSmtpSettings() {
-  const user = String(process.env.SMTP_USER || "").trim();
-  const host = String(process.env.SMTP_HOST || inferSmtpHost(user) || "").trim();
-  const port = Number(process.env.SMTP_PORT || (isGmailHost(host) ? 465 : 587));
-  const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === "true" : port === 465;
-  const rawPass = String(process.env.SMTP_PASS || "");
+  const user = String(environmentConfig.SMTP_USER || "").trim();
+  const host = String(environmentConfig.SMTP_HOST || inferSmtpHost(user) || "").trim();
+  const port = Number(environmentConfig.SMTP_PORT || (isGmailHost(host) ? 465 : 587));
+  const secure = environmentConfig.SMTP_SECURE ? environmentConfig.SMTP_SECURE === "true" : port === 465;
+  const rawPass = String(environmentConfig.SMTP_PASS || "");
   const pass = isGmailHost(host) ? rawPass.replace(/\s+/g, "") : rawPass;
 
   return { host, port, secure, user, pass };
@@ -3226,7 +3336,7 @@ function updateContactEnquiryDelivery(id, status, deliveryError = null) {
 let contactRetryInProgress = false;
 
 async function retryQueuedContactEnquiries(limit = 10) {
-  if (contactRetryInProgress || getSmtpConfigError()) return;
+  if (maintenanceMode || contactRetryInProgress || getSmtpConfigError()) return;
   contactRetryInProgress = true;
 
   try {
@@ -3268,8 +3378,7 @@ function upsertGoogleUser(profile) {
   const existingByEmail = getUserByEmail(email);
   if (existingByEmail) {
     const wasUnverified = !existingByEmail.email_verified;
-    db.exec("BEGIN IMMEDIATE");
-    try {
+    db.transactionSync(() => {
       db.prepare(`
         UPDATE users
         SET google_id = ?,
@@ -3283,11 +3392,7 @@ function upsertGoogleUser(profile) {
         db.prepare("DELETE FROM sessions WHERE user_id = ?").run(existingByEmail.id);
         db.prepare("DELETE FROM email_verification_tokens WHERE user_id = ?").run(existingByEmail.id);
       }
-      db.exec("COMMIT");
-    } catch (error) {
-      db.exec("ROLLBACK");
-      throw error;
-    }
+    });
     const user = getUserByEmail(email);
     ensureAccountProfiles(user);
     return user;
@@ -3547,21 +3652,22 @@ function hasSmtpConfig() {
 }
 
 function getSmtpConfigError() {
+  if (runtime.mailConfigurationError) return runtime.mailConfigurationError(environmentConfig) || "";
   const settings = getSmtpSettings();
 
   if (!settings.host) {
-    return "Email delivery is not configured on the server yet. Add SMTP settings in Render and try again.";
+    return "Email delivery is not configured on the server yet. Add SMTP settings and try again.";
   }
 
   if (settings.user && !settings.pass) {
-    return "SMTP is missing its password or app password. Add SMTP_PASS in Render, then try again.";
+    return "SMTP is missing its password or app password. Add SMTP_PASS, then try again.";
   }
 
   if (isGmailHost(settings.host) && (!settings.user || !settings.pass)) {
     return "Gmail SMTP needs SMTP_USER and a Google app password in SMTP_PASS.";
   }
 
-  if (settings.user.toLowerCase() === "resend" && !process.env.EMAIL_FROM) {
+  if (settings.user.toLowerCase() === "resend" && !environmentConfig.EMAIL_FROM) {
     return "EMAIL_FROM must be set to a verified sender address when using Resend SMTP.";
   }
 
@@ -3575,8 +3681,8 @@ function getEmailFromAddress() {
     return `RecallStride <${settings.user}>`;
   }
 
-  if (process.env.EMAIL_FROM) {
-    return process.env.EMAIL_FROM;
+  if (environmentConfig.EMAIL_FROM) {
+    return environmentConfig.EMAIL_FROM;
   }
 
   if (settings.user.includes("@")) {
@@ -3587,8 +3693,8 @@ function getEmailFromAddress() {
 }
 
 function getEmailDeliveryErrorMessage(error) {
-  const detail = process.env.NODE_ENV === "production" ? "" : ` (${error.message})`;
-  return `We could not send the enquiry email from the server. Check the SMTP provider, SMTP_PASS/app password, and EMAIL_FROM settings in Render, then try again.${detail}`;
+  const detail = environmentConfig.NODE_ENV === "production" ? "" : ` (${error.message})`;
+  return `We couldn't send your message just now. Please try again shortly.${detail}`;
 }
 
 function sanitizeMailerError(error) {
@@ -3602,7 +3708,7 @@ function sanitizeMailerError(error) {
 }
 
 function isGoogleConfigured() {
-  return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+  return Boolean(environmentConfig.GOOGLE_CLIENT_ID && environmentConfig.GOOGLE_CLIENT_SECRET);
 }
 
 function isStripeConfigured() {
@@ -3833,3 +3939,38 @@ function renderMessagePage(title, message) {
       </body>
     </html>`;
 }
+
+return {
+  app,
+  db,
+  retryQueuedContactEnquiries,
+  configuration: { port: PORT, baseUrl: BASE_URL, contactRetryIntervalMs: maintenanceMode ? 0 : CONTACT_RETRY_INTERVAL_MS, maintenanceMode },
+  providerStatus: () => ({ emailError: getSmtpConfigError(), googleConfigured: isGoogleConfigured(), stripeConfigured: isStripeConfigured() }),
+};
+}
+
+function startApplication() {
+  // Test fixtures explicitly bypass local provider configuration and real data.
+  if (process.env.RECALLSTRIDE_SKIP_DOTENV !== "true") require("dotenv").config();
+  const application = createApplication({ environment: process.env });
+  const { port, baseUrl, contactRetryIntervalMs } = application.configuration;
+  const server = application.app.listen(port, () => {
+    console.log(`RecallStride running at ${baseUrl}`);
+    const providers = application.providerStatus();
+    if (providers.emailError) console.log(`${providers.emailError} Development verification links are available only outside production.`);
+    if (!providers.googleConfigured) console.log("Google OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable it.");
+    application.retryQueuedContactEnquiries().catch((error) => console.error("Initial contact enquiry retry failed:", error.code || error.name));
+  });
+  let contactTimer;
+  if (contactRetryIntervalMs > 0) {
+    contactTimer = setInterval(() => application.retryQueuedContactEnquiries().catch((error) => {
+      console.error("Contact enquiry retry failed:", error.code || error.name);
+    }), contactRetryIntervalMs);
+    contactTimer.unref();
+  }
+  server.on("close", () => clearInterval(contactTimer));
+  return { ...application, server };
+}
+
+module.exports = { createApplication, startApplication };
+if (require.main === module) startApplication();

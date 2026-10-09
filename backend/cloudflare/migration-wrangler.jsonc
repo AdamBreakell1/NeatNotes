@@ -1,0 +1,13 @@
+{
+  "name": "recallstride-transfer",
+  "main": "migration-worker.mjs",
+  "compatibility_date": "2026-10-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{
+      "name": "RECALLSTRIDE_DB",
+      "class_name": "RecallStrideDatabase",
+      "script_name": "recallstride"
+    }]
+  }
+}

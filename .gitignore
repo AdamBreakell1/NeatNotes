@@ -3,3 +3,9 @@ node_modules/
 data/
 .resource-review/
 test-results/
+dist/
+.wrangler/
+.dev.vars*
+*.migration-private.json
+.cloudflare-production.json
+.cloudflare-migration-token

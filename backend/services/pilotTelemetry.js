@@ -8,9 +8,9 @@ function validateEvent(value){
  if(value.taskId!==null&&!TASKS.some(t=>t.id===value.taskId))return null;
  return {id:value.id,name:value.name,sessionId:value.sessionId,taskId:value.taskId,mode:value.mode};
 }
-function registerPilotRoutes(app,{db,requireUser,requireAdmin,rateLimit,consented}){
+function registerPilotRoutes(app,{db,requireUser,requireAdmin,rateLimit,consented,scheduleCleanup=true,pruneOnStartup=true}){
  db.exec(`CREATE TABLE IF NOT EXISTS pilot_events(id TEXT NOT NULL,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,event_name TEXT NOT NULL,session_id TEXT NOT NULL,task_id TEXT,mode TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(user_id,id)); CREATE INDEX IF NOT EXISTS pilot_event_time ON pilot_events(created_at);`);
- const prune=()=>db.prepare("DELETE FROM pilot_events WHERE created_at < ?").run(new Date(Date.now()-30*86400000).toISOString());prune();const timer=setInterval(prune,86400000);timer.unref();
+ const prune=()=>db.prepare("DELETE FROM pilot_events WHERE created_at < ?").run(new Date(Date.now()-30*86400000).toISOString());if(pruneOnStartup)prune();if(scheduleCleanup){const timer=setInterval(prune,86400000);timer.unref?.();}
  app.post('/api/pilot/events',requireUser,rateLimit,(req,res)=>{
   const value=validateEvent(req.body);if(!value)return res.status(400).json({error:'Only defined event names, IDs and mode are accepted. No source or personal text.'});
   if(!consented(req.user.id))return res.status(204).end();

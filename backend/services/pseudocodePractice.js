@@ -55,8 +55,12 @@ function createPracticeStore(db, now = () => Date.now()) {
     clear(owner) { db.prepare("DELETE FROM coding_practice_attempts WHERE user_id=?").run(owner); },
   };
 }
-function registerPracticeRoutes(app, { db, requireUser, rateLimit, canAccess }) {
-  const store = createPracticeStore(db); store.prune(); const cleanup = setInterval(() => store.prune(), 86400000); cleanup.unref();
+function registerPracticeRoutes(app, { db, requireUser, rateLimit, canAccess, scheduleCleanup = true, pruneOnStartup = true }) {
+  const store = createPracticeStore(db); if (pruneOnStartup) store.prune();
+  if (scheduleCleanup) {
+    const cleanup = setInterval(() => store.prune(), 86400000);
+    cleanup.unref?.();
+  }
   // User-authorised teaching material is available independently of revision decks.
   // Academic review metadata is descriptive, not a runtime publication dependency.
   function gate(req, res, next) {

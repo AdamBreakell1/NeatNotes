@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-09",
+  "branch": "codex/cloudflare-migration",
+  "sourceRevision": "d239cfe253f766a8de5dfffa07adef59c189a699",
+  "migrationStatus": "prepared_locally_not_deployed",
+  "cloudflareAuthenticated": false,
+  "nodeTests": {
+    "passed": 105,
+    "failed": 0
+  },
+  "workerdCompatibilityChecks": 12,
+  "workerdApplicationChecks": 15,
+  "workerdTransferChecks": 5,
+  "content": {
+    "topics": 24,
+    "concepts": 474,
+    "codingTasks": 60
+  },
+  "npmAuditVulnerabilities": 0,
+  "sourceHealth": {
+    "status": 200,
+    "release": "d239cfe253f7",
+    "databasePersistent": true,
+    "databaseFallbackActive": false
+  },
+  "notPerformed": [
+    "Cloudflare remote deployment",
+    "production account export/import",
+    "provider configuration transfer",
+    "real email delivery",
+    "real Stripe lifecycle",
+    "domain registration"
+  ],
+  "fixtures": "Disposable synthetic databases and blank provider configuration only; no production data or .env read."
+}

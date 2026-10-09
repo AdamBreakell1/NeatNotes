@@ -33,12 +33,12 @@ function normalise(value) {
   return String(value || "").toLowerCase().replace(/;+$/g, "").replace(/\s+/g, " ").trim();
 }
 
-function assessLab(labItem, response) {
+function assessLab(labItem, response, database) {
   const submitted = normalise(response);
   const expected = normalise(labItem.answer);
   let correct = submitted === expected;
   if (labItem.responseType === "sql") {
-    const evaluation = evaluateStudentQuery(response);
+    const evaluation = evaluateStudentQuery(response, database);
     return { ...evaluation, score: evaluation.correct ? 1 : 0, explanation: `${labItem.explanation} ${evaluation.detail}`, expectedAnswer: labItem.answer };
   }
   return { correct, score: correct ? 1 : 0, explanation: labItem.explanation, expectedAnswer: labItem.answer };

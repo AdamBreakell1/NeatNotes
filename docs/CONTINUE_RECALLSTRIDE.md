@@ -1,23 +1,39 @@
-# Continue RecallStride
+# Continue RecallStride — 9 October 2026
 
-Latest work, 7 October 2026: the user requested a complete embedded interpreter and tidy task workspace based on `/Users/adambreakell/Downloads/CodingTasks/`, plus persistent instructions against empty approval-dependent features. Their latest instruction supersedes the earlier coding publication restriction. Do not reinstate that empty catalogue or invent independent review approvals.
+The owner authorised finding a suitable free host and migrating RecallStride. Continue from branch `codex/cloudflare-migration`; do not repeat the hosting research or navigation redesign.
 
-The coding workspace is now implemented locally: 51 core worksheet tasks, one optional game, eight retained exercises, interactive Run, Stop, task checks, 1D/2D/3D arrays, strings, CASE, stepped loops, local routines, virtual files, timed output, project download/import, saved drafts, hints/solutions and responsive layout. Tasks are available without a deck or subscription requirement; account metadata stays authenticated. Revision-deck pricing/access is unchanged. See [coding architecture](pseudocode/ARCHITECTURE.md) and [the executable contract](pseudocode/SOURCES_AND_CONTRACT.md).
+**The migration is not live.** The Cloudflare Workers / SQLite Durable Object port and safe data-transfer tools are implemented locally. Safari is on the Cloudflare login page and `wrangler whoami` reports unauthenticated. The owner has been asked to sign in; no confirmation has arrived. No remote database, production customer export, provider configuration or domain purchase has been created by this work.
 
-Validation: 90 unit/API tests pass. Task benchmark: 60 tasks, 174 cases, 69 solution alternatives passing, 17 existing seeded faults detected. These are functional checks, not exam grades or proof of arbitrary algorithm correctness. 23 focused coding browser checks and 44 existing app browser checks pass. The coding suite verifies interactive input, 3D arrays, file editing, project round trips, timed-output cancellation, a playable game, data isolation, responsive widths and contrast. Current outputs are under ignored `test-results/pseudocode/`; refresh only when changes justify it.
+Render still serves https://neatnotes.onrender.com, release `d239cfe253f766a8de5dfffa07adef59c189a699` (health prefix `d239cfe253f7`). The 9 October health read returned HTTP 200, `ok:true`, persistent storage and no fallback. Its dashboard showed paid Starter hosting on 8 October. Preserve its disk and original data until cutover succeeds. Prior rollback release: `df4500f1b9c8c1232c49aa1d92934460b54e826b`.
 
-The school-linked starter files returned HTTP 401. The relevant tasks explicitly label replacement fixtures. Do not treat fictional populations as census data. The karaoke exercise uses original classroom text. No production accounts, school credentials or provider checks were used. The user previously chose provider checks pending; no need to revisit them for this coding feature.
+Prepared work:
 
-The user subsequently requested **deploy**, authorising commit and push of this complete workspace through the existing GitHub main → Render connection. See [the coding deployment record](DEPLOYMENT_CODE_STUDIO_2026_10_07.md) for live revision evidence. The rollback production release is `be3ae3406e3c78f37d7ba394b2c625011971c1b3`, serving at https://neatnotes.onrender.com. Preserve the unrelated untracked `docs/validation/production-deployment.json` from its live verification. On a subsequent explicit deploy instruction, deploy the prepared revision and confirm live health/revision only; the user will test new features. Their preferences are saved in `/Users/adambreakell/.codex/AGENTS.md`.
+- The complete Express application runs inside a SQLite Durable Object; static files bypass it. Passwords, permissions, notes, learning records and subscription processing retain their API contracts. All 60 coding tasks and the embedded interpreter remain available.
+- Real SQLite exercises, rollback-capable transactions, content seed fingerprints, indexes, reduced last-seen writes and persistent authentication throttling work in workerd.
+- Signup failures return recoverable mail-delivery errors instead of generic 500. Retry preserves one pending account and valid earlier links. Actual school email delivery remains unverified.
+- Private data transfer uses consistent read-only snapshots, chunk/table hashes, foreign-key checks, owner-only files and durable resumable receipts. It refuses an occupied destination.
+- Maintenance freezes API callbacks/writes and background/startup data changes during import. Incomplete/failed imports stay closed after restarts. The old host can redirect existing GET links after cutover.
+- `npm start` remains Node/Render-compatible. Cloudflare deployment rebuilds assets and supplies the committed revision to live health.
 
-Validation commands use disposable test databases and skip dotenv. Never read `.env` or use production customer data as fixtures:
+See [the migration runbook](CLOUDFLARE_MIGRATION.md) for account access, quotas, provider settings, cutover and rollback, and [commercial readiness](COMMERCIAL_READINESS.md) for externally unverified work. Hosting changes alone do not establish working payments or school mail delivery.
+
+Verification passed: 105 Node tests; 12 workerd compatibility checks; 15 full-app checks; 5 actual-workerd transfer checks; syntax for 85 files; content validation and bundle dry run. Compressed Worker size: 639.87 KiB. Dependency audit reported zero vulnerabilities. [Local evidence](validation/cloudflare-migration-local.json) records the limits of this verification.
+
+Test scripts use disposable synthetic databases and blank provider settings. Do not read `.env` or use the production disk as a test fixture. Run only checks justified by new changes:
 
 ```sh
 npm test
 npm run check
 npm run validate:content
-npm run benchmark:coding
+npm run test:cloudflare
+npm run build:cloudflare
 git diff --check
 ```
 
-For a changed browser flow, the installed Playwright module is `/Users/adambreakell/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright`; Chromium executable `/Applications/Brave Browser.app/Contents/MacOS/Brave Browser`. Scripts: `npm run test:coding-browser`, `npm run test:browser`. Do not add a browser-testing detour to a deploy-only request.
+Do not use anonymous `wrangler deploy --temporary` for production/customer records. After account login, finish normal Wrangler OAuth, preserve provider settings without printing secrets, deploy closed, freeze and export Render, import/verify, then switch traffic. A domain purchase or paid hosting upgrade was not authorised by the request for a free migration.
+
+Preserve unrelated untracked historical evidence: `docs/validation/production-deployment.json`, `docs/validation/code-studio-deployment.json`, `docs/validation/navigation-redesign-deployment.json`.
+
+The owner requires complete features with real tasks, context and behaviour. Do not substitute empty screens or describe unfinished work as “gated” or “awaiting approval”; identify the actual missing dependency. When explicitly told to deploy, deploy and confirm the live revision using concise essential checks. The owner tests features; do not add computer-use feature tests to a deployment request. Preferences are saved in `/Users/adambreakell/.codex/AGENTS.md`.
+
+The worksheet/interpreter and later navigation overhaul were already deployed. Older documents about withholding coding tasks or a local-only rollout are historical and superseded.

@@ -6831,7 +6831,7 @@ async function api(path, options = {}) {
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
   } catch (error) {
-    throw new Error("Cannot reach the local server. Make sure npm start is still running, then refresh the page.");
+    throw new Error("We couldn't connect to RecallStride. Check your connection and try again.");
   }
 
   const contentType = response.headers.get("content-type") || "";

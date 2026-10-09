@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "recallstride",
+  "main": "backend/cloudflare/worker.mjs",
+  "compatibility_date": "2026-10-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "assets": {
+    "directory": "./dist/cloudflare",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*", "/revision-topics.js", "/robots.txt", "/sitemap.xml", "/ocr-h446/*", "/__migration/*"]
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "RECALLSTRIDE_DB", "class_name": "RecallStrideDatabase" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RecallStrideDatabase"] }],
+  "vars": {
+    "NODE_ENV": "production",
+    "ALLOW_MOCK_BILLING": "false",
+    "CONTACT_RETRY_INTERVAL_MS": "600000",
+    "FREE_REVISION_DECK_LIMIT": "1",
+    "MAX_NOTE_BODY_BYTES": "98304",
+    "MAX_NOTE_VERSIONS": "40",
+    "MAX_NOTE_VERSION_BYTES": "1048576"
+  },
+  "observability": { "enabled": true }
+}

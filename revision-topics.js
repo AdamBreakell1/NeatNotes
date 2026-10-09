@@ -1,4 +1,9 @@
-window.REVISION_TOPICS = [
+(function (root, factory) {
+  const topics = factory();
+  if (typeof module === "object" && module.exports) module.exports = { REVISION_TOPICS: topics };
+  if (root) root.REVISION_TOPICS = topics;
+})(typeof window !== "undefined" ? window : null, function () {
+return [
   {
     id: "cs-1-1-1",
     subject: "Computer Science",
@@ -2269,3 +2274,5 @@ window.REVISION_TOPICS = [
     ],
   },
 ];
+
+});

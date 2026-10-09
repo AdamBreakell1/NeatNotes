@@ -1,16 +1,12 @@
 "use strict";
-const fs = require("node:fs");
-const path = require("node:path");
-const vm = require("node:vm");
+const { REVISION_TOPICS } = require("../../revision-topics");
 const { COMPONENT_TWO_TOPICS } = require("../../component-two");
 const review = require("../../content-review.json");
 const { mapComponentOneTopic } = require("../../component-one-mapping");
 const { attachAuthoredQuizzes } = require("../../component-one-quizzes");
 
 function loadTopics(reviewState = review) {
-  const sandbox = { window: {} };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../../revision-topics.js"), "utf8"), sandbox, { timeout: 1000 });
-  return [...sandbox.window.REVISION_TOPICS.map(mapComponentOneTopic).map((topic) => attachAuthoredQuizzes(topic, reviewState)), ...COMPONENT_TWO_TOPICS].map((topic) => ({
+  return [...REVISION_TOPICS.map(mapComponentOneTopic).map((topic) => attachAuthoredQuizzes(topic, reviewState)), ...COMPONENT_TWO_TOPICS].map((topic) => ({
     ...topic, componentId: topic.componentId || "h446-01",
     reviewStatus: hasApproval(topic, reviewState) ? "academically_reviewed" : hasPublicationAuthorization(topic, reviewState) ? "published_unreviewed" : topic.reviewStatus || "published_unreviewed",
     publicationAuthorization: hasPublicationAuthorization(topic, reviewState) ? "content_owner" : null,

@@ -7,7 +7,7 @@ function scripts(directory, recurse = true) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const file = path.join(directory, entry.name);
     if (entry.isDirectory()) return recurse ? scripts(file) : [];
-    return /\.(?:c?js)$/.test(entry.name) ? [file] : [];
+    return /\.(?:[cm]?js)$/.test(entry.name) ? [file] : [];
   });
 }
 const files = [...scripts(root, false), ...scripts(path.join(root, "backend")), ...scripts(__dirname)];
