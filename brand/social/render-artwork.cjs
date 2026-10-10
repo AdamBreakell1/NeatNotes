@@ -15,6 +15,10 @@ async function main() {
     const metadata = await sharp(target).metadata();
     exports.push({ name, width: metadata.width, height: metadata.height, format: metadata.format, bytes: (await fs.stat(target)).size });
   }
+  const portraitJpeg = path.join(source, "first-post-portrait.jpg");
+  await sharp(path.join(source, "first-post-portrait.png")).jpeg({ quality: 95, chromaSubsampling: "4:4:4" }).toFile(portraitJpeg);
+  const jpegMetadata = await sharp(portraitJpeg).metadata();
+  exports.push({ name: "first-post-portrait", width: jpegMetadata.width, height: jpegMetadata.height, format: jpegMetadata.format, bytes: (await fs.stat(portraitJpeg)).size });
   const publicFolder = path.resolve(source, "../../assets");
   await fs.mkdir(publicFolder, { recursive: true });
   await fs.copyFile(path.join(source, "social-preview.png"), path.join(publicFolder, "recallstride-social-preview.png"));

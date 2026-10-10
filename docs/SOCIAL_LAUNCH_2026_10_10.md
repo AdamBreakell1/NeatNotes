@@ -1,6 +1,6 @@
 # RecallStride social launch — 10 October 2026
 
-The launch artwork and copy are ready to use. This document records the assets and account settings, not evidence that a profile has been created or a post published. Add actual profile and post links after completing the relevant platform flow.
+The launch artwork and copy are ready. Both **[@RecallStride on X](https://x.com/RecallStride)** and **[@recallstride on Instagram](https://www.instagram.com/recallstride/)** are registered and have their first posts published. Their actual profile and post links are recorded below. TikTok and the optional Facebook Page have not been created by this task.
 
 ## Brand and artwork
 
@@ -14,6 +14,7 @@ The artwork uses the current website's light theme: pale blue `#f5f7fa`, navy `#
 | --- | --- | --- |
 | `brand/social/first-post-square.png` | 1080 × 1080 | X, Facebook, or square feed image |
 | `brand/social/first-post-portrait.png` | 1080 × 1350 | Instagram feed image |
+| `brand/social/first-post-portrait.jpg` | 1080 × 1350 | Instagram-compatible upload; use this JPEG in the current publishing flow |
 | `brand/social/first-post-story.png` | 1080 × 1920 | Story or vertical photo post; the footer leaves space for overlay controls |
 | `brand/social/profile-avatar.png` | 1024 × 1024 | Profile image, with lettering clear of the circle crop |
 | `brand/social/profile-header.png` | 1500 × 500 | X header |
@@ -25,14 +26,14 @@ Copy-friendly bios, captions, image paths and alt text are in **`brand/social/ac
 
 ## Instagram
 
-Display name: **RecallStride**. Website link: **https://recallstride.com**. Use `profile-avatar.png` and `first-post-portrait.png`.
+Verified account: **[@recallstride](https://www.instagram.com/recallstride/)**. Display name: **RecallStride**. The avatar is uploaded, the following bio is saved, and the [first post is published](https://www.instagram.com/recallstride/p/DeU6EpoilUK/). It uses `first-post-portrait.jpg`: Instagram rejected the PNG upload with “Media type invalid,” and the JPEG variant was accepted. The platform displayed “Your post has been shared” and the profile showed one post; the caption and alt text were verified in the publishing flow.
 
 Bio:
 
 ```text
 Revise. Practise. Code.
 OCR A-Level Computer Science in one workspace.
-60 coding tasks. Start free ↓
+60 coding tasks. Start free: recallstride.com
 ```
 
 First caption:
@@ -45,12 +46,12 @@ Your OCR A-Level Computer Science revision, questions and coding practice in one
 Choose a topic. Test what you remember. Write and run your own pseudocode with 60 free coding tasks.
 
 Revise. Practise. Code.
-Start free at recallstride.com — link in bio.
+Start free at recallstride.com.
 
 #ALevelComputerScience #ComputerScience #Revision #Pseudocode #ALevels
 ```
 
-Add the website link before using the “link in bio” caption. If the interface does not permit the link, replace that sentence with “Start free at recallstride.com.”
+The desktop website field is disabled and directs the owner to the mobile app. The saved bio contains the readable domain; a clickable profile website link has not been added. The caption therefore uses the plain domain without a “link in bio” claim.
 
 ## TikTok
 
@@ -74,6 +75,8 @@ The domain is readable in the bio even if the new account cannot add a clickable
 
 ## X
 
+Verified account: **[@RecallStride](https://x.com/RecallStride)**. The [first post is published](https://x.com/RecallStride/status/2109011974726000772).
+
 Display name: **RecallStride**. Use `profile-avatar.png`, `profile-header.png` and `first-post-square.png`. X recommends a 1500 × 500 header and a 400 × 400 profile image; the supplied 1024 × 1024 profile master can be resized by the upload interface. Its documented bio limit is 160 characters, and standard posts allow 280 characters. The bio below contains 142 characters and the caption 231, so a paid subscription is unnecessary. [X profile settings](https://help.x.com/en/managing-your-account/how-to-customize-your-profile), [X post instructions](https://help.x.com/en/using-x/how-to-post).
 
 Bio:
@@ -94,7 +97,7 @@ Revise. Practise. Code. Start free: https://recallstride.com
 #ALevelComputerScience #ComputerScience #Revision #Pseudocode
 ```
 
-Pin this introductory post after it is published.
+The introductory post is pinned on the profile; the live profile displayed “Pinned”.
 
 ## Facebook Page, if included
 
@@ -122,13 +125,15 @@ Email codes, phone verification or an identity challenge should be completed by 
 
 | Platform | Actual profile URL | Actual first post URL | Completed setup |
 | --- | --- | --- | --- |
-| Instagram | To be recorded after registration | To be recorded after publication | No profile creation claimed by the asset task |
+| Instagram | [@recallstride](https://www.instagram.com/recallstride/) | [First post](https://www.instagram.com/recallstride/p/DeU6EpoilUK/) | Account verified; avatar uploaded; bio saved; JPEG post published with caption and alt text; readable domain in bio |
 | TikTok | To be recorded after registration | To be recorded after publication | No profile creation claimed by the asset task |
-| X | To be recorded after registration | To be recorded after publication | No profile creation claimed by the asset task |
+| X | [@RecallStride](https://x.com/RecallStride) | [First post](https://x.com/RecallStride/status/2109011974726000772) | Profile URL confirmed; avatar, header, bio and website saved; first post published and pinned |
 | Facebook Page | To be recorded if created | To be recorded if published | Optional platform |
+
+Local Instagram publication evidence is saved in `test-results/launch/instagram-profile-published.png` and `test-results/launch/instagram-publication-confirmed.png`. These screenshots are local validation files excluded from Git and the public app bundle.
 
 ## Rebuilding the artwork
 
 The unmodified Inter variable font and its SIL Open Font License are included in `brand/social/`. They were sourced from the official Inter repository at commit `353b61b9f4430d5f420d56605a6e7993e0941470`. [Inter's licence](https://github.com/rsms/inter/blob/master/LICENSE.txt).
 
-With Python packages `fonttools` and `brotli`, run `python3 brand/social/build-artwork.py` to create the six SVG masters. With Node package `sharp` available, run `node brand/social/render-artwork.cjs` to create the PNG files, export manifest and public link preview. These are development tools, not app runtime dependencies. Review palette values against `student-layout.css` when the product branding changes.
+With Python packages `fonttools` and `brotli`, run `python3 brand/social/build-artwork.py` to create the six SVG masters. With Node package `sharp` available, run `node brand/social/render-artwork.cjs` to create the PNG files, export manifest and public link preview. The renderer also recreates the Instagram JPEG from the portrait PNG. These are development tools, not app runtime dependencies. Review palette values against `student-layout.css` when the product branding changes.

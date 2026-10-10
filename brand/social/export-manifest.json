@@ -40,5 +40,12 @@
     "height": 630,
     "format": "png",
     "bytes": 33396
+  },
+  {
+    "name": "first-post-portrait",
+    "width": 1080,
+    "height": 1350,
+    "format": "jpeg",
+    "bytes": 65211
   }
 ]
