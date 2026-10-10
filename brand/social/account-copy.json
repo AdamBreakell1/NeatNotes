@@ -44,7 +44,7 @@
     "fallbackHandle": "recallstridecs",
     "bio": "OCR A-Level Computer Science revision, questions and 60 coding tasks in one workspace. Revise. Practise. Code. Start free at recallstride.com.",
     "website": "https://recallstride.com",
-    "header": "brand/social/profile-header.png",
+    "header": "brand/social/profile-header.jpg",
     "firstPostAsset": "brand/social/first-post-square.png",
     "firstPostCaption": "Meet RecallStride.\n\nOCR A-Level Computer Science revision, questions and 60 coding tasks in one workspace.\n\nRevise. Practise. Code. Start free: https://recallstride.com\n\n#ALevelComputerScience #ComputerScience #Revision #Pseudocode",
     "profileUrlConfirmed": true,
@@ -55,8 +55,9 @@
     "firstPostPinned": true,
     "publicationProof": [
       "test-results/launch/x-first-post-published.png",
-      "test-results/launch/x-profile-pinned.png"
-    ]
+      "test-results/launch/x-profile-complete.jpg"
+    ],
+    "headerStatus": "JPEG header saved and confirmed by the actual public profile banner image and screenshot."
   },
   "facebook": {
     "displayName": "RecallStride",

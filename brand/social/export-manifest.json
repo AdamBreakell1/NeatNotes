@@ -47,5 +47,12 @@
     "height": 1350,
     "format": "jpeg",
     "bytes": 65211
+  },
+  {
+    "name": "profile-header",
+    "width": 1500,
+    "height": 500,
+    "format": "jpeg",
+    "bytes": 35028
   }
 ]

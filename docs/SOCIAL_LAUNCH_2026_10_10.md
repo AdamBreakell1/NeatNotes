@@ -17,7 +17,8 @@ The artwork uses the current website's light theme: pale blue `#f5f7fa`, navy `#
 | `brand/social/first-post-portrait.jpg` | 1080 × 1350 | Instagram-compatible upload; use this JPEG in the current publishing flow |
 | `brand/social/first-post-story.png` | 1080 × 1920 | Story or vertical photo post; the footer leaves space for overlay controls |
 | `brand/social/profile-avatar.png` | 1024 × 1024 | Profile image, with lettering clear of the circle crop |
-| `brand/social/profile-header.png` | 1500 × 500 | X header |
+| `brand/social/profile-header.png` | 1500 × 500 | X header master |
+| `brand/social/profile-header.jpg` | 1500 × 500 | X-compatible header upload |
 | `assets/recallstride-social-preview.png` | 1200 × 630 | Website Open Graph / social link preview |
 
 Every image also has an outlined SVG master under `brand/social/`. All raster exports have an opaque background. `export-manifest.json` records the actual dimensions and file sizes. The social link preview is copied into `assets/` for publication by the web build; the social account kit is not part of the public app bundle.
@@ -77,7 +78,7 @@ The domain is readable in the bio even if the new account cannot add a clickable
 
 Verified account: **[@RecallStride](https://x.com/RecallStride)**. The [first post is published](https://x.com/RecallStride/status/2109011974726000772).
 
-Display name: **RecallStride**. Use `profile-avatar.png`, `profile-header.png` and `first-post-square.png`. X recommends a 1500 × 500 header and a 400 × 400 profile image; the supplied 1024 × 1024 profile master can be resized by the upload interface. Its documented bio limit is 160 characters, and standard posts allow 280 characters. The bio below contains 142 characters and the caption 231, so a paid subscription is unnecessary. [X profile settings](https://help.x.com/en/managing-your-account/how-to-customize-your-profile), [X post instructions](https://help.x.com/en/using-x/how-to-post).
+Display name: **RecallStride**. The avatar, header, bio and website are saved. Use `profile-avatar.png`, `profile-header.jpg` and `first-post-square.png`. The PNG header upload failed to persist; the JPEG header was saved and confirmed on the actual public profile. Final profile proof is `test-results/launch/x-profile-complete.jpg`. X recommends a 1500 × 500 header and a 400 × 400 profile image; the supplied 1024 × 1024 profile master can be resized by the upload interface. Its documented bio limit is 160 characters, and standard posts allow 280 characters. The bio below contains 142 characters and the caption 231, so a paid subscription is unnecessary. [X profile settings](https://help.x.com/en/managing-your-account/how-to-customize-your-profile), [X post instructions](https://help.x.com/en/using-x/how-to-post).
 
 Bio:
 
@@ -136,4 +137,4 @@ Local Instagram publication evidence is saved in `test-results/launch/instagram-
 
 The unmodified Inter variable font and its SIL Open Font License are included in `brand/social/`. They were sourced from the official Inter repository at commit `353b61b9f4430d5f420d56605a6e7993e0941470`. [Inter's licence](https://github.com/rsms/inter/blob/master/LICENSE.txt).
 
-With Python packages `fonttools` and `brotli`, run `python3 brand/social/build-artwork.py` to create the six SVG masters. With Node package `sharp` available, run `node brand/social/render-artwork.cjs` to create the PNG files, export manifest and public link preview. The renderer also recreates the Instagram JPEG from the portrait PNG. These are development tools, not app runtime dependencies. Review palette values against `student-layout.css` when the product branding changes.
+With Python packages `fonttools` and `brotli`, run `python3 brand/social/build-artwork.py` to create the six SVG masters. With Node package `sharp` available, run `node brand/social/render-artwork.cjs` to create the PNG files, export manifest and public link preview. The renderer also recreates JPEG variants for the Instagram portrait and X header from their PNG masters. These are development tools, not app runtime dependencies. Review palette values against `student-layout.css` when the product branding changes.
