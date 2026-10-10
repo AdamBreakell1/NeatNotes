@@ -1,43 +1,25 @@
-# Continue RecallStride — 9 October 2026
+# Continue RecallStride — 10 October 2026
 
-The owner authorised finding a suitable free host and migrating RecallStride. Continue from branch `codex/cloudflare-migration`; do not repeat the hosting research or navigation redesign.
+The owner wants the complete app on Cloudflare, including existing accounts/login and automatic GitHub deployment, then retirement of the Render service and paid disk once the new app works. Custom domain and support email are deferred. Continue the migration; do not repeat hosting research, navigation redesign or feature browser tests.
 
-**Cloudflare is deployed in maintenance mode; customer data has not moved.** The owner signed in to Cloudflare and authorised Wrangler with account/user read plus Workers deployment access. Do not repeat that authorisation. The new app is https://recallstride.breakellsystems.workers.dev, code revision `99844836957d`, Worker version `c412fd1b-2e7d-494c-abec-2f067c08cc13`. Its API returns503 and public migration routes return404. The temporary protected transfer service is deployed and reports `not_started`.
+**Production data and the real SMTP connection are verified. Cloudflare remains closed while the final repaired release is prepared.** The full app is https://recallstride.breakellsystems.workers.dev. GitHub `main` revision `78b10336da079f416dc93b3cc1192bb166c3c1c2` was deployed successfully by [workflow run 38041652049](https://github.com/AdamBreakell1/NeatNotes/actions/runs/38041652049). The workflow preserves the production database, provider secrets and maintenance state. No repeat Cloudflare/Wrangler authorisation or deployment credential setup is needed.
 
-**Next required step:** the owner must finish the prepared Add SSH Public Key form in Safari/Render. Key name: `RecallStride temporary migration — 9 October 2026`; fingerprint `SHA256:z8GGZ8MnICxZjVuvz7/mlA01QUKEsJHFqBg5OYk2FPQ`. It has not been submitted. Confirmation is required by the computer-use policy for new security-sensitive access. The source has NOT been frozen; leave it writable until real access, size checks and backup are established. No production export, provider settings transfer or domain purchase has happened.
+Completed migration evidence:
 
-Local private state is in ignored `cloudflare-state.migration-private.json`; it records staging/key paths and remote IDs without provider values. The transfer token is in owner-only ignored `.cloudflare-migration-token`. Provider-copy helper: `/tmp/recallstride-copy-providers.mjs` (not executed), accepting `--ssh-target`, `--key-file`, `--config`; it streams an explicit allowlist from remote process.env into Wrangler stdin without printing values or reading .env. After the key is registered, read the exact SSH target in Render Connect, connect, check actual size/rows, freeze source, snapshot/export, copy providers, import/verify, update the existing Stripe webhook URL, then open Cloudflare. Revoke this temporary access and delete the transfer Worker after completion.
+- Render was frozen with `MIGRATION_MODE=true`: health 200, session API 503. Keep it frozen; its original source and disk remain available until retirement.
+- A consistent production backup and transfer artifact are retained under `/Users/adambreakell/.codex/backups/RecallStride/2026-10-10/`: `source.sqlite` and `recallstride.migration-private.json`, both 0600 inside a 0700 directory. Do not publish or use these files as test fixtures.
+- Import completed: **1,002 rows, 39 tables, 28 chunks**, import ID `474e22e3-0a0e-4d46-9ec1-1bba900b99ae`, artifact SHA-256 `2feccf6e36e368bc413bea08d1fff5eb4d5468ceb1ce8d30462ef19c05eae694`. Source/destination counts and hashes match; foreign-key violations are zero and integrity is `ok`. Existing password hashes, salts and account relationships were preserved.
+- Eleven existing SMTP/Stripe settings were copied privately. Live Stripe endpoint `we_1Tp7dD5atRAfVJNk9PxB1vVK` now targets `https://recallstride.breakellsystems.workers.dev/api/billing/stripe/webhook`; its existing signing secret was preserved. Google sign-in was not configured on Render.
+- Cloudflare's SMTP socket compatibility is repaired: the transport connects to the original hostname, requires TLS and verifies certificates, avoiding Nodemailer's resolved-IP proxy failure. An actual Cloudflare handshake returned HTTP 200, `configured=true`, `verified=true`, `errorCode=null`, using the existing Gmail settings. Six focused tests passed. No email was sent.
 
-Render now serves https://neatnotes.onrender.com, revision `99844836957d`, after the compatible migration backend was pushed to main and auto-deployed. Health returned200 with email/Stripe configuration present and Google sign-in absent. This publishes the recoverable signup fix. It remains the writable production source on Starter with its original disk. Preserve it through cutover. The pre-migration rollback revision is `d239cfe253f766a8de5dfffa07adef59c189a699`.
+**Next:** commit and publish the repaired release, open Cloudflare, and perform concise checks of the live revision, persistent storage, full API and account system. Set the old host's redirect if needed; remove the temporary transfer Worker/token/SSH key. Retire Render and its paid disk only after the working cutover is confirmed, retaining the controlled backup. Do not leave two writable databases or reopen the stale Render source after Cloudflare accepts new writes.
 
-Prepared work:
+Ignored `cloudflare-state.migration-private.json` records staging paths and remote IDs. `.cloudflare-production.json` holds the local deployment configuration; `.cloudflare-migration-token` is an owner-only temporary credential. Do not read `.env`, print provider values or copy secrets into Git. See [migration/rollback](CLOUDFLARE_MIGRATION.md), [GitHub deployment](GITHUB_DEPLOYMENT.md) and [commercial readiness](COMMERCIAL_READINESS.md).
 
-- The complete Express application runs inside a SQLite Durable Object; static files bypass it. Passwords, permissions, notes, learning records and subscription processing retain their API contracts. All 60 coding tasks and the embedded interpreter remain available.
-- Real SQLite exercises, rollback-capable transactions, content seed fingerprints, indexes, reduced last-seen writes and persistent authentication throttling work in workerd.
-- Signup failures return recoverable mail-delivery errors instead of generic 500. Retry preserves one pending account and valid earlier links. Actual school email delivery remains unverified.
-- Private data transfer uses consistent read-only snapshots, chunk/table hashes, foreign-key checks, owner-only files and durable resumable receipts. It refuses an occupied destination.
-- Maintenance freezes API callbacks/writes and background/startup data changes during import. Incomplete/failed imports stay closed after restarts. The old host can redirect existing GET links after cutover.
-- `npm start` remains Node/Render-compatible. Cloudflare deployment rebuilds assets and supplies the committed revision to live health.
+The prepared full app preserves revision, notes, teaching, subscription and coding API contracts. All **60 coding tasks and the embedded interpreter** remain included. Real SQLite exercises, transactions, content seed fingerprints, indexes, reduced last-seen writes, persistent authentication throttling, retryable signup, private transfer/resume and maintenance protection run in workerd. `npm start` remains Node-compatible.
 
-See [the migration runbook](CLOUDFLARE_MIGRATION.md) for account access, quotas, provider settings, cutover and rollback, and [commercial readiness](COMMERCIAL_READINESS.md) for externally unverified work. Hosting changes alone do not establish working payments or school mail delivery.
-
-Verification passed: 105 Node tests; 12 workerd compatibility checks; 15 full-app checks; 5 actual-workerd transfer checks; syntax for 85 files; content validation and bundle dry run. Compressed Worker size: 639.87 KiB. Dependency audit reported zero vulnerabilities. [Local evidence](validation/cloudflare-migration-local.json) records the limits of this verification.
-
-Test scripts use disposable synthetic databases and blank provider settings. Do not read `.env` or use the production disk as a test fixture. Run only checks justified by new changes:
-
-```sh
-npm test
-npm run check
-npm run validate:content
-npm run test:cloudflare
-npm run build:cloudflare
-git diff --check
-```
-
-Do not use anonymous `wrangler deploy --temporary` for production/customer records. Wrangler OAuth is complete. Once Render SSH access is established, preserve provider settings without printing secrets, deploy closed, freeze and export Render, import/verify, then switch traffic. A domain purchase or paid hosting upgrade was not authorised by the request for a free migration.
+Previous verification passed: 105 Node tests; 12 workerd compatibility checks; 15 full-app checks; 5 actual-workerd transfer checks; syntax for 85 files; content validation and bundle dry run. The GitHub deployment adds five deployment safety tests and actual remote namespace/secret/revision checks. [Local evidence](validation/cloudflare-migration-local.json) records the limits of synthetic verification. The SMTP repair additionally passed six focused tests and the real provider handshake. Run further checks only when new changes justify them; do not repeat the full test suite without a reason.
 
 Preserve unrelated untracked historical evidence: `docs/validation/production-deployment.json`, `docs/validation/code-studio-deployment.json`, `docs/validation/navigation-redesign-deployment.json`.
 
-The owner requires complete features with real tasks, context and behaviour. Do not substitute empty screens or describe unfinished work as “gated” or “awaiting approval”; identify the actual missing dependency. When explicitly told to deploy, deploy and confirm the live revision using concise essential checks. The owner tests features; do not add computer-use feature tests to a deployment request. Preferences are saved in `/Users/adambreakell/.codex/AGENTS.md`.
-
-The worksheet/interpreter and later navigation overhaul were already deployed. Older documents about withholding coding tasks or a local-only rollout are historical and superseded.
+The owner requires complete features with real tasks, context and behaviour, and exact statements about unfinished dependencies. On an explicit deployment request, deploy and confirm the live revision using concise essential checks; the owner tests the features. Preferences are saved in `/Users/adambreakell/.codex/AGENTS.md`. Older documents withholding coding tasks or requiring a local-only rollout are historical and superseded.

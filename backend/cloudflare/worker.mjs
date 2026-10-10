@@ -4,6 +4,7 @@ import { createServer } from "node:http";
 import { createApplication } from "../../server.js";
 import { createDurableDatabase } from "./durable-sqlite-adapter.mjs";
 import { createDataTransfer } from "./data-transfer.mjs";
+import { createCloudflareMailTransport } from "./smtp-transport.mjs";
 
 const OBJECT_NAME = "recallstride-production";
 const dynamicPath = (path) => path.startsWith("/api/") || path.startsWith("/ocr-h446/")
@@ -32,7 +33,12 @@ export class RecallStrideDatabase extends DurableObject {
     };
     this.runtime = createApplication({
       db: this.db, environment, staticAssets: false,
-      runtime: { scheduleCleanup: false, persistentRateLimits: true, waitUntil: (promise) => this.ctx.waitUntil(promise) },
+      runtime: {
+        scheduleCleanup: false,
+        persistentRateLimits: true,
+        createMailTransport: createCloudflareMailTransport,
+        waitUntil: (promise) => this.ctx.waitUntil(promise),
+      },
     });
     this.handler = httpServerHandler(createServer(this.runtime.app));
   }

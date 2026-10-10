@@ -37,7 +37,7 @@ jobs:
         run: |
           npm run check
           npm run validate:content
-          node --test scripts/cloudflare-deployment.test.mjs
+          node --test scripts/cloudflare-deployment.test.mjs backend/cloudflareMail.test.js
       - name: Build, deploy and confirm the live revision
         run: node scripts/deploy-cloudflare-ci.mjs
         env:

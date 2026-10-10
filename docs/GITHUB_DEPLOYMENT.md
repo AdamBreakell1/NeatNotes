@@ -2,11 +2,11 @@
 
 Every push to `main` runs [the production workflow](../.github/workflows/deploy-cloudflare.yml). It installs the locked dependencies with Node.js 24, checks syntax and content, rebuilds every public app asset, and deploys the complete Worker/API to https://recallstride.breakellsystems.workers.dev. The committed Git SHA is supplied as `RELEASE_SHA`; the workflow checks the live revision and persistent database after deployment. Manual reruns through Actions are available on `main`.
 
-## One-time credential setup
+## Verified connection — 10 October 2026
 
-The repository `AdamBreakell1/NeatNotes` needs one Actions secret: **`CLOUDFLARE_API_TOKEN`**. Create a deployment token with **Account → Workers Scripts → Edit**, restricted to account **`7656ff3b3eaa33f5eb0e17d1b026f7f0`**, then store it under GitHub repository Settings → Secrets and variables → Actions. No zone permissions are needed for the existing `workers.dev` hostname. The account ID is public configuration in the workflow, not a credential. Wrangler's local OAuth sign-in cannot authenticate a GitHub runner. Do not store its OAuth credentials, email/password, SMTP or Stripe secrets in GitHub.
+The repository Actions secret **`CLOUDFLARE_API_TOKEN`** is stored and working. [Workflow run 38041652049](https://github.com/AdamBreakell1/NeatNotes/actions/runs/38041652049) successfully deployed `main` revision **`78b10336da079f416dc93b3cc1192bb166c3c1c2`**, preserving the existing database, secrets and `MIGRATION_MODE=true`. This establishes automatic deployment from GitHub; maintenance remained enabled while the production cutover continued. Production data and the real SMTP handshake are now verified. The repaired release is being prepared for publishing and opening; future `main` pushes use this same connection.
 
-This setup is not operational until the secret is stored and an actual workflow deployment succeeds. See Cloudflare's [GitHub Actions instructions](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/).
+For token rotation, use **Account → Workers Scripts → Edit**, restricted to account **`7656ff3b3eaa33f5eb0e17d1b026f7f0`**, and replace the repository Actions secret. No zone permissions are needed for the existing `workers.dev` hostname. The account ID is public configuration in the workflow, not a credential. Do not store local OAuth credentials, email/password, SMTP or Stripe secrets in GitHub. See Cloudflare's [GitHub Actions instructions](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/).
 
 ## Data, provider settings and maintenance
 

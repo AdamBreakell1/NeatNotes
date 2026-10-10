@@ -1,8 +1,12 @@
-# RecallStride migration — 9 October 2026
+# RecallStride migration — 10 October 2026
 
 ## Status and architecture
 
-The owner authorised a suitable free migration. Cloudflare and Wrangler are now authenticated. The app is deployed at https://recallstride.breakellsystems.workers.dev in maintenance mode, revision `99844836957d`; the protected transfer service is deployed. **Customer data has not moved.** Render now serves the same compatible revision and remains writable with its original disk. Next: finish the prepared temporary Render SSH-key registration, then follow the source-freeze/backup/import procedure. See [the current checkpoint](CONTINUE_RECALLSTRIDE.md).
+**Production data and the real SMTP connection are verified; Cloudflare remains closed while the repaired release is prepared for publishing and final checks.** The full app is deployed at https://recallstride.breakellsystems.workers.dev. [GitHub run 38041652049](https://github.com/AdamBreakell1/NeatNotes/actions/runs/38041652049) successfully deployed `main` revision `78b10336da079f416dc93b3cc1192bb166c3c1c2`, preserving the database, provider secrets and maintenance state. See [the current checkpoint](CONTINUE_RECALLSTRIDE.md) and [automatic GitHub deployment](GITHUB_DEPLOYMENT.md).
+
+Render is frozen with `MIGRATION_MODE=true` (health 200; session API 503). Protected backup/export files are retained under `/Users/adambreakell/.codex/backups/RecallStride/2026-10-10/`, in a 0700 directory with 0600 files. Import `474e22e3-0a0e-4d46-9ec1-1bba900b99ae` completed **1,002 rows across 39 tables in 28 chunks**; counts/hashes match, foreign-key violations are zero and integrity is `ok`. Artifact SHA-256: `2feccf6e36e368bc413bea08d1fff5eb4d5468ceb1ce8d30462ef19c05eae694`.
+
+Eleven existing SMTP/Stripe settings were copied privately. Existing live Stripe endpoint `we_1Tp7dD5atRAfVJNk9PxB1vVK` now points to the Cloudflare webhook URL, with its signing secret preserved. Google sign-in was not configured on the source. The SMTP compatibility repair connects to the original hostname, requires TLS and verifies certificates, avoiding Nodemailer's resolved-IP proxy failure. Six focused tests passed, and an actual Cloudflare handshake returned HTTP 200, `configured=true`, `verified=true`, `errorCode=null`. No email was sent. Publish this repaired release before opening signup/verification/reset flows. Once the full app and account system work, the owner authorised retirement of Render and its paid disk. Custom domain and support email are deferred.
 
 The target is a Cloudflare Worker for static assets/routes and one SQLite-backed Durable Object running the complete Express API. This preserves existing SQLite transactions, foreign keys, passwords and workspace relationships. Students' code runs in their browsers. Static assets avoid database requests. One database preserves joins and Stripe idempotency but does not provide horizontal database sharding.
 
@@ -23,9 +27,11 @@ The calling Worker has its own request/CPU quota. Free daily quotas reset at 00:
 
 ## Verification
 
-`npm test` covers ordinary APIs, failed email delivery, auth links, transfer integrity and source maintenance. `npm run test:cloudflare` runs real workerd against disposable fixtures, including password compatibility, transactions, app routes, isolation, restart persistence, throttling and private migration/resume. No live mail, payment, customer data or hosting capacity is tested. A bundle dry run is not a deployment.
+`npm test` covers ordinary APIs, failed email delivery, auth links, transfer integrity and source maintenance. `npm run test:cloudflare` runs real workerd against disposable fixtures, including password compatibility, transactions, app routes, isolation, restart persistence, throttling and private migration/resume. These development tests use no customer records or live providers. Separately, the authorised real data transfer verified counts/hashes/integrity, the actual GitHub workflow deployed successfully, and six focused SMTP tests and a real Cloudflare provider handshake confirmed the repair above. No email was sent or financial test performed. A bundle dry run alone is not a deployment.
 
-## Cutover
+## Cutover and recovery procedure
+
+Steps 1–5 are complete for this migration. Provider settings and the existing Stripe webhook URL in step 6 are configured; publishing the verified SMTP repair, opening/confirmation and final cleanup/retirement remain. Keep this procedure for recovery and future migrations, not as an instruction to repeat the completed production import.
 
 1. Have the owner sign in at https://dash.cloudflare.com, complete `wrangler login`, then confirm the correct account with `wrangler whoami`. Use its Free plan. Do not use anonymous temporary hosting or select a paid upgrade. Check source bytes and expected row/index import costs fit the free allowance before scheduling downtime.
 2. Copy `wrangler.jsonc` to ignored `.cloudflare-production.json`. Configure the actual HTTPS `BASE_URL`, matching `CORS_ORIGIN` and `MIGRATION_MODE=true`. Resolve `main`/`assets.directory` relative to that file. Keep the production Worker named `recallstride` and mock billing disabled. Deploy the committed branch with `npm run deploy:cloudflare -- --config .cloudflare-production.json`. This rebuilds assets and supplies `RELEASE_SHA`; APIs must remain 503 while closed.
@@ -44,13 +50,13 @@ The calling Worker has its own request/CPU quota. Free daily quotas reset at 00:
    ```
 
    Full file integrity is checked before target contact. Ordered atomic chunks resume from durable receipts; repeats do not duplicate rows. An occupied destination is refused. Completion requires matching table counts/hashes and valid foreign keys. Require `status:complete`; a failed import stays closed. Do not reset a failed import to hide corruption.
-6. Update Stripe's webhook URL to the new `/api/billing/stripe/webhook` and use the correct signing secret. Add Google's callback `/api/auth/google/callback` and origin. Update sender links and provider/policy facts. Remove Cloudflare `MIGRATION_MODE` only after data integrity succeeds and real provider configuration is present. Redeploy; health must show the committed revision, persistent database and no fallback. Provider delivery/payment checks remain incomplete until tested in the owner's chosen environment or by the owner; health alone does not establish revenue readiness.
+6. Update Stripe's webhook URL to the new `/api/billing/stripe/webhook` and preserve the existing endpoint's signing secret. Update Google's callback `/api/auth/google/callback` and origin only if Google sign-in was configured on the source. Update sender links and provider/policy facts. Remove Cloudflare `MIGRATION_MODE` only after data integrity succeeds and the configured providers work in the new runtime. Redeploy; health must show the committed revision, persistent database and no fallback. Health alone does not establish email delivery or the complete payment lifecycle.
 7. Keep Render frozen and set `MIGRATION_REDIRECT_URL` to the new canonical HTTPS origin. Old GET links, including verification/reset, redirect; old mutations remain 503, preventing two writable databases. Users must sign in on the new hostname because cookies belong to the old host. Update promoted links. Delete the temporary transfer Worker and token, clear staging exports and retain only the controlled backup. Keep the old service/disk until rollback retention and new operation are confirmed.
 
 ## Rollback and domain
 
 Before opening Cloudflare, keep it closed and remove Render maintenance to resume the original source. After new writes are accepted, Render is stale: freeze the new host, preserve and reconcile its data/provider events, then reopen a restored source. Do not discard new student records or leave both stores writable.
 
-No domain was purchased. The 8 October registry checks showed no registration for `recallstride.com` or `recallstride.co.uk`; availability/checkout price still need confirmation. A free `workers.dev` hostname can serve the application. A branded domain normally has registration/renewal costs and is outside the free-migration spending authority.
+No domain was purchased. The owner deferred RecallStride.com and a custom support email. The free `workers.dev` hostname serves the application; any later domain purchase requires its current availability and price to be checked.
 
-Real school mail delivery, Stripe lifecycle, actual production recovery and owner/operator facts remain unverified. See [commercial readiness](COMMERCIAL_READINESS.md).
+School mail acceptance and the full Stripe purchase/cancellation lifecycle have not been exercised by this migration. The retained production backup has integrity evidence; a full restore has not been performed. See [commercial readiness](COMMERCIAL_READINESS.md) for the actual remaining work.

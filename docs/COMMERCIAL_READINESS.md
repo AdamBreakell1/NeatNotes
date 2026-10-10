@@ -1,20 +1,21 @@
-# RecallStride commercial readiness — 9 October 2026
+# RecallStride commercial readiness — 10 October 2026
 
-**The app has functioning revision, notes, teaching and coding features, but its revenue and email providers have not been verified.** Hosting migration alone does not establish readiness to take paying customers. The owner previously chose to record provider checks as pending.
+**The full Cloudflare app, verified production transfer, working SMTP connection and automatic GitHub deployment are in place. Cloudflare remains closed while the repaired release is prepared for publishing and final account/app checks.** Render is frozen and retained until the Cloudflare app/account system works, after which the owner authorised service and paid-disk retirement. Custom domain and support email are deferred.
 
-The owner authorised the previous feature deployments and now a suitable free hosting migration. Older documents about withholding coding tasks, local-only work or approval-dependent empty screens are superseded. All 60 coding tasks, the complete interpreter and revised navigation are available in production. Development tests are not independent academic certification.
+All 60 coding tasks, the complete embedded interpreter and revised navigation are included. Older documents withholding coding tasks, requiring local-only work or describing empty approval-dependent features are superseded. Development tests are not independent academic certification.
 
 | Area | Current evidence | Remaining concrete work |
 | --- | --- | --- |
-| Live app | Render health 200, revision `99844836957d`, persistent database, no fallback | Preserve service/disk through cutover |
-| Free hosting | Full Express/SQLite port, real-runtime checks and safe transfer tools | Cloudflare app deployed closed; finish temporary Render SSH access, actual customer export/import and cutover; see [runbook](CLOUDFLARE_MIGRATION.md) |
-| Signup/email | Generic500 after failed verification delivery fixed locally; retries preserve one account and valid links | Fix is deployed on Render; verify real sender/recipient delivery. School email domain/provider response unknown; no platform restriction established |
-| Subscriptions | Signed/idempotent webhooks, state reconciliation and plan boundaries pass synthetic checks | Real Stripe prices, Checkout, portal, webhook delivery and cancellation/refund behaviour on the chosen origin remain unverified |
-| Student data | Account isolation/export/deletion and synthetic backup/transfer checks pass | Actual production backup, verified transfer and recovery evidence |
-| Domain | RecallStride/BreakellSystems displayed; no domain purchased | Confirm chosen domain/price, register with owner authority, configure DNS/TLS/sender records |
-| Policies | Implementation-specific policy drafts exist | Supply actual operator/contact/provider/retention/refund facts and complete owner review; do not invent these |
+| Full app | Complete Express API and public app assets deployed to Cloudflare; workerd checks cover revision, notes, teaching, coding, account isolation and persistence | Publish the repaired release, open the new host, confirm its live revision and account behaviour |
+| GitHub deployment | Actual [run 38041652049](https://github.com/AdamBreakell1/NeatNotes/actions/runs/38041652049) deployed `main` revision `78b10336da079f416dc93b3cc1192bb166c3c1c2`; database, secrets and maintenance state preserved | Use the same workflow for the final fix and future maintenance |
+| Accounts/email | Existing password hashes/salts and account records transferred; recoverable signup and retry/link handling implemented; existing SMTP settings copied | SMTP compatibility repair passed six focused tests and an actual Cloudflare handshake: HTTP 200, configured/verified true, no error. No email was sent; recipient inbox acceptance has not been exercised |
+| Subscriptions | Existing Stripe settings copied; signed/idempotent handling and plan boundaries pass synthetic checks; live endpoint updated to the Cloudflare webhook URL with the existing signing secret | Confirm actual Checkout/portal/webhook behaviour on the new origin; no purchase or financial test has been performed |
+| Student data | Verified transfer of 1,002 rows in 39 tables; matching counts/hashes, zero foreign-key violations, integrity `ok`; protected production backup retained | Preserve the backup and complete cutover; after Cloudflare accepts writes, the frozen Render copy is stale |
+| Render retirement | Source frozen, health 200/session 503; original service/disk retained | After the new app/account system works, retire the service and paid disk and remove temporary migration access |
+| Domain/support email | Free `workers.dev` origin available; no domain purchased | Owner deferred RecallStride.com and custom support email |
+| Policies | Implementation-specific policy drafts exist | Ensure operator/contact/provider/retention/refund facts match the actual service; do not invent these |
 | Content | 24 topics, 474 concepts, 60 coding tasks; examples/benchmarks execute | Independent subject review and real student outcomes unestablished; avoid exam-grade certification claims |
-| Accessibility | Previous automated navigation/interpreter checks and responsive layouts | Actual screen-reader/device feedback remains bounded; no universal claim |
-| Expansion | Static assets bypass database; indexes and fewer repeated writes | Measure real usage/latency/quota headroom; one database is not horizontal sharding or unlimited free scale |
+| Accessibility | Previous automated navigation/interpreter checks and responsive layouts | Incorporate actual screen-reader/device feedback; no universal accessibility claim |
+| Expansion | Static assets bypass database; indexes and fewer repeated writes; production data fits the migration | Measure actual traffic/quota headroom; one database is not horizontal sharding or unlimited free scale |
 
-Next: finish the prepared Render SSH access and complete the controlled data transfer/cutover. Cloudflare authentication/deployment are complete. Do not restart a broad audit or redo computer-use feature tests when asked to deploy. Confirm the live revision and precisely which provider/customer-data/domain actions happened.
+Publish the verified SMTP repair and finish the controlled cutover. Do not restart a broad audit or add computer-use feature tests to a deployment request. Confirm exactly which live revision, provider checks, account checks and Render retirement actions completed.
