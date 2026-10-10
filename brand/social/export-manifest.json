@@ -1,0 +1,44 @@
+[
+  {
+    "name": "first-post-square",
+    "width": 1080,
+    "height": 1080,
+    "format": "png",
+    "bytes": 35170
+  },
+  {
+    "name": "first-post-portrait",
+    "width": 1080,
+    "height": 1350,
+    "format": "png",
+    "bytes": 37103
+  },
+  {
+    "name": "first-post-story",
+    "width": 1080,
+    "height": 1920,
+    "format": "png",
+    "bytes": 42554
+  },
+  {
+    "name": "profile-avatar",
+    "width": 1024,
+    "height": 1024,
+    "format": "png",
+    "bytes": 28906
+  },
+  {
+    "name": "profile-header",
+    "width": 1500,
+    "height": 500,
+    "format": "png",
+    "bytes": 23859
+  },
+  {
+    "name": "social-preview",
+    "width": 1200,
+    "height": 630,
+    "format": "png",
+    "bytes": 33396
+  }
+]

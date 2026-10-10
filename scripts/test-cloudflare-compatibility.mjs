@@ -89,12 +89,38 @@ try {
   });
   assert.equal(postResponse.status, 201);
   assert.deepEqual(await postResponse.json(), { body: { synthetic: true } });
+  const confirmationAction = async action => {
+    const response = await fetch(`${baseUrl}/confirmation/probe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action }) });
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  const confirmationSeed = await confirmationAction("seed");
+  assert.equal(confirmationSeed.contracts, 1);
+  assert.equal(confirmationSeed.confirmations, 1);
+  assert.equal(confirmationSeed.rollbackVerified, true);
+  assert.equal(confirmationSeed.queue.status, "delivery_failed");
+  assert.equal(confirmationSeed.queue.last_error_code, "ETIMEDOUT");
+  assert.equal(confirmationSeed.sent, 1);
+  assert.ok(Date.parse(confirmationSeed.queue.next_attempt_at) - Date.parse(confirmationSeed.queue.created_at) >= 600000);
+  assert.match(confirmationSeed.contract.termsHtml, /Synthetic Operator/);
+  const persistedConfirmation = await fetch(`${baseUrl}/confirmation/probe`).then(response => response.json());
+  assert.equal(persistedConfirmation.contract.sha256, confirmationSeed.contract.sha256);
+  assert.deepEqual(persistedConfirmation.queue, confirmationSeed.queue);
+  const confirmationDelivered = await confirmationAction("deliver");
+  assert.equal(confirmationDelivered.queue.status, "delivered");
+  assert.equal(confirmationDelivered.queue.attempts, 2);
+  assert.equal(confirmationDelivered.sent, 2);
+  assert.equal(confirmationDelivered.stableMessageId, true);
+  assert.equal(confirmationDelivered.attachmentCount, 3);
+  const confirmationErased = await confirmationAction("erase");
+  assert.equal(confirmationErased.contracts, 0);
+  assert.equal(confirmationErased.confirmations, 0);
   console.log(JSON.stringify({
     passed: true,
     measuredAt: new Date().toISOString(),
     runtime: "Wrangler/workerd local SQLite-backed Durable Object",
     applicationTables: first.tableCount - 3,
-    checks: ["Express GET/JSON POST", "full application schema", "multi-statement SQL", "bound strings/numbers/null", "spread array bindings", "undefined/missing row semantics", "indexed affected-row count", "foreign keys", "transaction rollback", "async transaction rejection", "native scrypt hash compatibility", "database persistence across requests"],
+    checks: ["Express GET/JSON POST", "full application schema", "multi-statement SQL", "bound strings/numbers/null", "spread array bindings", "undefined/missing row semantics", "indexed affected-row count", "foreign keys", "transaction rollback", "async transaction rejection", "native scrypt hash compatibility", "database persistence across requests", "immutable subscription contract and unique outbox SQL", "atomic contract/outbox rollback", "persisted ten-minute confirmation retry", "leased delivery and stable Message-ID", "subscription document account-erasure cascade"],
     limitations: "Synthetic local fixtures only. No Cloudflare account, provider credentials, .env, production database, email delivery or hosting capacity was tested.",
   }, null, 2));
 } finally {

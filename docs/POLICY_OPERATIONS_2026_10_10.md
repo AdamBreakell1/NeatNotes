@@ -1,0 +1,52 @@
+# RecallStride policy operations — 10 October 2026
+
+These procedures put the published customer policies into practice. Operator: Adam Breakell trading as BreakellSystems. The operator’s authorised public postal address and current support email come from deployment configuration, not a guessed address or machine identity. Policy version: `2026-10-10`.
+
+## Customer information and consent
+
+- Publish Privacy, Terms, Cookies, Cancellation and Billing, and Your Account Data using the same configured policy factory. The public policies identify the operator and address, monthly price, renewal, cancellation method and full refund promise.
+- New account signup records the current terms version, agreement and a 16-or-over declaration. This is a declaration, not verified age. Do not collect passports, full birthdays or parental identity documents simply to create a study account.
+- Before a new Pro purchase, show £3.99 monthly renewal, cancellation and the 14-day full refund promise. Record agreement to the current version and the purchaser’s declaration that they are an adult or have the necessary adult permission. Never describe this as independently verified parental consent.
+- Give the customer a saveable copy of the purchase terms and cancellation information with the subscription confirmation. A price-only payment receipt is not the full contract information. Retain the exact version applicable to the order; a future policy edit must not rewrite an earlier order.
+- Optional usage analytics is off by default. Browser event storage and server collection must both respect the choice. Withdrawing it stops collection and removes the account’s optional product and coding telemetry. Learning history needed for the requested study tools is separate from optional business analytics.
+
+## Support and refund handling
+
+The existing Contact form is a working persisted enquiry route with email delivery and retry. `support@recallstride.com` is the public support address. Cloudflare routes it to the verified `recallstride@gmail.com` inbox; application contact notifications go directly to that inbox. Cancellation and privacy requests do not require the customer to sign in or complete a special form.
+
+1. Review delivered enquiries and delivery failures each working day. Acknowledgement should state what was received and the next action. Ask only for information needed to identify the account or payment; never request a password, complete card number or card security code.
+2. For a cancellation without refund, use the authenticated Stripe dashboard to cancel renewal and confirm the effective date to the customer. Retain access through the paid period unless the customer requests immediate cancellation with an applicable refund.
+3. For a request received within 14 days of the first or any renewal charge, refund that charge in full, even if the customer used Pro. Cancel future billing as part of the request. Use the original payment method and process the refund within 14 days of the request. Record the Stripe payment/refund references, request date and decision.
+4. For duplicate charges, unauthorised payments, defective service or a dispute outside the promise window, investigate the facts and statutory remedy. The 14-day promise does not limit rights for a faulty or misdescribed service.
+5. After a refund that ends the subscription, confirm the cancellation/refund and account access. Stripe webhooks update entitlement; correct any stale status before closing the enquiry. This procedure is owner-operated; it is not an automatic refund button.
+6. Keep necessary tax and refund accounting evidence in the business financial records, including Stripe receipts. Account billing-status metadata is not an accounting ledger. Follow the relevant HMRC period; for the confirmed sole-trader operation it is at least five years after the 31 January filing deadline for the tax year, with special rules for very late returns.
+
+## Privacy requests
+
+1. Record the received date, account email where known, requested right and any response deadline. Account export is useful, but it does not replace responding to a wider subject access request.
+2. Check identity proportionately. An authenticated account or a reply from the existing account email may be sufficient. Ask for more only where needed; explain why. Do not reveal a student’s information solely because a person describes themselves as a parent, teacher or payer.
+3. Provide the relevant data and privacy information, including support correspondence, optional events and security information not present in the ordinary JSON export. Remove another person’s private information where necessary.
+4. Normally respond within one month. If the applicable law allows extra time for a complex request, explain the reason and extension within the initial month. A legal exception needs a specific recorded reason; do not use an active subscription as a reason to ignore the request.
+5. For erasure, resolve billing and existing shared ownership with the customer, then remove account and dependent private data. Delete or restrict matching support inbox copies where required. Preserve only records specifically required for a legal duty or claim and explain that exception.
+6. Add account deletion requests to the restricted recovery record. Recovery must reapply deletions from after the restore point before the restored service accepts users. Provider accounting records and short-lived backup history are explained separately to the customer.
+7. Keep enough evidence to show the request was handled, with restricted use. Complaints may be raised directly with the ICO; do not make use of our support process a precondition.
+
+## Retention and disposal
+
+The application lifecycle cleanup runs on startup and daily maintenance, including Cloudflare’s database alarm. It removes expired authentication/session/continuation/rate-limit records, optional analytics and coding metadata older than 30 days, audit logs older than 90 days, support enquiry records older than 365 days after creation regardless of delivery state, and billing/payment-event metadata, immutable checkout contracts and subscription confirmation records older than seven calendar years. Account-linked records may disappear sooner on account deletion. The runtime tests verify those boundaries with synthetic records.
+
+Account data, private notes and study progress are not automatically erased for inactivity. Count-limited histories and note versions are pruned as documented in the product. Browser coding/recall/worked-example drafts expire for resume after 30 days when checked; coding drafts are cleared on sign-out. Other local study drafts persist until cleared/account deletion. Mini-mock resume is seven days. Native Cloudflare point-in-time recovery covers 30 days.
+
+Application cleanup does not delete Gmail inbox copies. The operator must delete ordinary support threads at 365 days after submission, including the corresponding sent messages/trash as appropriate. Keep an identified unresolved complaint or legal hold separately, with its reason, review date and limited scope. Review incident/migration copies after recovery is no longer needed and securely remove them; do not retain historical production snapshots indefinitely as an informal archive.
+
+## Security incident response
+
+Restrict the affected access, preserve only necessary incident evidence and record what happened, the categories of information and people affected, likely consequences and remedial action. Assess risk to people, including students. If notification to the ICO is required, make it without undue delay and, where feasible, within 72 hours of awareness. Notify affected people without undue delay where the applicable high-risk threshold is met. An incident is not automatically reportable, but the assessment and decision must be recorded.
+
+## Provider and business administration
+
+Cloudflare processes hosting/database/recovery data under its customer processing terms. Resend, configured in its Ireland region, delivers verification, reset, subscription and support notifications through the verified RecallStride domain. Cloudflare Email Routing forwards branded incoming mail to the operator’s Gmail inbox to the verified destination. Gmail stores support correspondence under Google’s service/privacy terms; consumer Gmail is not to be described as a separately negotiated business processing agreement. Stripe handles payments and keeps financial records for its own regulatory purposes. Email open and click tracking remains unconfigured. These providers can process information outside the UK; record the applicable processing role, transfer mechanism and terms when onboarding or changing a provider. Do not assert that all student data stays in the UK.
+
+Use the official [ICO fee self-assessment](https://ico.org.uk/for-organisations/data-protection-fee/self-assessment/) and register/pay if required. The operator’s wider processing and registration status cannot be inferred from the app repository; publishing a privacy notice is not registration. Reassess the fee when the business changes.
+
+Primary guidance checked on 10 October 2026: [ICO privacy information](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/individual-rights/the-right-to-be-informed/what-privacy-information-should-we-provide/), [ICO access rights](https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/individual-rights/right-of-access/what-is-the-right-of-access/), [GOV.UK distance selling](https://www.gov.uk/online-and-distance-selling-for-businesses/distance-selling), [GOV.UK online selling](https://www.gov.uk/online-and-distance-selling-for-businesses/online-selling), [HMRC sole-trader record retention](https://www.gov.uk/self-employed-records/how-long-to-keep-your-records), [Cloudflare processing terms](https://www.cloudflare.com/cloudflare-customer-dpa/), [Google privacy](https://policies.google.com/privacy), and [Stripe privacy](https://stripe.com/gb/privacy). These support the practical choices above; they do not certify the product or replace the operator carrying out the procedures.

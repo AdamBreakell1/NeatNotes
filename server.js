@@ -26,6 +26,12 @@ const { REPAIR_LESSONS, isRepairReleased, publicRepair, assessRepair } = require
 const contentReviewState = require("./content-review.json");
 const { trustedSchedule } = require("./backend/services/trustedSchedule");
 const { createSubscriptionEventProcessor, subscriptionAccess } = require("./backend/services/subscriptionEvents");
+const { createMetadataRetention, RETENTION } = require("./backend/services/metadataRetention");
+const { POLICY_VERSION, policyConsentError } = require("./backend/services/launchPolicy");
+const { publicPolicyConfig } = require("./backend/services/publicPolicyConfig");
+const { createCheckoutContract, createSubscriptionConfirmations } = require("./backend/services/subscriptionConfirmation");
+const policyContent = require("./policy-content");
+const publicSeo = require("./backend/services/publicSeo");
 const revisionGenerator = require("./revision-generator");
 
 // Each runtime owns its database and configuration; importing this module is inert.
@@ -77,7 +83,7 @@ const billingRateLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
   max: Number(environmentConfig.BILLING_RATE_LIMIT || 12),
 });
-const stripe = environmentConfig.STRIPE_SECRET_KEY ? new Stripe(environmentConfig.STRIPE_SECRET_KEY) : null;
+const stripe = environmentConfig.STRIPE_SECRET_KEY ? (runtime.stripeClient || new Stripe(environmentConfig.STRIPE_SECRET_KEY)) : null;
 const STRIPE_WEBHOOK_SECRET = environmentConfig.STRIPE_WEBHOOK_SECRET || "";
 const STRIPE_PRICE_IDS = {
   pro: environmentConfig.STRIPE_PRICE_PRO || environmentConfig.STRIPE_PRICE_PLUS || "",
@@ -575,6 +581,9 @@ db.exec(`
 `);
 if (!maintenanceMode) seedRevisionDecksIfChanged();
 validatePublishedContent();
+const subscriptionConfirmations = createSubscriptionConfirmations({ db, configurationError: getSmtpConfigError,
+  sendMessage: (message) => sendAuthenticationEmail({ createTransport: createMailTransport, kind: "subscription_confirmation",
+    message: { from: getEmailFromAddress(), ...message } }) });
 const processSubscriptionEvent = createSubscriptionEventProcessor({
   hasEvent: (id) => Boolean(db.prepare("SELECT 1 FROM stripe_events WHERE id = ?").get(id)),
   recordEvent: (event) => db.prepare("INSERT INTO stripe_events (id, type, processed_at) VALUES (?, ?, ?)").run(event.id, event.type, new Date().toISOString()),
@@ -609,11 +618,15 @@ app.use(express.json({ limit: environmentConfig.JSON_BODY_LIMIT || "1mb" }));
 app.use("/api", enforceSameOriginMutation);
 app.use("/api", (req, res, next) => {
   res.setHeader("Cache-Control", "no-store");
+  res.setHeader("X-Robots-Tag", "noindex, nofollow");
   next();
 });
 registerPublicAssetRoutes();
 
-app.get("/api/session", requireUser, (req, res) => {
+app.get("/api/session", (req, res, next) => {
+  if (req.query.optional === "1" && !getOptionalSessionUser(req)) return res.json({ user: null });
+  next();
+}, requireUser, (req, res) => {
   res.json({
     user: publicUser(req.user),
     plans: Object.fromEntries(PUBLIC_PLAN_IDS.map((id) => [id, PLAN_CATALOG[id]])),
@@ -636,6 +649,17 @@ app.get("/api/plans", (req, res) => {
 });
 
 app.get("/api/auth/providers", (req, res) => res.json({ google: isGoogleConfigured() }));
+
+app.get("/api/public-config", (req, res) => {
+  res.json({ policies: publicPolicyConfig({ ...environmentConfig, BASE_URL }, { googleSignInEnabled: isGoogleConfigured() }) });
+});
+
+app.get("/api/policies/:page", (req, res) => {
+  if (!policyContent.pages.includes(req.params.page)) return res.status(404).send("Policy not found.");
+  const config = publicPolicyConfig({ ...environmentConfig, BASE_URL }, { googleSignInEnabled: isGoogleConfigured() });
+  if (!config.configured) return res.status(503).send("Customer policy details are unavailable. Please try again shortly.");
+  res.type("html").send(policyContent.create(config).renderDocument(req.params.page));
+});
 
 app.post("/api/contact", contactRateLimiter, asyncHandler(async (req, res) => {
   const name = String(req.body.name || "").trim().slice(0, 120);
@@ -777,6 +801,14 @@ app.post("/api/billing/checkout-session", billingRateLimiter, requireUser, async
     return res.status(400).json({ error: "Only monthly Pro is available for new subscriptions. Manage an existing subscription through Billing." });
   }
 
+  const consentError = policyConsentError(req.body, "checkout");
+  if (consentError) return res.status(400).json(consentError);
+  const publicContractConfig = publicPolicyConfig({ ...environmentConfig, BASE_URL }, { googleSignInEnabled: isGoogleConfigured() });
+  if (!publicContractConfig.configured || (environmentConfig.NODE_ENV === "production" && (!environmentConfig.BASE_URL || new URL(BASE_URL).protocol !== "https:"))) {
+    return res.status(503).json({ error: "New subscriptions are temporarily unavailable while our operator and support details are configured. Your existing account and notes are unaffected." });
+  }
+  const contract = createCheckoutContract(publicContractConfig);
+
   if (req.user.stripe_subscription_id && ["active", "trialing", "past_due", "unpaid", "incomplete", "paused"].includes(req.user.subscription_status)) {
     return res.status(409).json({ error: "You already have a subscription. Use account billing to manage it rather than starting another." });
   }
@@ -802,6 +834,8 @@ app.post("/api/billing/checkout-session", billingRateLimiter, requireUser, async
     metadata: {
       userId: user.id,
       plan,
+      policyVersion: contract.policyVersion,
+      contractSha256: contract.sha256,
     },
     subscription_data: {
       metadata: {
@@ -811,8 +845,14 @@ app.post("/api/billing/checkout-session", billingRateLimiter, requireUser, async
     },
   });
 
-  db.prepare("INSERT INTO billing_events (id, user_id, plan, provider, status, created_at) VALUES (?, ?, ?, 'stripe', 'checkout_started', ?)")
-    .run(crypto.randomUUID(), user.id, plan, new Date().toISOString());
+  const acceptedAt = contract.acceptedAt;
+  db.transactionSync(() => {
+    subscriptionConfirmations.recordCheckout(session.id, user.id, contract);
+    db.prepare(`INSERT INTO billing_events (id, user_id, plan, provider, status, created_at,
+      consent_version, consent_accepted_at, adult_permission_confirmed)
+      VALUES (?, ?, ?, 'stripe', 'checkout_started', ?, ?, ?, 1)`)
+      .run(crypto.randomUUID(), user.id, plan, acceptedAt, POLICY_VERSION, acceptedAt);
+  });
 
   res.json({ url: session.url });
 }));
@@ -860,6 +900,9 @@ app.post("/api/auth/signup", authRateLimiter, asyncHandler(async (req, res) => {
     return res.status(400).json({ error: "Enter a name, valid email, and password between 8 and 128 characters." });
   }
 
+  const consentError = policyConsentError(req.body, "signup");
+  if (consentError) return res.status(400).json(consentError);
+
   ensureAuthenticationEmailAvailable();
 
   const existing = getUserByEmail(email);
@@ -869,6 +912,9 @@ app.post("/api/auth/signup", authRateLimiter, asyncHandler(async (req, res) => {
         && verifyPassword(password, existing.password_salt, existing.password_hash);
       let verification = {};
       if (passwordMatches) {
+        const acceptedAt = new Date().toISOString();
+        db.prepare("UPDATE users SET age_confirmed_at = ?, terms_accepted_at = ?, terms_version = ? WHERE id = ?")
+          .run(acceptedAt, acceptedAt, POLICY_VERSION, existing.id);
         authContinuations.save(existing.id, req.body.returnTask);
         verification = await createAndSendVerification(existing.id, existing.email, existing.name);
       }
@@ -889,9 +935,10 @@ app.post("/api/auth/signup", authRateLimiter, asyncHandler(async (req, res) => {
 
   db.transactionSync(() => {
     db.prepare(`
-      INSERT INTO users (id, email, name, password_hash, password_salt, email_verified, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, 0, ?, ?)
-    `).run(userId, email, name, passwordRecord.hash, passwordRecord.salt, now, now);
+      INSERT INTO users (id, email, name, password_hash, password_salt, email_verified, created_at, updated_at,
+        age_confirmed_at, terms_accepted_at, terms_version)
+      VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+    `).run(userId, email, name, passwordRecord.hash, passwordRecord.salt, now, now, now, now, POLICY_VERSION);
     ensurePersonalWorkspace(userId, name);
     ensureAccountProfiles({ id: userId, role: "student" });
     authContinuations.save(userId, req.body.returnTask);
@@ -1022,8 +1069,16 @@ app.delete("/api/account/sessions/others", requireUser, (req, res) => {
   res.json({ message: `${Number(result.changes)} other session${Number(result.changes) === 1 ? "" : "s"} signed out.` });
 });
 
-const codingPracticeStore = registerPracticeRoutes(app, { db, requireUser, rateLimit: revisionRateLimiter, canAccess: canAccessRevisionDeck, scheduleCleanup: !maintenanceMode && runtime.scheduleCleanup !== false, pruneOnStartup: !maintenanceMode });
-const pilotTelemetry = registerPilotRoutes(app, { db, requireUser, requireAdmin, rateLimit: revisionRateLimiter, scheduleCleanup: !maintenanceMode && runtime.scheduleCleanup !== false, pruneOnStartup: !maintenanceMode, consented: (owner) => normalizeNotificationPreferences(parseJsonValue(getStudentProfile(owner)?.notification_preferences, {})).usageAnalytics });
+const codingPracticeStore = registerPracticeRoutes(app, { db, requireUser, rateLimit: revisionRateLimiter, canAccess: canAccessRevisionDeck, scheduleCleanup: false, pruneOnStartup: false });
+const pilotTelemetry = registerPilotRoutes(app, { db, requireUser, requireAdmin, rateLimit: revisionRateLimiter, scheduleCleanup: false, pruneOnStartup: false, consented: (owner) => normalizeNotificationPreferences(parseJsonValue(getStudentProfile(owner)?.notification_preferences, {})).usageAnalytics });
+const metadataRetention = createMetadataRetention(db);
+function runDailyMaintenance(options) {
+  if (maintenanceMode) return { skipped: true, maintenanceMode: true };
+  const result = metadataRetention.prune(options);
+  if (!result.skipped) result.subscriptionRecords = subscriptionConfirmations.prune();
+  return result;
+}
+if (!maintenanceMode) runDailyMaintenance();
 
 app.get("/api/account/export", requireUser, (req, res) => {
   const workspaces = db.prepare(`
@@ -1038,8 +1093,10 @@ app.get("/api/account/export", requireUser, (req, res) => {
     exportedAt: new Date().toISOString(),
     codingPractice: codingPracticeStore.list(req.user.id),
     pilotEvents: pilotTelemetry.export(req.user.id),
+    usageAnalytics: db.prepare("SELECT event_name, metadata, created_at FROM product_events WHERE user_id = ? ORDER BY created_at").all(req.user.id),
     codingDraftsNotice: "Source, input fixtures and predictions stay in browser storage. Use Export coding data in Practice to include this device's drafts.",
     account: publicUser(req.user),
+    billingDocuments: subscriptionConfirmations.export(req.user.id),
     profile: getAccountProfiles(req.user.id),
     workspaces,
     notes: workspaceIds.length ? db.prepare(`
@@ -1091,7 +1148,10 @@ app.delete("/api/account", requireUser, (req, res) => {
   if (archivedOwnership) return res.status(409).json({ error: "This account owns archived classroom records. Export your account data and contact support to arrange retention or ownership before deletion. Other people's records will not be deleted automatically." });
 
   const userId = req.user.id;
-  db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+  db.transactionSync(() => {
+    db.prepare("DELETE FROM product_events WHERE user_id = ?").run(userId);
+    db.prepare("DELETE FROM users WHERE id = ?").run(userId);
+  });
   clearSessionCookie(res);
   console.info(JSON.stringify({ event: "account_deleted", userId, timestamp: new Date().toISOString() }));
   res.json({ message: "Your RecallStride account and associated personal data have been deleted." });
@@ -1151,7 +1211,7 @@ app.get("/api/auth/google/callback", asyncHandler(async (req, res) => {
     return res.status(400).send(renderMessagePage("Google sign-in failed", "The OAuth response could not be verified."));
   }
 
-  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+  const tokenResponse = await (runtime.fetchOAuth || fetch)("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -1168,7 +1228,7 @@ app.get("/api/auth/google/callback", asyncHandler(async (req, res) => {
   }
 
   const tokens = await tokenResponse.json();
-  const profileResponse = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+  const profileResponse = await (runtime.fetchOAuth || fetch)("https://openidconnect.googleapis.com/v1/userinfo", {
     headers: { authorization: `Bearer ${tokens.access_token}` },
   });
 
@@ -1181,6 +1241,10 @@ app.get("/api/auth/google/callback", asyncHandler(async (req, res) => {
     return res.status(400).send(renderMessagePage("Google sign-in failed", "Google did not confirm a verified email address."));
   }
   const user = upsertGoogleUser(profile);
+  if (!user) {
+    res.clearCookie("google_oauth_state");
+    return res.status(400).send(renderMessagePage("Create your RecallStride account", "Create your account with email first to confirm that you are 16 or over and agree to the Terms. You can then sign in with Google using the same email address."));
+  }
   issueSession(res, user.id, req);
   res.clearCookie("google_oauth_state");
   res.redirect("/");
@@ -1468,6 +1532,12 @@ app.patch("/api/profile", requireUser, (req, res) => {
   const notificationPreferences = normalizeNotificationPreferences(
     req.body.notificationPreferences ?? parseJsonValue(student?.notification_preferences, {}),
   );
+  if (!notificationPreferences.usageAnalytics) {
+    db.transactionSync(() => {
+      db.prepare("DELETE FROM product_events WHERE user_id = ?").run(req.user.id);
+      db.prepare("DELETE FROM pilot_events WHERE user_id = ?").run(req.user.id);
+    });
+  }
   const completeOnboarding = req.body.completeOnboarding === true;
 
   db.prepare(`
@@ -1833,6 +1903,14 @@ app.use((req, res, next) => {
   }
 
   if (!staticAssets) return res.status(404).type("text/plain").send("Route not found.");
+  if (req.path === "/index.html") return res.redirect(308, `/${req.originalUrl.slice(req.path.length)}`);
+  if (req.path !== "/") {
+    return res.status(404).set("X-Robots-Tag", "noindex, nofollow").type("text/plain").send("Page not found. Visit RecallStride at /.");
+  }
+  if (["reset", "verified", "checkout", "billing"].some((key) => Object.hasOwn(req.query, key))) {
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    res.setHeader("Cache-Control", "private, no-store");
+  }
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
@@ -1886,6 +1964,7 @@ function registerPublicAssetRoutes() {
     ["/revision-generator.js", "application/javascript"],
     ["/neat-questions.js", "application/javascript"],
     ["/favicon.svg", "image/svg+xml"],
+    ["/assets/recallstride-social-preview.png", "image/png"],
   ]);
 
   publicAssets.forEach((contentType, publicPath) => {
@@ -1913,7 +1992,7 @@ function registerPublicAssetRoutes() {
   });
 
   app.get("/robots.txt", (req, res) => {
-    res.type("text/plain").send(`User-agent: *\nAllow: /\nSitemap: ${BASE_URL}/sitemap.xml\n`);
+    res.type("text/plain").send(publicSeo.robotsTxt(BASE_URL));
   });
 
   app.get("/ocr-h446/:code", (req, res) => {
@@ -1924,27 +2003,12 @@ function registerPublicAssetRoutes() {
   });
 
   app.get("/sitemap.xml", (req, res) => {
-    const urls = [BASE_URL, ...REVISION_TOPICS.filter((topic) => isReleased(topic)).map((topic) => `${BASE_URL}/ocr-h446/${encodeURIComponent(topic.code)}`)];
-    res.type("application/xml").send(
-      `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls.map((url) => `<url><loc>${escapeHtml(url)}</loc></url>`).join("")}</urlset>`,
-    );
+    res.type("application/xml").send(publicSeo.sitemapXml(BASE_URL, REVISION_TOPICS.filter(isReleased)));
   });
 }
 
 function renderPublicTopicPage(topic) {
-  const description = String(topic.summary || `Revise OCR H446 ${topic.code} ${topic.title} with RecallStride.`).slice(0, 220);
-  const concepts = (topic.cards || []).slice(0, 6).map((card) => `<li><strong>${escapeHtml(card.front)}</strong><span>${escapeHtml(card.category || "Knowledge")}</span></li>`).join("");
-  const canonical = `${BASE_URL}/ocr-h446/${encodeURIComponent(topic.code)}`;
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>${escapeHtml(topic.code)} ${escapeHtml(topic.title)} | OCR H446 revision | RecallStride</title>
-    <meta name="description" content="${escapeHtml(description)}"><link rel="canonical" href="${escapeHtml(canonical)}">
-    <meta property="og:title" content="${escapeHtml(topic.code)} ${escapeHtml(topic.title)} | RecallStride"><meta property="og:description" content="${escapeHtml(description)}">
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css"></head>
-    <body class="public-topic-page"><header><a class="public-topic-brand" href="/"><span class="brand-mark">RS</span><span><strong>RecallStride</strong><small>A BreakellSystems product</small></span></a><a class="primary-account-button" href="/?signup=1">Start free</a></header>
-    <main><p class="eyebrow">OCR H446 · Component ${topic.code.startsWith("2.") ? "02" : "01"}</p><h1>${escapeHtml(topic.code)} ${escapeHtml(topic.title)}</h1><p class="public-topic-summary">${escapeHtml(description)}</p>
-    <section><div><p class="eyebrow">Topic overview</p><h2>Build accurate recall, then apply it.</h2><p>RecallStride combines active flashcards, quick checks, exam practice and scheduled review. Progress is based on learning evidence rather than passive completion.</p></div><ul>${concepts}</ul></section>
-    <aside><div><strong>${Number(topic.cards?.length || 0)} original retrieval cards</strong><span>Mapped to stable OCR concepts</span></div><a href="/?demo=1">Try the interactive demo</a><a href="/?signup=1">Create a free account</a></aside>
-    <p class="public-topic-disclaimer">Published with owner authorisation; awaiting independent academic review. RecallStride is independently produced and is not endorsed by OCR. OCR is a registered trademark of OCR.</p></main></body></html>`;
+  return publicSeo.renderPublicTopicPage(topic, REVISION_TOPICS.filter(isReleased), BASE_URL);
 }
 
 function getOptionalSessionUser(req) {
@@ -2014,6 +2078,13 @@ async function handleStripeWebhook(req, res) {
 async function handleCheckoutCompleted(session) {
   const userId = session.metadata?.userId || session.client_reference_id;
   if (!userId) return;
+  const user = getUserById(userId);
+  if (!user) return;
+  if (subscriptionConfirmations.completed(session.id)) return;
+  const recorded = subscriptionConfirmations.contract(session.id);
+  if (recorded && recorded.userId !== userId) throw new Error("Checkout contract does not belong to this account.");
+  const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
+  if (customerId && user.stripe_customer_id && customerId !== user.stripe_customer_id) throw new Error("Checkout customer does not match the subscription account.");
 
   const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
   let subscription = null;
@@ -2022,9 +2093,18 @@ async function handleCheckoutCompleted(session) {
   }
 
   const { status, plan, currentPeriodEnd } = subscriptionAccess(subscription, getPlanFromStripePrice);
-  applyUserPlan(userId, plan, status, subscriptionId, currentPeriodEnd);
-  db.prepare("INSERT INTO billing_events (id, user_id, plan, provider, status, created_at) VALUES (?, ?, ?, 'stripe', ?, ?)")
-    .run(crypto.randomUUID(), userId, plan, "checkout_completed", new Date().toISOString());
+  // Delayed-payment completion is acknowledged without manufacturing payment
+  // or acceptance. Its verified async success event can finish the purchase.
+  if (!['paid', 'no_payment_required'].includes(session.payment_status) || session.status !== 'complete') return;
+  if (plan === "free" || !["active", "trialing"].includes(status)) return;
+  db.transactionSync(() => {
+    applyUserPlan(userId, plan, status, subscriptionId, currentPeriodEnd);
+    db.prepare("INSERT INTO billing_events (id, user_id, plan, provider, status, created_at) VALUES (?, ?, ?, 'stripe', ?, ?)")
+      .run(crypto.randomUUID(), userId, plan, "checkout_completed", new Date().toISOString());
+    subscriptionConfirmations.enqueue({ user, session, currentPeriodEnd,
+      currentConfig: publicPolicyConfig({ ...environmentConfig, BASE_URL }, { googleSignInEnabled: isGoogleConfigured() }) });
+  });
+  scheduleSubscriptionConfirmationDelivery();
 }
 
 async function handleSubscriptionChanged(subscription) {
@@ -2196,6 +2276,12 @@ function migrateSchema() {
   addColumnIfMissing("users", "plan_status", "TEXT NOT NULL DEFAULT 'active'");
   addColumnIfMissing("users", "plan_updated_at", "TEXT");
   addColumnIfMissing("users", "free_revision_deck_id", "TEXT");
+  addColumnIfMissing("users", "age_confirmed_at", "TEXT");
+  addColumnIfMissing("users", "terms_accepted_at", "TEXT");
+  addColumnIfMissing("users", "terms_version", "TEXT");
+  addColumnIfMissing("billing_events", "consent_version", "TEXT");
+  addColumnIfMissing("billing_events", "consent_accepted_at", "TEXT");
+  addColumnIfMissing("billing_events", "adult_permission_confirmed", "INTEGER");
   addColumnIfMissing("workspaces", "kind", "TEXT NOT NULL DEFAULT 'project'");
   addColumnIfMissing("sessions", "user_agent", "TEXT");
   addColumnIfMissing("sessions", "last_used_at", "TEXT");
@@ -3210,6 +3296,7 @@ async function createAndSendVerification(userId, email, name) {
       onFailure: logAuthenticationEmailFailure,
       message: {
         from: getEmailFromAddress(),
+        replyTo: publicPolicyConfig({ ...environmentConfig, BASE_URL }).supportEmail,
         to: email,
         ...verificationEmail({ name, url: verificationUrl }),
       },
@@ -3231,6 +3318,7 @@ async function sendPasswordResetEmail(user, resetUrl) {
     onFailure: logAuthenticationEmailFailure,
     message: {
       from: getEmailFromAddress(),
+      replyTo: publicPolicyConfig({ ...environmentConfig, BASE_URL }).supportEmail,
       to: user.email,
       ...passwordResetEmail({ name: user.name, url: resetUrl }),
     },
@@ -3360,6 +3448,18 @@ async function retryQueuedContactEnquiries(limit = 10) {
   }
 }
 
+async function retryQueuedSubscriptionConfirmations(limit = 10) {
+  if (maintenanceMode) return;
+  await subscriptionConfirmations.retry(limit);
+}
+
+function scheduleSubscriptionConfirmationDelivery() {
+  const delivery = retryQueuedSubscriptionConfirmations().catch((error) => {
+    console.error("Subscription confirmation retry failed:", { code: String(error?.code || "QUEUE_RETRY_FAILED").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 60) });
+  });
+  if (runtime.waitUntil) runtime.waitUntil(delivery);
+}
+
 function upsertGoogleUser(profile) {
   const email = normalizeEmail(profile.email);
   if (!email || profile.email_verified !== true) {
@@ -3395,16 +3495,9 @@ function upsertGoogleUser(profile) {
     return user;
   }
 
-  const userId = crypto.randomUUID();
-  const name = String(profile.name || email.split("@")[0]);
-  db.prepare(`
-    INSERT INTO users (id, email, name, email_verified, google_id, created_at, updated_at)
-    VALUES (?, ?, ?, 1, ?, ?, ?)
-  `).run(userId, email, name, profile.sub, now, now);
-  ensurePersonalWorkspace(userId, name);
-  const user = getUserByEmail(email);
-  ensureAccountProfiles(user);
-  return user;
+  // New accounts use the regular signup path so age and current terms are
+  // confirmed explicitly. Existing accounts can still link a verified Google ID.
+  return null;
 }
 
 function requireWorkspaceMember(req, res) {
@@ -3641,6 +3734,7 @@ function publicUser(user) {
     legacyContract: Boolean(plan.legacyOnly),
     entitlements: publicPlan,
     emailVerified: Boolean(user.email_verified),
+    policyAcceptance: { version: user.terms_version || null, acceptedAt: user.terms_accepted_at || null, ageConfirmedAt: user.age_confirmed_at || null },
   };
 }
 
@@ -3941,7 +4035,9 @@ return {
   app,
   db,
   retryQueuedContactEnquiries,
-  configuration: { port: PORT, baseUrl: BASE_URL, contactRetryIntervalMs: maintenanceMode ? 0 : CONTACT_RETRY_INTERVAL_MS, maintenanceMode },
+  retryQueuedSubscriptionConfirmations,
+  runDailyMaintenance,
+  configuration: { port: PORT, baseUrl: BASE_URL, contactRetryIntervalMs: maintenanceMode ? 0 : CONTACT_RETRY_INTERVAL_MS, confirmationRetryIntervalMs: maintenanceMode ? 0 : 600000, maintenanceIntervalMs: maintenanceMode ? 0 : RETENTION.cleanupIntervalMs, maintenanceMode },
   providerStatus: () => ({ emailError: getSmtpConfigError(), googleConfigured: isGoogleConfigured(), stripeConfigured: isStripeConfigured() }),
 };
 }
@@ -3950,13 +4046,14 @@ function startApplication() {
   // Test fixtures explicitly bypass local provider configuration and real data.
   if (process.env.RECALLSTRIDE_SKIP_DOTENV !== "true") require("dotenv").config();
   const application = createApplication({ environment: process.env });
-  const { port, baseUrl, contactRetryIntervalMs } = application.configuration;
+  const { port, baseUrl, contactRetryIntervalMs, confirmationRetryIntervalMs, maintenanceIntervalMs } = application.configuration;
   const server = application.app.listen(port, () => {
     console.log(`RecallStride running at ${baseUrl}`);
     const providers = application.providerStatus();
     if (providers.emailError) console.log(`${providers.emailError} Development verification links are available only outside production.`);
     if (!providers.googleConfigured) console.log("Google OAuth is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable it.");
     application.retryQueuedContactEnquiries().catch((error) => console.error("Initial contact enquiry retry failed:", error.code || error.name));
+    application.retryQueuedSubscriptionConfirmations().catch(() => console.error("Initial subscription confirmation retry failed."));
   });
   let contactTimer;
   if (contactRetryIntervalMs > 0) {
@@ -3965,7 +4062,15 @@ function startApplication() {
     }), contactRetryIntervalMs);
     contactTimer.unref();
   }
-  server.on("close", () => clearInterval(contactTimer));
+  const maintenanceTimer = maintenanceIntervalMs > 0 ? setInterval(() => {
+    try { application.runDailyMaintenance(); } catch (error) { console.error("Metadata maintenance failed:", error.code || error.name); }
+  }, maintenanceIntervalMs) : null;
+  maintenanceTimer?.unref();
+  const confirmationTimer = confirmationRetryIntervalMs > 0 ? setInterval(() => {
+    application.retryQueuedSubscriptionConfirmations().catch(() => console.error("Subscription confirmation queue retry failed."));
+  }, confirmationRetryIntervalMs) : null;
+  confirmationTimer?.unref();
+  server.on("close", () => { clearInterval(contactTimer); clearInterval(confirmationTimer); clearInterval(maintenanceTimer); });
   return { ...application, server };
 }
 

@@ -21,6 +21,7 @@ const server = spawn(process.execPath, [path.join(root, "server.js")], {
   cwd: root, stdio: ["ignore", "pipe", "pipe"],
   env: { ...process.env, RECALLSTRIDE_SKIP_DOTENV: "true", NODE_ENV: "development",
     PORT: String(port), BASE_URL: base, CORS_ORIGIN: base,
+    POLICY_OPERATOR_NAME: "Fixture Operator", POLICY_POSTAL_ADDRESS: "1 Example Street, Leeds, LS1 1AA",
     DATABASE_PATH: path.join(temp, "fixture.sqlite"), ALLOW_MOCK_BILLING: "true",
     AUTH_RATE_LIMIT: "200", REVISION_RATE_LIMIT: "400", CONTACT_RETRY_INTERVAL_MS: "0",
     SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", STRIPE_SECRET_KEY: "",
@@ -126,7 +127,7 @@ async function modalBounds(open, modal, title, close, width) {
     passed("Public and authentication primary actions retain readable labels at rest and on hover in both themes");
     passed("Empty email and password boundaries meet 3:1 in both themes without adding an inner password border");
 
-    const data = { name: "UI Fixture", email: "ui-fixture@example.test", password: "UIFixturePass123" };
+    const data = { name: "UI Fixture", email: "ui-fixture@example.test", password: "UIFixturePass123", ageConfirmed: true, termsAccepted: true, policyVersion: "2026-10-10" };
     const signup = await context.request.post(`${base}/api/auth/signup`, { data }); assert.equal(signup.status(), 201);
     await context.request.get((await signup.json()).devVerificationUrl);
     assert.equal((await context.request.post(`${base}/api/auth/login`, { data })).status(), 200);

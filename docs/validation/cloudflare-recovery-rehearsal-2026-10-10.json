@@ -1,0 +1,24 @@
+{
+  "workerName": "recallstride-recovery-rehearsal-a025c513",
+  "account": "7656ff3b3eaa33f5eb0e17d1b026f7f0",
+  "syntheticOnly": true,
+  "productionDatabaseAccessed": false,
+  "checks": [
+    "Native SQLite recovery available on an isolated authenticated Durable Object",
+    "Actual application schema, account hash, Pro entitlement, Unicode note and binary data recorded",
+    "Native point-in-time restore recovers the original account, entitlement, note and bytes exactly",
+    "Saved undo bookmark reverses the restore without loss of intervening synthetic changes",
+    "Synthetic namespace, temporary Worker and recovery secret removed"
+  ],
+  "testedAt": "2026-10-10T19:35:24.142Z",
+  "objectId": "11934ca2bab6aef0a82dcb12e790312b2676893acb7b723c448a4e5fe6e2b765",
+  "originalSha256": "8d01a018a7d86ce83ffc77562fd19dd33ce045def946fed79787a481047e99c2",
+  "damagedSha256": "eebe99723bcd8966904cd7fb393778064c5b0040f292b1ba4ff9005fb21dd1ed",
+  "restoredSha256": "8d01a018a7d86ce83ffc77562fd19dd33ce045def946fed79787a481047e99c2",
+  "restoredForeignKeyErrors": 0,
+  "databaseTables": 42,
+  "nativeRetentionDays": 30,
+  "syntheticNamespaceDeleted": true,
+  "temporaryWorkerDeleted": true,
+  "temporarySecretDeleted": true
+}

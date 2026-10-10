@@ -34,7 +34,7 @@ test("verification and reset mail give the right action, expiry and safe recover
     assert.match(mail.text, /you can ignore this email/);
     assert.match(mail.html, /role="presentation"/);
     assert.match(mail.html, /max-width:640px/);
-    assert.match(mail.html, /#0f766e/);
+    assert.match(mail.html, /#236a5e/);
   }
   assert.match(reset.text, /Your password will stay the same/);
 });
@@ -52,7 +52,7 @@ test("signup and password reset deliver the branded multipart templates through 
   await once(server, "listening");
   const base = `http://127.0.0.1:${server.address().port}`;
   const post = (endpoint, body) => fetch(base + endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const account = { name: "Ada & Grace", email: "student@fixture.test", password: "SyntheticPass123" };
+  const account = { name: "Ada & Grace", email: "student@fixture.test", password: "SyntheticPass123", ageConfirmed: true, termsAccepted: true, policyVersion: "2026-10-10" };
   try {
     assert.equal((await post("/api/auth/signup", account)).status, 201);
     assert.equal(messages.length, 1);

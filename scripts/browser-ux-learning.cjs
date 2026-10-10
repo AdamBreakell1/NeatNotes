@@ -20,6 +20,7 @@ const server = spawn(process.execPath, [path.join(root, "server.js")], {
   cwd: root, stdio: ["ignore", "pipe", "pipe"],
   env: { ...process.env, RECALLSTRIDE_SKIP_DOTENV: "true", NODE_ENV: "development",
     PORT: String(port), BASE_URL: base, CORS_ORIGIN: base,
+    POLICY_OPERATOR_NAME: "Fixture Operator", POLICY_POSTAL_ADDRESS: "1 Example Street, Leeds, LS1 1AA",
     DATABASE_PATH: path.join(fixture, "fixture.sqlite"), ALLOW_MOCK_BILLING: "true",
     AUTH_RATE_LIMIT: "100", REVISION_RATE_LIMIT: "300", CONTACT_RETRY_INTERVAL_MS: "0",
     SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", STRIPE_SECRET_KEY: "",
@@ -46,7 +47,7 @@ async function guestNotes(page) {
 }
 async function signup(context) {
   const response = await context.request.post(`${base}/api/auth/signup`, {
-    data: { name: "UX Learning Student", email: "ux-learning@example.test", password: "UXLearningPass123" },
+    data: { name: "UX Learning Student", email: "ux-learning@example.test", password: "UXLearningPass123", ageConfirmed: true, termsAccepted: true, policyVersion: "2026-10-10" },
   });
   assert.equal(response.status(), 201);
   const data = await response.json();

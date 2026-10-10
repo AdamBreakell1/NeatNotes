@@ -78,7 +78,7 @@ test("student account verifies, logs in and cannot elevate its role", async () =
   const signupResponse = await fetch(`${baseUrl}/api/auth/signup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: "Integration Student", email: "student@example.test", password: "StrongPass123", returnTask: { section: "practice", topicId: "cs-1-1-2", practiceMode: "exam", notes: "Never transfer guest notes" } }),
+    body: JSON.stringify({ name: "Integration Student", email: "student@example.test", password: "StrongPass123", ageConfirmed: true, termsAccepted: true, policyVersion: "2026-10-10", returnTask: { section: "practice", topicId: "cs-1-1-2", practiceMode: "exam", notes: "Never transfer guest notes" } }),
   });
   const signup = await signupResponse.json();
   assert.equal(signupResponse.status, 201);
@@ -242,7 +242,7 @@ async function createVerifiedAccount({ name, email, password }) {
   const signupResponse = await fetch(`${baseUrl}/api/auth/signup`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email, password }),
+    body: JSON.stringify({ name, email, password, ageConfirmed: true, termsAccepted: true, policyVersion: "2026-10-10" }),
   });
   const signup = await signupResponse.json();
   assert.equal(signupResponse.status, 201);

@@ -13,8 +13,6 @@ const REVIEW_SCHEDULES_KEY = "neat-notes-review-schedules";
 const MISTAKE_JOURNAL_KEY = "neat-notes-mistake-journal";
 const DAILY_REVIEW_GOAL = 10;
 const DEFAULT_GUEST_REVISION_DECK_ID = "cs-1-1-1";
-const MIN_LAUNCH_OVERLAY_MS = 250;
-const launchOverlayStartedAt = performance.now();
 const TOPBAR_TIME_FORMATTER = new Intl.DateTimeFormat(undefined, {
   hour: "2-digit",
   minute: "2-digit",
@@ -108,6 +106,7 @@ let mistakeJournal = loadLocalArray(MISTAKE_JOURNAL_KEY);
 let activeAdaptiveSession = null;
 let adaptivePlanPreview = null;
 let accountProfile = null;
+let publicPolicyRequest = null;
 const modalStack = [];
 const modalBackgroundState = new Map();
 const compactNotesMedia = window.matchMedia("(max-width: 1080px)");
@@ -635,6 +634,7 @@ function restoreWorkspaceRoute() {
   const panels = history.state?.panels || {};
   elements.landingView.hidden = true;
   elements.appView.hidden = false;
+  document.querySelector(".skip-link").setAttribute("href", "#app-view");
   setAppSection(route.section, { ...route, history: "none" });
   lastRenderedRoute = location.hash;
   requestAnimationFrame(() => {
@@ -1367,6 +1367,11 @@ function recordActivityEvent(event) {
 }
 
 function trackEvent(name, details = {}) {
+  const preferences = parseClientJson(accountProfile?.studentProfile?.notification_preferences, {});
+  if (isGuestMode || !currentUser || preferences.usageAnalytics !== true) {
+    clearOptionalUsageHistory();
+    return;
+  }
   try {
     const existing = JSON.parse(localStorage.getItem(APP_EVENT_LOG_KEY) || "[]");
     const events = Array.isArray(existing) ? existing : [];
@@ -1380,8 +1385,6 @@ function trackEvent(name, details = {}) {
     // Product analytics should never block the learner workflow.
   }
 
-  const preferences = parseClientJson(accountProfile?.studentProfile?.notification_preferences, {});
-  if (isGuestMode || !currentUser || preferences.usageAnalytics !== true) return;
   fetch("/api/events", {
     method: "POST",
     credentials: "same-origin",
@@ -1391,6 +1394,10 @@ function trackEvent(name, details = {}) {
   }).catch(() => {
     // Analytics delivery is intentionally non-blocking.
   });
+}
+
+function clearOptionalUsageHistory() {
+  try { localStorage.removeItem(APP_EVENT_LOG_KEY); } catch { /* A storage restriction must not interrupt study. */ }
 }
 
 function createEmptyNeatQuizState() {
@@ -1904,7 +1911,8 @@ async function updateAnalyticsConsent() {
     accountProfile = response;
     elements.settingsMessage.textContent = elements.usageAnalyticsConsent.checked
       ? "Privacy-safe product analytics enabled."
-      : "Product analytics disabled.";
+      : "Product analytics disabled and stored optional usage events cleared.";
+    if (!elements.usageAnalyticsConsent.checked) clearOptionalUsageHistory();
     elements.settingsMessage.className = "status-message success";
   } catch (error) {
     elements.usageAnalyticsConsent.checked = !elements.usageAnalyticsConsent.checked;
@@ -2170,6 +2178,7 @@ function handleFooterClick(event) {
     localStorage.setItem(LANDING_DISMISSED_KEY, "true");
     elements.landingView.hidden = true;
     elements.appView.hidden = false;
+  document.querySelector(".skip-link").setAttribute("href", "#app-view");
     setAppSection(sectionButton.dataset.appSection);
   }
 }
@@ -2180,14 +2189,21 @@ function handleLegalModalClick(event) {
   }
 }
 
-function openLegalModal(page = "privacy") {
-  const legalPage = getLegalPageContent(page);
-  elements.legalTitle.textContent = legalPage.title;
-  elements.legalContent.innerHTML = legalPage.html;
+async function openLegalModal(page = "privacy") {
+  page = window.RecallPolicies.pages.includes(page) ? page : "privacy";
+  elements.legalTitle.textContent = window.RecallPolicies.get(page).title;
+  elements.legalContent.textContent = "Loading policy details…";
   openManagedModal(elements.legalModal, {
     initialFocus: () => elements.legalModal.querySelector("button[data-close-legal]"),
     close: closeLegalModal,
   });
+  try {
+    await loadPublicPolicies();
+    const legalPage = getLegalPageContent(page);
+    elements.legalContent.innerHTML = `${legalPage.html}<p class="policy-document-action"><a href="/api/policies/${page}" target="_blank" rel="noopener">Save or print ${legalPage.title} (opens a new tab)</a></p>`;
+  } catch (error) {
+    elements.legalContent.textContent = `We could not load the current policy details. Close this window and try again. ${error.message}`;
+  }
   trackEvent("legal_page_opened", { page });
 }
 
@@ -2197,6 +2213,17 @@ function closeLegalModal() {
 
 function getLegalPageContent(page) {
   return window.RecallPolicies.get(page);
+}
+
+function loadPublicPolicies() {
+  if (!publicPolicyRequest) {
+    publicPolicyRequest = api("/api/public-config").then(({ policies }) => {
+      if (!policies?.configured || !window.RecallPolicies.configure(policies)) throw new Error("Customer policy details are temporarily unavailable.");
+      if (policies.version !== window.RecallPolicies.version) throw new Error("Reload RecallStride to read the current policies.");
+      return policies;
+    }).catch((error) => { publicPolicyRequest = null; throw error; });
+  }
+  return publicPolicyRequest;
 }
 
 function switchSettingsTab(event) {
@@ -2251,6 +2278,8 @@ function selectSettingsTab(tabName = "general") {
 }
 
 async function boot() {
+  clearOptionalUsageHistory();
+  loadPublicPolicies().catch(() => {});
   const initialRoute = window.WorkspaceNavigation.parse(location.hash);
   api("/api/auth/providers").then((providers) => {
     document.querySelector(".google-button").hidden = !providers.google;
@@ -2269,7 +2298,8 @@ async function boot() {
   }
 
   try {
-    const session = await api("/api/session");
+    const session = await api("/api/session?optional=1");
+    if (!session.user) throw new Error("No saved account session.");
     applyAuthenticatedSession(session.user, session.plans);
     try {
       await loadApp();
@@ -2339,6 +2369,7 @@ function handleLandingClick(event) {
 function showLandingPage() {
   elements.landingView.hidden = false;
   elements.appView.hidden = true;
+  document.querySelector(".skip-link").setAttribute("href", "#landing-product");
   closeManagedModal(elements.authView, { restoreFocus: false });
   hideLaunchOverlay();
 }
@@ -2357,6 +2388,7 @@ function exitDemoWorkspace() {
   activeAppSection = "home";
   closeManagedModal(elements.authView, { restoreFocus: false });
   elements.appView.hidden = true;
+  document.querySelector(".skip-link").setAttribute("href", "#landing-product");
   elements.landingView.hidden = false;
   hideLaunchOverlay();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2368,6 +2400,7 @@ function openDemoWorkspace(options = {}) {
   ensureDemoWorkspace({ reset: false });
   elements.landingView.hidden = true;
   elements.appView.hidden = false;
+  document.querySelector(".skip-link").setAttribute("href", "#app-view");
   setAppSection(options.section || "home");
   if (options.section === "revise") {
     activeComponentId = "h446-01";
@@ -2381,17 +2414,8 @@ function openDemoWorkspace(options = {}) {
 
 function hideLaunchOverlay() {
   if (!elements.launchOverlay || elements.launchOverlay.dataset.dismissed === "true") return;
-
   elements.launchOverlay.dataset.dismissed = "true";
-  const elapsed = performance.now() - launchOverlayStartedAt;
-  const delay = Math.max(0, MIN_LAUNCH_OVERLAY_MS - elapsed);
-
-  window.setTimeout(() => {
-    elements.launchOverlay.classList.add("dismissed");
-    window.setTimeout(() => {
-      elements.launchOverlay.hidden = true;
-    }, 360);
-  }, delay);
+  elements.launchOverlay.hidden = true;
 }
 
 async function login(event) {
@@ -2436,6 +2460,7 @@ async function signup(event) {
   setAuthLoading("signup", true);
 
   try {
+    await loadPublicPolicies();
     const response = await api("/api/auth/signup", {
       method: "POST",
       body: {
@@ -2443,6 +2468,9 @@ async function signup(event) {
         email: document.querySelector("#signup-email").value,
         password: document.querySelector("#signup-password").value,
         returnTask: authReturnTask,
+        ageConfirmed: document.querySelector("#signup-age-confirmed").checked,
+        termsAccepted: document.querySelector("#signup-terms-accepted").checked,
+        policyVersion: window.RecallPolicies.version,
       },
     });
 
@@ -2460,6 +2488,7 @@ async function signup(event) {
 }
 
 async function logout() {
+  clearOptionalUsageHistory();
   window.CodingPractice.sessionChanged(currentUser?.id, true);
   await api("/api/auth/logout", { method: "POST" }).catch(() => {});
   currentUser = null;
@@ -2468,6 +2497,10 @@ async function logout() {
 }
 
 function applyAuthenticatedSession(user, nextPlans = null) {
+  if (currentUser?.id !== user.id) {
+    clearOptionalUsageHistory();
+    accountProfile = null;
+  }
   if (currentUser?.id && currentUser.id !== user.id) window.CodingPractice.sessionChanged(currentUser.id, true);
   currentUser = user;
   selectAccountLearningState();
@@ -2476,6 +2509,7 @@ function applyAuthenticatedSession(user, nextPlans = null) {
   closeManagedModal(elements.authView, { restoreFocus: false });
   elements.landingView.hidden = true;
   elements.appView.hidden = false;
+  document.querySelector(".skip-link").setAttribute("href", "#app-view");
   elements.userName.textContent = currentUser?.name || "Account";
   elements.userEmail.textContent = currentUser?.email || "";
   renderAccountChrome();
@@ -2607,6 +2641,8 @@ function getAuthInitialFocus() {
 }
 
 function handleAuthModalClick(event) {
+  const policyButton = event.target.closest("[data-legal-page]");
+  if (policyButton) { openLegalModal(policyButton.dataset.legalPage); return; }
   if (event.target.closest("[data-close-auth]")) {
     closeAuthModal();
   }
@@ -2735,6 +2771,7 @@ function loadGuestApp(options = {}) {
   }
   closeManagedModal(elements.authView, { restoreFocus: false });
   elements.appView.hidden = Boolean(options.showLanding);
+  document.querySelector(".skip-link").setAttribute("href", options.showLanding ? "#landing-product" : "#app-view");
   elements.landingView.hidden = !options.showLanding;
   render();
   if (options.showLanding) {
@@ -2749,6 +2786,7 @@ async function loadApp() {
   closeManagedModal(elements.authView, { restoreFocus: false });
   elements.landingView.hidden = true;
   elements.appView.hidden = false;
+  document.querySelector(".skip-link").setAttribute("href", "#app-view");
   elements.userName.textContent = currentUser.name;
   elements.userEmail.textContent = currentUser.email;
   const profileResponse = await api("/api/profile");
@@ -3328,12 +3366,20 @@ async function handleBillingAction(event) {
 
   const originalLabel = button.textContent;
   elements.pricingMessage.textContent = "";
+  const terms = document.querySelector("#checkout-terms-accepted");
+  const permission = document.querySelector("#checkout-adult-permission");
+  if (!terms.checked || !permission.checked) {
+    showPricingMessage("Read and agree to the subscription terms, then confirm your age or parent/guardian permission before continuing.", "error");
+    (!terms.checked ? terms : permission).focus();
+    return;
+  }
   try {
+    await loadPublicPolicies();
     button.disabled = true;
     button.textContent = "Opening checkout...";
     const response = await api("/api/billing/checkout-session", {
       method: "POST",
-      body: { plan },
+      body: { plan, termsAccepted: terms.checked, adultPermissionConfirmed: permission.checked, policyVersion: window.RecallPolicies.version },
     });
     window.location.href = response.url;
   } catch (error) {
@@ -3359,6 +3405,8 @@ function closePlansModal() {
 }
 
 function handlePricingModalClick(event) {
+  const policyButton = event.target.closest("[data-legal-page]");
+  if (policyButton) { openLegalModal(policyButton.dataset.legalPage); return; }
   if (event.target.closest("[data-auth-mode]")) {
     closePlansModal();
     openAuthModal("signup");

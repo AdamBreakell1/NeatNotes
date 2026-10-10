@@ -20,7 +20,7 @@ jobs:
     timeout-minutes: 15
     environment:
       name: production
-      url: https://recallstride.breakellsystems.workers.dev
+      url: https://recallstride.com
     steps:
       - name: Check out the committed revision
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -37,7 +37,8 @@ jobs:
         run: |
           npm run check
           npm run validate:content
-          node --test scripts/cloudflare-deployment.test.mjs backend/cloudflareMail.test.js
+          node --test scripts/cloudflare-deployment.test.mjs scripts/cloudflare-domain.test.mjs backend/cloudflareRecovery.test.js backend/cloudflareMail.test.js
+          node --test backend/services/subscriptionConfirmation.test.js backend/subscriptionConfirmation.integration.test.js
       - name: Build, deploy and confirm the live revision
         run: node scripts/deploy-cloudflare-ci.mjs
         env:

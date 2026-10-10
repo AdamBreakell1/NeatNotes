@@ -5,6 +5,9 @@ import { createApplication } from "../../server.js";
 import { createDurableDatabase } from "./durable-sqlite-adapter.mjs";
 import { createDataTransfer } from "./data-transfer.mjs";
 import { createCloudflareMailTransport } from "./smtp-transport.mjs";
+import { createRecoveryController } from "./recovery.mjs";
+import { canonicalRedirect } from "./domain-routing.mjs";
+import { publicIndexRedirect, protectPublicResponse } from "./public-seo.mjs";
 
 const OBJECT_NAME = "recallstride-production";
 const dynamicPath = (path) => path.startsWith("/api/") || path.startsWith("/ocr-h446/")
@@ -19,6 +22,7 @@ export class RecallStrideDatabase extends DurableObject {
     this.runtime = null;
     this.handler = null;
     this.transfer = createDataTransfer(this.db);
+    this.recovery = createRecoveryController(ctx, env);
   }
 
   initialize(origin) {
@@ -52,7 +56,7 @@ export class RecallStrideDatabase extends DurableObject {
       });
     }
     // Durable alarms replace process timers, allowing an idle database to sleep.
-    const interval = this.runtime.configuration.contactRetryIntervalMs;
+    const interval = this.alarmInterval();
     if (interval > 0 && await this.ctx.storage.getAlarm() === null) {
       await this.ctx.storage.setAlarm(Date.now() + Math.max(60_000, interval));
     }
@@ -65,10 +69,23 @@ export class RecallStrideDatabase extends DurableObject {
     if (!this.env.BASE_URL) return;
     this.initialize(this.env.BASE_URL);
     if (this.env.MIGRATION_MODE === "true" || ["importing", "failed"].includes(this.transfer.importStatus().status)) return;
+    this.runtime.runDailyMaintenance();
+    await this.runtime.retryQueuedSubscriptionConfirmations();
     await this.runtime.retryQueuedContactEnquiries();
-    const interval = this.runtime.configuration.contactRetryIntervalMs;
+    const interval = this.alarmInterval();
     if (interval > 0) await this.ctx.storage.setAlarm(Date.now() + Math.max(60_000, interval));
   }
+
+  alarmInterval() {
+    const intervals = [this.runtime.configuration.contactRetryIntervalMs, this.runtime.configuration.confirmationRetryIntervalMs, this.runtime.configuration.maintenanceIntervalMs]
+      .filter((interval) => Number.isFinite(interval) && interval > 0);
+    return intervals.length ? Math.min(...intervals) : 0;
+  }
+
+  recoveryInfo() { return this.recovery.info(); }
+  recoveryBookmarkForTime(input) { return this.recovery.bookmarkForTime(input); }
+  prepareRecovery(input) { return this.recovery.prepare(input); }
+  restartRecovery(input) { return this.recovery.restart(input); }
 
   migration() {
     if (this.env.MIGRATION_MODE !== "true" || !this.env.BASE_URL) {
@@ -89,11 +106,15 @@ export class RecallStrideDatabase extends DurableObject {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const redirect = canonicalRedirect(request, env);
+    if (redirect) return redirect;
+    const indexRedirect = publicIndexRedirect(request);
+    if (indexRedirect) return indexRedirect;
     if (url.pathname.startsWith("/__migration/")) {
       // Migration RPC is deliberately not exposed by the public application.
       return new Response("Not found", { status: 404 });
     }
-    if (!dynamicPath(url.pathname)) return env.ASSETS.fetch(request);
+    if (!dynamicPath(url.pathname)) return protectPublicResponse(request, await env.ASSETS.fetch(request));
     const headers = new Headers(request.headers);
     headers.delete("Forwarded");
     headers.delete("X-Forwarded-For");
@@ -101,7 +122,7 @@ export default {
     headers.set("X-Forwarded-Proto", url.protocol.slice(0, -1));
     const clientIp = request.headers.get("CF-Connecting-IP");
     if (clientIp) headers.set("X-Forwarded-For", clientIp);
-    return env.RECALLSTRIDE_DB.getByName(OBJECT_NAME, { locationHint: "weur" })
-      .fetch(new Request(request, { headers }));
+    return protectPublicResponse(request, await env.RECALLSTRIDE_DB.getByName(OBJECT_NAME, { locationHint: "weur" })
+      .fetch(new Request(request, { headers })));
   },
 };

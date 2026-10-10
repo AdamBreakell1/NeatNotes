@@ -86,6 +86,7 @@ async function startWorker(mode, allowMock = "false", authLimit = "150") {
   base = `http://127.0.0.1:${port}`;
   const variables = {
     NODE_ENV: mode, BASE_URL: base, CORS_ORIGIN: base, AUTH_RATE_LIMIT: authLimit,
+    POLICY_OPERATOR_NAME: "Fixture Operator", POLICY_POSTAL_ADDRESS: "1 Example Street, Leeds, LS1 1AA",
     REVISION_RATE_LIMIT: "300", CONTACT_RETRY_INTERVAL_MS: "0",
     ALLOW_MOCK_BILLING: allowMock, SMTP_HOST: "", SMTP_PORT: "587", SMTP_SECURE: "false",
     SMTP_USER: "", SMTP_PASS: "", EMAIL_FROM: "", CONTACT_TO: "support@fixture.test",
@@ -127,7 +128,7 @@ async function json(response, expected) {
 }
 
 async function account(email) {
-  const details = { name: "Synthetic Migration Student", email, password: "MigrationPass123" };
+  const details = { name: "Synthetic Migration Student", email, password: "MigrationPass123", ageConfirmed: true, termsAccepted: true, policyVersion: "2026-10-10" };
   const signup = await json(await request("/api/auth/signup", { method: "POST", body: details }), 201);
   const link = new URL(signup.devVerificationUrl);
   assert.equal(link.origin, base, "Synthetic verification must remain on the local fixture");
@@ -211,7 +212,7 @@ try {
   assert.equal((await request(`/api/revision/decks/${decks[1].id}`, { cookie: first.cookie })).status, 402);
   assert.equal((await request(`/api/revision/decks/${decks[0].id}`)).status, 401);
   assert.equal((await request("/api/billing/mock-upgrade", { method: "POST", cookie: first.cookie, body: { plan: "pro" } })).status, 403);
-  assert.equal((await request("/api/billing/checkout-session", { method: "POST", cookie: first.cookie, body: { plan: "pro" } })).status, 503);
+  assert.equal((await request("/api/billing/checkout-session", { method: "POST", cookie: first.cookie, body: { plan: "pro", termsAccepted: true, adultPermissionConfirmed: true, policyVersion: "2026-10-10" } })).status, 503);
   checked("Free revision entitlements and disabled payment-provider actions remain enforced");
 
   const revisionDeck = (await json(await request(`/api/revision/decks/${decks[0].id}`, { cookie: first.cookie }), 200)).deck;
@@ -281,7 +282,7 @@ try {
   assert.equal((await request("/api/billing/mock-upgrade", { method: "POST", cookie: first.cookie, body: { plan: "pro" } })).status, 403);
   checked("Durable Object accounts, sessions, notes and coding records survive a workerd restart");
 
-  const noMailDetails = { name: "Synthetic Mail Unavailable", email: "no-mail@fixture.test", password: "MigrationPass123" };
+  const noMailDetails = { name: "Synthetic Mail Unavailable", email: "no-mail@fixture.test", password: "MigrationPass123", ageConfirmed: true, termsAccepted: true, policyVersion: "2026-10-10" };
   const blocked = await json(await request("/api/auth/signup", { method: "POST", body: noMailDetails }), 503);
   assert.equal(blocked.code, "AUTH_EMAIL_UNAVAILABLE");
   assert.equal(blocked.devVerificationUrl, undefined);

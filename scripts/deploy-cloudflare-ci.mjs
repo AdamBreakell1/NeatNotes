@@ -3,13 +3,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { configuredOrigin } from "./cloudflare-domain.mjs";
 
 export const accountId = "7656ff3b3eaa33f5eb0e17d1b026f7f0";
 export const workerName = "recallstride";
 export const productionOrigin = "https://recallstride.breakellsystems.workers.dev";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-export function deploymentState(settings) {
+export function deploymentState(settings, expectedOrigin = productionOrigin) {
   assert.ok(Array.isArray(settings?.bindings), "The existing Worker bindings could not be read.");
   const bindings = new Map(settings.bindings.map((binding) => [binding.name, binding]));
   const database = bindings.get("RECALLSTRIDE_DB");
@@ -24,20 +25,22 @@ export function deploymentState(settings) {
   };
   const baseUrl = variable("BASE_URL");
   const corsOrigin = variable("CORS_ORIGIN");
-  assert.equal(baseUrl, productionOrigin, "The production BASE_URL differs from the deployment destination.");
-  assert.equal(corsOrigin, productionOrigin, "The production CORS_ORIGIN differs from the deployment destination.");
+  assert.equal(baseUrl, expectedOrigin, "The production BASE_URL differs from the deployment destination.");
+  assert.equal(corsOrigin, expectedOrigin, "The production CORS_ORIGIN differs from the deployment destination.");
   const migrationMode = variable("MIGRATION_MODE") ?? "false";
   assert.ok(["true", "false"].includes(migrationMode), "MIGRATION_MODE must be true, false or absent.");
   return {
     namespaceId: database.namespace_id,
+    origin: baseUrl,
     migrationMode,
     release: variable("RELEASE_SHA"),
     secretNames: settings.bindings.filter((binding) => ["secret_text", "secret_key"].includes(binding.type)).map((binding) => binding.name).sort(),
   };
 }
 
-export function confirmPreservedDeployment(before, after, revision) {
+export function confirmPreservedDeployment(before, after, revision, expectedOrigin = before.origin) {
   assert.equal(after.namespaceId, before.namespaceId, "Deployment changed the production database namespace.");
+  assert.equal(after.origin, expectedOrigin, "Deployment changed the canonical account-system origin unexpectedly.");
   assert.equal(after.migrationMode, before.migrationMode, "Deployment changed the maintenance state.");
   for (const name of before.secretNames) assert.ok(after.secretNames.includes(name), `Deployment removed the ${name} secret binding.`);
   assert.equal(after.release, revision, "The Worker does not have the committed release binding.");
@@ -56,7 +59,7 @@ export function confirmHealth(status, health, state, revision) {
   assert.equal(health.release, revision.slice(0, 12), "The live revision does not match this deployment.");
 }
 
-async function readSettings(token) {
+async function readSettings(token, expectedOrigin) {
   const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${workerName}/settings`, {
     headers: { Authorization: `Bearer ${token}` },
     redirect: "error",
@@ -65,7 +68,12 @@ async function readSettings(token) {
   assert.equal(response.status, 200, `Cloudflare settings request failed (HTTP ${response.status}); check the deployment token and existing Worker.`);
   const payload = await response.json();
   assert.equal(payload.success, true, "Cloudflare could not read the existing Worker settings.");
-  return deploymentState(payload.result);
+  if (Array.isArray(expectedOrigin)) {
+    const currentOrigin = payload.result?.bindings?.find((binding) => binding.name === "BASE_URL")?.text;
+    assert.ok(expectedOrigin.includes(currentOrigin), "The current account-system origin is not an approved migration origin.");
+    return deploymentState(payload.result, currentOrigin);
+  }
+  return deploymentState(payload.result, expectedOrigin);
 }
 
 export async function main() {
@@ -80,6 +88,7 @@ export async function main() {
   // This repository's config is valid JSON. A config edit must keep the existing
   // production identity; new deployments must not create an empty database.
   const config = JSON.parse(fs.readFileSync(path.join(root, "wrangler.jsonc"), "utf8"));
+  const targetOrigin = configuredOrigin(config);
   assert.equal(config.name, workerName, "The production Worker name must remain recallstride.");
   assert.deepEqual(config.durable_objects?.bindings, [{ name: "RECALLSTRIDE_DB", class_name: "RecallStrideDatabase" }], "The production database binding must be preserved.");
   for (const migration of config.migrations ?? []) {
@@ -87,7 +96,9 @@ export async function main() {
     assert.ok(!(migration.renamed_classes ?? []).some((entry) => entry.from === "RecallStrideDatabase"), "A database class rename requires a planned migration.");
   }
   assert.ok(!Object.hasOwn(config.vars ?? {}, "MIGRATION_MODE"), "Keep MIGRATION_MODE as an operational Cloudflare variable, preserved by --keep-vars.");
-  const before = await readSettings(token);
+  // A reviewed owned-domain config may migrate the existing Workers origin.
+  // Later deployments preserve the committed canonical origin strictly.
+  const before = await readSettings(token, [...new Set([productionOrigin, targetOrigin])]);
   const deployment = spawnSync(process.execPath, [path.join(root, "scripts/deploy-cloudflare.mjs"), "--config", "wrangler.jsonc", "--keep-vars"], {
     cwd: root, stdio: "inherit", env: process.env,
   });
@@ -95,11 +106,11 @@ export async function main() {
   let lastError;
   for (let attempt = 0; attempt < 12; attempt += 1) {
     try {
-      const after = await readSettings(token);
-      confirmPreservedDeployment(before, after, revision);
-      const response = await fetch(`${productionOrigin}/api/health`, { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000) });
+      const after = await readSettings(token, targetOrigin);
+      confirmPreservedDeployment(before, after, revision, targetOrigin);
+      const response = await fetch(`${targetOrigin}/api/health`, { cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000) });
       confirmHealth(response.status, await response.json(), after, revision);
-      const summary = `Deployed ${revision.slice(0, 12)} to ${productionOrigin}. Database and secrets preserved; ${after.migrationMode === "true" ? "maintenance remains enabled" : "live health and persistent database confirmed"}.`;
+      const summary = `Deployed ${revision.slice(0, 12)} to ${targetOrigin}. Database and secrets preserved; ${after.migrationMode === "true" ? "maintenance remains enabled" : "live health and persistent database confirmed"}.`;
       console.log(summary);
       if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`);
       return;

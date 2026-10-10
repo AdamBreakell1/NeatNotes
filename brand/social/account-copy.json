@@ -1,0 +1,39 @@
+{
+  "brand": "RecallStride",
+  "accountEmail": "recallstride@gmail.com",
+  "preferredHandle": "recallstride",
+  "fallbackHandles": ["recallstrideapp", "recallstridecs"],
+  "website": "https://recallstride.com",
+  "avatar": "brand/social/profile-avatar.png",
+  "imageAltText": "RecallStride's navy RS mark above the name RecallStride and the words Revise, Practise and Code. The website recallstride.com appears below on a white card against a pale blue background.",
+  "instagram": {
+    "displayName": "RecallStride",
+    "bio": "Revise. Practise. Code.\nOCR A-Level Computer Science in one workspace.\n60 coding tasks. Start free ↓",
+    "website": "https://recallstride.com",
+    "firstPostAsset": "brand/social/first-post-portrait.png",
+    "firstPostCaption": "Meet RecallStride.\n\nYour OCR A-Level Computer Science revision, questions and coding practice in one workspace.\n\nChoose a topic. Test what you remember. Write and run your own pseudocode with 60 free coding tasks.\n\nRevise. Practise. Code.\nStart free at recallstride.com — link in bio.\n\n#ALevelComputerScience #ComputerScience #Revision #Pseudocode #ALevels"
+  },
+  "tiktok": {
+    "displayName": "RecallStride",
+    "bio": "OCR A-Level Computer Science. Revise. Practise. Code. recallstride.com",
+    "website": "https://recallstride.com",
+    "firstPostAsset": "brand/social/first-post-story.png",
+    "firstPostCaption": "OCR A-Level Computer Science, all in one workspace. Revise a topic, practise questions and run your own pseudocode with 60 free coding tasks. Meet RecallStride. Start free at recallstride.com.\n\n#ALevelComputerScience #ComputerScience #Revision #Pseudocode #ALevels"
+  },
+  "x": {
+    "displayName": "RecallStride",
+    "fallbackHandle": "recallstridecs",
+    "bio": "OCR A-Level Computer Science revision, questions and 60 coding tasks in one workspace. Revise. Practise. Code. Start free at recallstride.com.",
+    "website": "https://recallstride.com",
+    "header": "brand/social/profile-header.png",
+    "firstPostAsset": "brand/social/first-post-square.png",
+    "firstPostCaption": "Meet RecallStride.\n\nOCR A-Level Computer Science revision, questions and 60 coding tasks in one workspace.\n\nRevise. Practise. Code. Start free: https://recallstride.com\n\n#ALevelComputerScience #ComputerScience #Revision #Pseudocode"
+  },
+  "facebook": {
+    "displayName": "RecallStride",
+    "bio": "OCR A-Level Computer Science revision, questions and 60 coding tasks. Revise. Practise. Code.",
+    "website": "https://recallstride.com",
+    "firstPostAsset": "brand/social/first-post-square.png",
+    "firstPostCaption": "Meet RecallStride: one workspace for OCR A-Level Computer Science revision, questions and coding practice.\n\nExplore a topic, practise what you know and write pseudocode that runs — with 60 free coding tasks, examples and an embedded interpreter.\n\nRevise. Practise. Code.\nStart free: https://recallstride.com\n\n#ALevelComputerScience #ComputerScience #Revision #Pseudocode"
+  }
+}

@@ -11,7 +11,7 @@ function createSubscriptionEventProcessor({ hasEvent, recordEvent, checkout, sub
     const previous = queues.get(key) || Promise.resolve();
     const current = previous.catch(() => {}).then(async () => {
       if (hasEvent(event.id)) return { received: true, duplicate: true };
-      if (event.type === "checkout.session.completed") await checkout(object);
+      if (["checkout.session.completed", "checkout.session.async_payment_succeeded"].includes(event.type)) await checkout(object);
       else if (["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"].includes(event.type)) await subscription(object);
       else if (["invoice.paid", "invoice.payment_failed"].includes(event.type)) {
         const subscriptionId = object.parent?.subscription_details?.subscription || object.subscription;

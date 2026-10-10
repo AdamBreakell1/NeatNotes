@@ -15,7 +15,7 @@ const port = 5200 + Math.floor(Math.random() * 400);
 const base = `http://127.0.0.1:${port}`;
 let server = spawn(process.execPath, [path.join(root, "server.js")], {
   cwd: root, stdio: ["ignore", "pipe", "pipe"],
-  env: { ...process.env, RECALLSTRIDE_SKIP_DOTENV: "true", PORT: String(port), BASE_URL: base, CORS_ORIGIN: base, DATABASE_PATH: path.join(temp, "fixture.sqlite"), NODE_ENV: "development", ALLOW_MOCK_BILLING: "true", AUTH_RATE_LIMIT: "100", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" },
+  env: { ...process.env, RECALLSTRIDE_SKIP_DOTENV: "true", POLICY_OPERATOR_NAME: "Fixture Operator", POLICY_POSTAL_ADDRESS: "1 Example Street, Leeds, LS1 1AA", PORT: String(port), BASE_URL: base, CORS_ORIGIN: base, DATABASE_PATH: path.join(temp, "fixture.sqlite"), NODE_ENV: "development", ALLOW_MOCK_BILLING: "true", AUTH_RATE_LIMIT: "100", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" },
 });
 let logs = "";
 server.stdout.on("data", (chunk) => { logs += chunk; });
@@ -99,7 +99,7 @@ async function dismissLaunch(page) {
     await page.locator(".global-account-menu summary").click();
     await page.locator('[data-global-action="login"]').click();
     assert.equal(await page.locator(".google-button:visible").count(), 0);
-    const signup = await context.request.post(`${base}/api/auth/signup`, { data: { name: "Browser Student", email: "browser@example.test", password: "BrowserPass123" } });
+    const signup = await context.request.post(`${base}/api/auth/signup`, { data: { name: "Browser Student", email: "browser@example.test", password: "BrowserPass123", ageConfirmed: true, termsAccepted: true, policyVersion: "2026-10-10" } });
     assert.equal(signup.status(), 201);
     const signupData = await signup.json();
     await context.request.get(signupData.devVerificationUrl);
@@ -111,7 +111,7 @@ async function dismissLaunch(page) {
     await context.request.patch(`${base}/api/profile`, { data: { completeOnboarding: true } });
     assert.equal(await page.locator("#topbar-login-button:visible").count(), 0);
     assert.match(await page.locator("#topbar-user-label").innerText(), /Browser/);
-    const returnSignup = await context.request.post(`${base}/api/auth/signup`, { data: { name: "Return Student", email: "return@example.test", password: "ReturnPass123", returnTask: { section: "practice", topicId: "cs-1-1-2", practiceMode: "exam" } } });
+    const returnSignup = await context.request.post(`${base}/api/auth/signup`, { data: { name: "Return Student", email: "return@example.test", password: "ReturnPass123", ageConfirmed: true, termsAccepted: true, policyVersion: "2026-10-10", returnTask: { section: "practice", topicId: "cs-1-1-2", practiceMode: "exam" } } });
     const returnData = await returnSignup.json();
     const otherBrowser = await browser.newContext({ viewport: { width: 390, height: 844 }, reducedMotion: "reduce" });
     const returnPage = await otherBrowser.newPage();
@@ -397,7 +397,7 @@ async function dismissLaunch(page) {
     if (server.exitCode === null) await once(server, "exit");
     server = spawn(process.execPath, [path.join(root, "server.js")], {
       cwd: root, stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, RECALLSTRIDE_SKIP_DOTENV: "true", PORT: String(port), BASE_URL: base, CORS_ORIGIN: base, DATABASE_PATH: path.join(temp, "fixture.sqlite"), NODE_ENV: "production", ALLOW_MOCK_BILLING: "false", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" },
+      env: { ...process.env, RECALLSTRIDE_SKIP_DOTENV: "true", POLICY_OPERATOR_NAME: "Fixture Operator", POLICY_POSTAL_ADDRESS: "1 Example Street, Leeds, LS1 1AA", PORT: String(port), BASE_URL: base, CORS_ORIGIN: base, DATABASE_PATH: path.join(temp, "fixture.sqlite"), NODE_ENV: "production", ALLOW_MOCK_BILLING: "false", SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", STRIPE_SECRET_KEY: "", STRIPE_WEBHOOK_SECRET: "", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" },
     });
     server.stdout.on("data", (chunk) => { logs += chunk; });
     server.stderr.on("data", (chunk) => { logs += chunk; });

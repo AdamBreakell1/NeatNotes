@@ -3,6 +3,7 @@
 // private revision bank, provider configuration, databases or migration tools.
 const fs = require("node:fs");
 const path = require("node:path");
+const { transformSync } = require("esbuild");
 const root = path.resolve(__dirname, "..");
 const output = path.join(root, "dist", "cloudflare");
 const files = [
@@ -11,12 +12,22 @@ const files = [
   "pseudocode-practice.js", "workspace-navigation.js", "pseudocode-drafts.js", "pseudocode.css",
   "ocr-content.js", "service-worker.js", "manifest.webmanifest", "styles.css", "student-layout.css",
   "UIVERSE-LICENSE.txt", "revision-generator.js", "neat-questions.js", "favicon.svg",
+  "assets/recallstride-social-preview.png",
 ];
 fs.rmSync(output, { recursive: true, force: true });
 fs.mkdirSync(output, { recursive: true });
-for (const file of files) fs.copyFileSync(path.join(root, file), path.join(output, file));
-fs.copyFileSync(path.join(root, "app.js"), path.join(output, "app-relaunch.js"));
-fs.copyFileSync(path.join(root, "styles.css"), path.join(output, "styles-relaunch.css"));
+for (const file of files) {
+  const destination = path.join(output, file);
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  if (/\.(?:js|css)$/.test(file)) {
+    // Minify published copies, preserving editable source and script ordering.
+    // No bundle/format is applied, so browser globals keep their existing API.
+    const loader = path.extname(file) === ".css" ? "css" : "js";
+    fs.writeFileSync(destination, transformSync(fs.readFileSync(path.join(root, file), "utf8"), { loader, minify: true, target: "es2022", legalComments: "inline" }).code);
+  } else fs.copyFileSync(path.join(root, file), destination);
+}
+fs.copyFileSync(path.join(output, "app.js"), path.join(output, "app-relaunch.js"));
+fs.copyFileSync(path.join(output, "styles.css"), path.join(output, "styles-relaunch.css"));
 fs.writeFileSync(path.join(output, "_headers"), `/*
   X-Content-Type-Options: nosniff
   X-Frame-Options: SAMEORIGIN

@@ -87,7 +87,7 @@ async function smtpFixture() {
   return state;
 }
 
-const account = { name: "Synthetic Mail Student", email: "student@fixture.test", password: "StrongPass123" };
+const account = { name: "Synthetic Mail Student", email: "student@fixture.test", password: "StrongPass123", ageConfirmed: true, termsAccepted: true, policyVersion: "2026-10-10" };
 const post = (base, endpoint, body) => fetch(base + endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
 function verificationLink(message) {
   const decoded = message.replace(/=\r\n/g, "").replace(/=3D/g, "=");

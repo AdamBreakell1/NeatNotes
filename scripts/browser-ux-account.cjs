@@ -18,6 +18,7 @@ const server = spawn(process.execPath, [path.join(root, "server.js")], {
   cwd: root, stdio: ["ignore", "pipe", "pipe"],
   env: { ...process.env, RECALLSTRIDE_SKIP_DOTENV: "true", NODE_ENV: "development",
     PORT: String(port), BASE_URL: base, CORS_ORIGIN: base,
+    POLICY_OPERATOR_NAME: "Fixture Operator", POLICY_POSTAL_ADDRESS: "1 Example Street, Leeds, LS1 1AA",
     DATABASE_PATH: path.join(temp, "fixture.sqlite"), ALLOW_MOCK_BILLING: "true",
     AUTH_RATE_LIMIT: "200", REVISION_RATE_LIMIT: "400", CONTACT_RETRY_INTERVAL_MS: "0",
     SMTP_HOST: "", SMTP_USER: "", SMTP_PASS: "", STRIPE_SECRET_KEY: "",
@@ -36,9 +37,9 @@ async function focused(page, selector) {
   });
 }
 async function hidden(page, selector) { await page.locator(selector).waitFor({ state: "hidden" }); }
-async function ready(page) { await hidden(page, "#launch-overlay"); }
+async function ready(page) { await hidden(page, "#launch-overlay"); await page.waitForFunction(() => typeof navigationReady !== "undefined" && navigationReady); }
 async function fixtureAccount(context) {
-  const data = { name: "UX Fixture", email: "ux-fixture@example.test", password: "UXFixturePass123" };
+  const data = { name: "UX Fixture", email: "ux-fixture@example.test", password: "UXFixturePass123", ageConfirmed: true, termsAccepted: true, policyVersion: "2026-10-10" };
   const signup = await context.request.post(`${base}/api/auth/signup`, { data });
   assert.equal(signup.status(), 201);
   await context.request.get((await signup.json()).devVerificationUrl);
@@ -64,6 +65,8 @@ async function failRoute(page, route, message) {
     page.setDefaultTimeout(15000);
     page.on("pageerror", error => errors.push(error.message));
     await page.goto(base); await ready(page);
+    let optionalEventRequests = 0;
+    page.on("request", request => { if (new URL(request.url()).pathname === "/api/events") optionalEventRequests++; });
     const landingLogin = '.landing-nav [data-landing-action="login"]';
     await page.locator(landingLogin).click(); await focused(page, "#login-email");
     assert.equal(await page.locator("#landing-view").getAttribute("inert"), "");
@@ -80,6 +83,23 @@ async function failRoute(page, route, message) {
     await focused(page, landingLogin);
     assert.equal(await page.locator("#landing-view").getAttribute("inert"), null);
     passed("Authentication traps focus, isolates its background, supports keyboard tabs and returns to its opener");
+
+    await page.locator('.landing-nav [data-landing-action="signup"]').click();
+    await page.locator("#signup-name").fill("Typed Fixture");
+    await page.locator("#signup-email").fill("typed-fixture@example.test");
+    await page.locator("#signup-password").fill("TypedFixturePass123");
+    const signupTerms = '#signup-form [data-legal-page="terms"]';
+    await page.locator(signupTerms).click();
+    await page.waitForFunction(() => document.querySelector("#legal-content").textContent.includes("Fixture Operator"));
+    await focused(page, "[data-close-legal].modal-close-button");
+    await page.keyboard.press("Escape"); await hidden(page, "#legal-modal");
+    await focused(page, signupTerms);
+    assert.equal(await page.locator("#signup-form").isVisible(), true);
+    assert.equal(await page.locator("#signup-name").inputValue(), "Typed Fixture");
+    assert.equal(await page.locator("#signup-email").inputValue(), "typed-fixture@example.test");
+    assert.equal(await page.locator("#signup-password").inputValue(), "TypedFixturePass123");
+    await page.keyboard.press("Escape");
+    passed("Signup policy links open a nested readable dialog and return focus without losing typed fields");
 
     await page.locator(landingLogin).click(); await focused(page, "#login-email");
     await page.locator("[data-auth-recovery]").click(); await focused(page, "#recovery-email");
@@ -106,6 +126,13 @@ async function failRoute(page, route, message) {
     await focused(page, "#close-plans-button");
     await page.keyboard.press("Escape"); await focused(page, pricingOpener);
     passed("Stacked dialogs close only the top dialog and retain background isolation until the final close");
+
+    await page.evaluate(() => localStorage.setItem("neat-notes-event-log", '[{"name":"stale-event"}]'));
+    await page.locator(pricingOpener).click();
+    assert.equal(await page.evaluate(() => localStorage.getItem("neat-notes-event-log")), null);
+    assert.equal(optionalEventRequests, 0);
+    await page.keyboard.press("Escape");
+    passed("Guest feature use clears stale optional history and sends no product analytics requests");
 
     await fixtureAccount(context);
     await page.goto(`${base}/#/today`); await page.reload(); await ready(page);
@@ -151,6 +178,16 @@ async function failRoute(page, route, message) {
     assert.equal(sessionActions, 2);
     passed("Every Settings panel is keyboard reachable and account action failure/success is visible with a working retry");
 
+    await page.locator('[data-settings-tab="data"]').click();
+    await page.locator("#usage-analytics-consent").check();
+    await page.waitForFunction(() => document.querySelector("#settings-message").textContent === "Privacy-safe product analytics enabled.");
+    await page.evaluate(() => localStorage.setItem("neat-notes-event-log", '[{"name":"synthetic-consented-event"}]'));
+    await page.locator("#usage-analytics-consent").uncheck();
+    await page.waitForFunction(() => document.querySelector("#settings-message").textContent.includes("stored optional usage events cleared"));
+    assert.equal(await page.evaluate(() => localStorage.getItem("neat-notes-event-log")), null);
+    assert.equal(await page.locator("#usage-analytics-consent").isChecked(), false);
+    passed("Withdrawing analytics consent persists the choice and removes optional local history");
+
     await page.locator('[data-settings-tab="general"]').click();
     await page.locator('[data-theme-choice="dark"]').click();
     assert.equal(await page.locator('[data-theme-choice="dark"]').getAttribute("aria-pressed"), "true");
@@ -170,15 +207,33 @@ async function failRoute(page, route, message) {
     await page.keyboard.press("Escape"); await focused(page, "#global-menu-label");
     passed("Theme selection is exposed accessibly and the passive clock avoids repeated text announcements");
 
-    await failRoute(page, "/api/billing/checkout-session", "Fixture checkout temporarily unavailable. Please retry.");
+    let checkoutRequests = 0;
+    await page.route("**/api/billing/checkout-session", request => {
+      checkoutRequests++;
+      assert.deepEqual(request.request().postDataJSON(), { plan: "pro", termsAccepted: true, adultPermissionConfirmed: true, policyVersion: "2026-10-10" });
+      return request.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "Fixture checkout temporarily unavailable. Please retry." }) });
+    });
     await failRoute(page, "/api/billing/customer-portal", "Fixture billing portal temporarily unavailable. Please retry.");
     await page.locator(pricingOpener).click(); await focused(page, "#close-plans-button");
+    await page.locator("#checkout-terms-accepted").uncheck();
+    await page.locator("#checkout-adult-permission").uncheck();
+    await page.locator('[data-plan="pro"]').click();
+    await focused(page, "#checkout-terms-accepted");
+    assert.equal(checkoutRequests, 0);
+    assert.match(await page.locator("#pricing-message").textContent(), /Read and agree/);
+    await page.locator("#checkout-terms-accepted").check();
+    await page.locator('[data-plan="pro"]').click();
+    await focused(page, "#checkout-adult-permission");
+    assert.equal(checkoutRequests, 0);
+    await page.locator("#checkout-adult-permission").check();
     const proLabel = await page.locator('[data-plan="pro"]').textContent();
     await page.locator('[data-plan="pro"]').click();
     await page.waitForFunction(() => document.querySelector("#pricing-message").textContent.includes("Fixture checkout"));
     assert.equal(await page.locator("#pricing-message").isVisible(), true);
     assert.equal(await page.locator('[data-plan="pro"]').textContent(), proLabel);
     assert.equal(await page.locator('[data-plan="pro"]').isEnabled(), true);
+    assert.equal(checkoutRequests, 1);
+    passed("Checkout cannot contact its provider until subscription terms and adult permission are explicitly confirmed");
     const portalLabel = await page.locator("[data-billing-portal]").textContent();
     await page.locator("[data-billing-portal]").click();
     await page.waitForFunction(() => document.querySelector("#pricing-message").textContent.includes("Fixture billing portal"));

@@ -1,0 +1,10 @@
+{
+  "name": "recallstride-recovery",
+  "main": "recovery-worker.mjs",
+  "compatibility_date": "2026-10-09",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [{ "name": "RECALLSTRIDE_DB", "class_name": "RecallStrideDatabase", "script_name": "recallstride" }]
+  }
+}

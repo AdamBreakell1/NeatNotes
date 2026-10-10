@@ -18,29 +18,29 @@ function accountEmail({ name, url, subject, heading, introduction, action, expir
       "", `This link expires in ${expiry}.`, "", ignore, "", "RecallStride · A BreakellSystems product"].join("\n"),
     html: `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(subject)}</title></head>
-<body style="margin:0;padding:0;background-color:#f3f5f4;color:#18211f;font-family:Arial,Helvetica,sans-serif;">
+<body style="margin:0;padding:0;background-color:#f5f7fa;color:#192b43;font-family:Arial,Helvetica,sans-serif;">
 <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">${escapeHtml(action)} to continue with RecallStride. This link expires in ${escapeHtml(expiry)}.</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f3f5f4" style="width:100%;background-color:#f3f5f4;"><tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f5f7fa" style="width:100%;background-color:#f5f7fa;"><tr><td align="center" style="padding:32px 16px;">
 <!--[if mso]><table role="presentation" width="640" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="width:100%;max-width:640px;background-color:#ffffff;border:1px solid #d8e0dd;border-radius:16px;">
 <tr><td style="padding:28px 28px 24px;border-bottom:1px solid #d8e0dd;"><table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-<td width="44" height="44" align="center" bgcolor="#0f766e" style="width:44px;height:44px;border-radius:12px;background-color:#0f766e;color:#ffffff;font-size:18px;font-weight:700;">RS</td>
-<td style="padding-left:12px;color:#18211f;font-size:23px;font-weight:700;letter-spacing:-0.5px;">RecallStride</td>
+<td width="44" height="44" align="center" bgcolor="#20374e" style="width:44px;height:44px;border-radius:12px;background-color:#20374e;color:#c1f3e0;font-size:18px;font-weight:700;">RS</td>
+<td style="padding-left:12px;color:#192b43;font-size:23px;font-weight:700;letter-spacing:-0.5px;">RecallStride</td>
 </tr></table></td></tr>
 <tr><td style="padding:28px;">
-<h1 style="margin:0 0 20px;color:#18211f;font-size:28px;line-height:36px;font-weight:700;">${escapeHtml(heading)}</h1>
+<h1 style="margin:0 0 20px;color:#192b43;font-size:28px;line-height:36px;font-weight:700;">${escapeHtml(heading)}</h1>
 <p style="margin:0 0 12px;font-size:16px;line-height:26px;">${escapeHtml(greeting)}</p>
-<p style="margin:0 0 24px;color:#46534f;font-size:16px;line-height:26px;">${escapeHtml(introduction)}</p>
-<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="#0f766e" style="background-color:#0f766e;border-radius:10px;mso-padding-alt:14px 24px;"><a href="${safeLink}" style="display:inline-block;padding:14px 24px;border:1px solid #0f766e;border-radius:10px;color:#ffffff;font-size:16px;font-weight:700;line-height:24px;text-decoration:none;">${escapeHtml(action)}</a></td></tr></table>
-<p style="margin:18px 0 24px;color:#46534f;font-size:14px;line-height:22px;">This link expires in <strong>${escapeHtml(expiry)}</strong>.</p>
-<p style="margin:0 0 24px;color:#46534f;font-size:14px;line-height:22px;">${escapeHtml(ignore)}</p>
+<p style="margin:0 0 24px;color:#526378;font-size:16px;line-height:26px;">${escapeHtml(introduction)}</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr><td align="center" bgcolor="#236a5e" style="background-color:#236a5e;border-radius:10px;mso-padding-alt:14px 24px;"><a href="${safeLink}" style="display:inline-block;padding:14px 24px;border:1px solid #236a5e;border-radius:10px;color:#ffffff;font-size:16px;font-weight:700;line-height:24px;text-decoration:none;">${escapeHtml(action)}</a></td></tr></table>
+<p style="margin:18px 0 24px;color:#526378;font-size:14px;line-height:22px;">This link expires in <strong>${escapeHtml(expiry)}</strong>.</p>
+<p style="margin:0 0 24px;color:#526378;font-size:14px;line-height:22px;">${escapeHtml(ignore)}</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-top:1px solid #d8e0dd;"><tr><td style="padding-top:20px;">
-<p style="margin:0 0 8px;color:#46534f;font-size:13px;line-height:21px;">Button not working? Copy and paste this link into your browser:</p>
-<p style="margin:0;font-size:13px;line-height:21px;word-break:break-all;overflow-wrap:anywhere;"><a href="${safeLink}" style="color:#0f766e;text-decoration:underline;word-break:break-all;overflow-wrap:anywhere;">${safeLink}</a></p>
+<p style="margin:0 0 8px;color:#526378;font-size:13px;line-height:21px;">Button not working? Copy and paste this link into your browser:</p>
+<p style="margin:0;font-size:13px;line-height:21px;word-break:break-all;overflow-wrap:anywhere;"><a href="${safeLink}" style="color:#236a5e;text-decoration:underline;word-break:break-all;overflow-wrap:anywhere;">${safeLink}</a></p>
 </td></tr></table></td></tr>
 </table>
 <!--[if mso]></td></tr></table><![endif]-->
-<p style="margin:20px 0 0;color:#46534f;font-size:12px;line-height:20px;">RecallStride · A BreakellSystems product</p>
+<p style="margin:20px 0 0;color:#526378;font-size:12px;line-height:20px;">RecallStride · A BreakellSystems product</p>
 </td></tr></table></body></html>`,
   };
 }

@@ -3,19 +3,33 @@
   "name": "recallstride",
   "main": "backend/cloudflare/worker.mjs",
   "compatibility_date": "2026-10-09",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "workers_dev": true,
   "keep_vars": true,
   "assets": {
     "directory": "./dist/cloudflare",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/revision-topics.js", "/robots.txt", "/sitemap.xml", "/ocr-h446/*", "/__migration/*"]
+    "run_worker_first": true
   },
   "durable_objects": {
-    "bindings": [{ "name": "RECALLSTRIDE_DB", "class_name": "RecallStrideDatabase" }]
+    "bindings": [
+      {
+        "name": "RECALLSTRIDE_DB",
+        "class_name": "RecallStrideDatabase"
+      }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["RecallStrideDatabase"] }],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "RecallStrideDatabase"
+      ]
+    }
+  ],
   "vars": {
     "NODE_ENV": "production",
     "ALLOW_MOCK_BILLING": "false",
@@ -23,7 +37,23 @@
     "FREE_REVISION_DECK_LIMIT": "1",
     "MAX_NOTE_BODY_BYTES": "98304",
     "MAX_NOTE_VERSIONS": "40",
-    "MAX_NOTE_VERSION_BYTES": "1048576"
+    "MAX_NOTE_VERSION_BYTES": "1048576",
+    "BASE_URL": "https://recallstride.com",
+    "CORS_ORIGIN": "https://recallstride.com"
   },
-  "observability": { "enabled": true }
+  "observability": {
+    "enabled": true
+  },
+  "routes": [
+    {
+      "pattern": "recallstride.com",
+      "custom_domain": true,
+      "zone_id": "8cc2641fea789362a249502ca54d4ea1"
+    },
+    {
+      "pattern": "www.recallstride.com",
+      "custom_domain": true,
+      "zone_id": "8cc2641fea789362a249502ca54d4ea1"
+    }
+  ]
 }

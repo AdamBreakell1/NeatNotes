@@ -1,0 +1,23 @@
+{
+  "source": [
+    "student-layout.css :root",
+    "student-layout.css .brand-mark",
+    "styles.css --font-sans"
+  ],
+  "font": "Inter",
+  "fontSource": "https://github.com/rsms/inter/tree/353b61b9f4430d5f420d56605a6e7993e0941470",
+  "palette": {
+    "canvas": "#f5f7fa",
+    "surface": "#ffffff",
+    "text": "#192b43",
+    "secondary": "#4d6078",
+    "border": "#dce4ee",
+    "accent": "#236a5e",
+    "accentSoft": "#e2f2eb",
+    "markBackground": "#20374e",
+    "markBorder": "#39566e",
+    "markText": "#c1f3e0"
+  },
+  "wordmark": "RecallStride",
+  "tagline": "Revise \u00b7 Practise \u00b7 Code"
+}
