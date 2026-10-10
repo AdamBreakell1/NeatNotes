@@ -195,7 +195,9 @@ async function failRoute(page, route, message) {
 
     await page.evaluate(() => setAppSection("notes"));
     await focused(page, "#workspace-page-title");
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await page.locator("#search-input").focus();
+    await focused(page, "#search-input");
     await page.setViewportSize({ width: 390, height: 900 });
     await focused(page, "#mobile-notes-button");
     assert.equal(await page.locator("#search-input").isVisible(), false);

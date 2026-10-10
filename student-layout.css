@@ -9,6 +9,7 @@
   --text-muted: #5e7188;
   --border: #dce4ee;
   --border-strong: #b5c3d4;
+  --control-border: #74869e;
   --accent: #236a5e;
   --accent-hover: #195548;
   --accent-soft: #e2f2eb;
@@ -37,6 +38,7 @@
   --text-muted: #a0b4cc;
   --border: #304760;
   --border-strong: #526c89;
+  --control-border: #6c829d;
   --accent: #88dfc2;
   --accent-hover: #acebd6;
   --accent-soft: #21463e;
@@ -49,10 +51,34 @@ body { font-size: 15px; letter-spacing: 0; }
 [hidden] { display: none !important; }
 button, input, textarea, select, summary { scroll-margin-block: 86px 90px; border-radius: var(--radius-control); }
 a { color: var(--accent-ink); }
-:is(button, a, input, textarea, select, summary):focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+:is(button, a, input, textarea, select, summary, [contenteditable="true"]):focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 button { transition: background 140ms ease, border-color 140ms ease; }
 button:disabled { transform: none; }
-:is(.primary-account-button, .primary-button, .revision-primary-action, .revision-action-primary) { color: var(--on-accent); }
+/* Filled actions keep readable labels through legacy component and hover rules. */
+:is(
+  .primary-account-button,
+  .primary-button,
+  .revision-primary-action,
+  .revision-action-primary:not(.editor-toolbar button),
+  .contact-submit-button,
+  .plan-button:not(.subtle),
+  .icon-button,
+  .student-dashboard-head > button,
+  .neat-questions-actions button,
+  .today-session-actions > button,
+  .student-action-card.primary-path .student-card-actions button:first-child,
+  .neat-quiz-empty > button,
+  .neat-quiz-controls button:last-child:not(:disabled),
+  .revision-paywall-actions button:first-child,
+  .teacher-upgrade-actions button:first-child,
+  .onboarding-finish-grid .onboarding-primary
+) { color: var(--on-accent); }
+.plan-button.subtle:hover:not(:disabled) { color: var(--on-accent); }
+.editor-toolbar .revision-action-primary:hover:not(:disabled) { border-color: var(--accent); background: var(--surface-subtle); color: var(--accent-ink); }
+.danger-button:hover:not(:disabled) { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
+/* Field boundaries are stronger than decorative dividers; focus and errors retain their colours. */
+:is(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]), textarea, select):not(#coding-source):not(:focus):not([aria-invalid="true"]):not(:user-invalid) { border-color: var(--control-border); }
+.password-field:not(:focus-within):not(:has([aria-invalid="true"], input:user-invalid)) { border-color: var(--control-border); }
 .eyebrow, .workspace-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--text-muted); }
 .brand-mark { border-radius: 10px; background: #20374e; color: #c1f3e0; border: 1px solid #39566e; box-shadow: none; }
 
@@ -672,3 +698,85 @@ button[aria-busy="true"]::before { content: ""; display: inline-block; width: .8
 .settings-body { min-height: 0; overflow: hidden; }
 #settings-message:not(:empty) { margin: 12px 24px; }
 #settings-message:empty { display: none; }
+
+/* Give dialog headings a separate column from their close control. */
+.pricing-head, .badge-head, .settings-head, .global-search-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 44px;
+  align-items: start;
+  gap: 16px;
+}
+.pricing-head > .modal-close-button, .badge-head > .modal-close-button,
+.settings-head > .modal-close-button, .global-search-head > .modal-close-button {
+  position: static;
+  width: 44px;
+  height: 44px;
+}
+.auth-card > :is(.eyebrow, h2), .legal-dialog > :is(.eyebrow, h2) { padding-inline-end: 48px; }
+
+/* Notes keeps the writing pane usable before the main navigation becomes compact. */
+@media (min-width: 821px) and (max-width: 1080px) {
+  .app-shell:not(.revision-mode):not(.contact-mode) {
+    grid-template-columns: 210px minmax(0, 1fr);
+    grid-template-areas: "topbar topbar" "page-header page-header" "notes editor";
+  }
+  .app-shell:not(.revision-mode):not(.contact-mode) .topbar-context {
+    position: absolute;
+    top: 76px;
+    right: var(--workspace-gutter);
+    z-index: 2;
+    display: flex;
+  }
+  .app-shell:not(.revision-mode):not(.contact-mode) #mobile-notes-button {
+    display: inline-flex;
+    min-height: 42px;
+    align-items: center;
+    padding: 9px 12px;
+    border-color: var(--border);
+    color: var(--text-secondary);
+    background: var(--surface);
+    font-size: 12px;
+  }
+  .app-shell:not(.revision-mode):not(.contact-mode) #workspace-page-header { padding-right: 130px; }
+  .app-shell:not(.revision-mode):not(.contact-mode) .sidebar {
+    position: fixed;
+    inset: 0 auto 0 var(--workspace-rail);
+    z-index: 80;
+    display: block;
+    width: 320px;
+    height: 100dvh;
+    visibility: hidden;
+    border-right: 1px solid var(--border-strong);
+    background: var(--surface);
+    box-shadow: var(--shadow-dialog);
+    transform: translateX(-102%);
+    transition: transform 220ms ease;
+  }
+  .app-shell.mobile-sidebar-open:not(.revision-mode):not(.contact-mode)::after {
+    position: fixed;
+    inset: 0;
+    z-index: 75;
+    background: rgba(13, 25, 22, .48);
+    content: "";
+  }
+  .app-shell.mobile-sidebar-open:not(.revision-mode):not(.contact-mode) .sidebar { visibility: visible; transform: translateX(0); }
+  .app-shell:not(.revision-mode):not(.contact-mode) .sidebar-tools { justify-content: space-between; }
+  .app-shell:not(.revision-mode):not(.contact-mode) .mobile-sidebar-close {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    padding: 8px 12px;
+    border-color: transparent;
+    background: transparent;
+    font-size: 12px;
+  }
+}
+
+/* Anchor compact Notes menus to the action bar, not a narrow summary control. */
+@media (max-width: 820px) {
+  .editor-control-menu { position: static; }
+  .editor-control-menu > :is(.format-toolbar, .editor-toolbar) { right: var(--workspace-gutter); left: auto; }
+}
+@media (max-width: 520px) {
+  .editor-control-menu > :is(.format-toolbar, .editor-toolbar) { right: auto; left: var(--workspace-gutter); }
+}

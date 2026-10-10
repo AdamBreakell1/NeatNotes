@@ -1,0 +1,51 @@
+{
+  "audit_date": "2026-10-10",
+  "base_revision": "a1c8022af371920c556111e53fb86ad728b965c3",
+  "selected_ui_changes": [
+    "UI-01",
+    "UI-02",
+    "UI-03",
+    "UI-04",
+    "UI-05",
+    "UI-06",
+    "UI-07",
+    "UI-08"
+  ],
+  "syntax_files": 94,
+  "content": {
+    "topics": 24,
+    "concepts": 474,
+    "passed": true
+  },
+  "deployment_safeguards": {
+    "passed": 5,
+    "failed": 0
+  },
+  "browser_checks": [
+    {
+      "name": "focused-ui",
+      "passed": true,
+      "groups": 13,
+      "measurements": 66,
+      "local_artifact": "test-results/ui-audit/report.json"
+    },
+    {
+      "name": "account-keyboard",
+      "passed": true,
+      "groups": 10,
+      "local_artifact": "test-results/ux-account/report.json"
+    },
+    {
+      "name": "navigation",
+      "passed": true,
+      "groups": 18,
+      "local_artifact": "test-results/navigation-redesign/browser-results.json",
+      "timing": "Before the final scoped Notes resize recovery; focused UI and account checks verify final recovery."
+    }
+  ],
+  "browser_check_groups": 41,
+  "production_test_data_used": false,
+  "live_email_sent": false,
+  "payment_actions": 0,
+  "delivery": "Push main through the existing Cloudflare deployment workflow; exact live revision retained in local test-results/ui-audit/deployment.json."
+}

@@ -110,7 +110,8 @@ let adaptivePlanPreview = null;
 let accountProfile = null;
 const modalStack = [];
 const modalBackgroundState = new Map();
-const compactNotesMedia = window.matchMedia("(max-width: 820px)");
+const compactNotesMedia = window.matchMedia("(max-width: 1080px)");
+let lastFocusedNotesControl = null;
 let globalSearchSelection = 0;
 let globalSearchRequestId = 0;
 let onboardingStep = 1;
@@ -818,10 +819,15 @@ function closeMobileNotesSidebar({ restoreFocus = true } = {}) {
 }
 
 function handleNotesDrawerViewport(event) {
-  const focusedSidebar = elements.notesSidebar.contains(document.activeElement);
+  if (activeAppSection !== "notes" || getActiveModal()) return;
+  const focusedElement = document.activeElement;
+  const focusWasLost = focusedElement === document.body || focusedElement === document.documentElement;
+  // Hiding a focused drawer control can blur it before the media event fires.
+  const focusedSidebar = elements.notesSidebar.contains(focusedElement)
+    || (focusWasLost && elements.notesSidebar.contains(lastFocusedNotesControl));
   if (!event.matches) {
     closeMobileNotesSidebar({ restoreFocus: false });
-    if (focusedSidebar && !isVisibleControl(document.activeElement)) elements.searchInput.focus();
+    if (focusedSidebar && (focusWasLost || !isVisibleControl(focusedElement))) elements.searchInput.focus();
   } else if (focusedSidebar && !elements.appView.classList.contains("mobile-sidebar-open")) {
     elements.mobileNotesButton.focus({ preventScroll: true });
   }
@@ -3452,6 +3458,9 @@ function closeManagedModal(modal, { restoreFocus = true } = {}) {
 }
 
 function containModalFocus(event) {
+  if (event.target !== document.body && event.target !== document.documentElement) {
+    lastFocusedNotesControl = elements.notesSidebar.contains(event.target) ? event.target : null;
+  }
   const modal = getActiveModal();
   if (modal && !modal.contains(event.target)) focusActiveModal();
   else if (!modal && compactNotesMedia.matches && elements.appView.classList.contains("mobile-sidebar-open")
