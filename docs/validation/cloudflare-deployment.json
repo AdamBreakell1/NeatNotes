@@ -1,31 +1,115 @@
 {
-  "date": "2026-10-09",
-  "codeRevision": "99844836957d1ae2a65d5e95731bd4920e8cc7e4",
+  "date": "2026-10-10",
+  "observedAt": "2026-10-10T09:50:45.636Z",
+  "codeRevision": "14f3820838e674de9626a6c9bcefbaa86aa7b95f",
   "cloudflare": {
     "url": "https://recallstride.breakellsystems.workers.dev",
-    "version": "c412fd1b-2e7d-494c-abec-2f067c08cc13",
-    "mode": "maintenance",
-    "apiHealthStatus": 503,
+    "mode": "active",
+    "apiHealthStatus": 200,
+    "databasePersistent": true,
+    "databaseFallbackActive": false,
+    "deckCount": 24,
+    "emailConfigured": true,
+    "stripeConfigured": true,
+    "googleConfigured": false,
     "publicTransferRouteStatus": 404,
-    "transferStatus": "not_started"
+    "codingTasksStatus": 200,
+    "codingTaskCount": 60,
+    "codingPreview": false,
+    "anonymousSessionStatus": 401,
+    "databaseNamespace": "a5e9557c19f54431bec4e9ba81337209",
+    "cutoverVersion": "cd7da7e6-64d0-40e8-afcd-9225dde51ac1",
+    "cutoverVersionSource": "manual cutover deployment; later GitHub deployments may create another version of this revision",
+    "postRenderRetirementHealthStatus": 200
+  },
+  "migration": {
+    "status": "complete",
+    "importId": "474e22e3-0a0e-4d46-9ec1-1bba900b99ae",
+    "importedRows": 1002,
+    "tableCount": 39,
+    "chunkCount": 28,
+    "artifactSha256": "2feccf6e36e368bc413bea08d1fff5eb4d5468ceb1ce8d30462ef19c05eae694",
+    "countsAndHashesMatch": true,
+    "foreignKeyViolations": 0,
+    "integrity": "ok",
+    "protectedBackupRetained": true,
+    "existingAccountPasswordDataPreserved": true,
+    "providerSettingsCopied": 11,
+    "retirementAndCleanupComplete": true
+  },
+  "smtp": {
+    "realCloudflareHandshakeStatus": 200,
+    "configured": true,
+    "verified": true,
+    "errorCode": null,
+    "tlsRequired": true,
+    "certificateVerification": true,
+    "focusedTestsPassed": 6,
+    "emailSentByVerificationCheck": false
+  },
+  "stripe": {
+    "existingLiveWebhookId": "we_1Tp7dD5atRAfVJNk9PxB1vVK",
+    "webhookUrl": "https://recallstride.breakellsystems.workers.dev/api/billing/stripe/webhook",
+    "existingSigningSecretPreserved": true,
+    "financialTestPerformed": false
+  },
+  "github": {
+    "automaticDeploymentVerified": true,
+    "verifiedRun": "https://github.com/AdamBreakell1/NeatNotes/actions/runs/38042175469",
+    "verifiedRunRevision": "14f3820838e674de9626a6c9bcefbaa86aa7b95f",
+    "verifiedRunMode": "active",
+    "activeRevisionPushedToMain": true,
+    "livePersistentDatabaseVerified": true
   },
   "render": {
     "url": "https://neatnotes.onrender.com",
-    "release": "99844836957d",
-    "healthStatus": 200,
-    "writable": true,
-    "emailConfigured": true,
-    "stripeConfigured": true,
-    "googleConfigured": false
+    "writable": false,
+    "retired": true,
+    "retirementApproval": "owner_explicitly_authorised_after_confirming_existing_account_signin",
+    "preRetirementHealthStatus": 200,
+    "preRetirementSessionStatus": 503,
+    "formerPlan": "Starter",
+    "formerDiskGigabytes": 1,
+    "preRetirementMigrationMode": true,
+    "serviceDeleted": true,
+    "attachedDiskDeleted": true,
+    "projectServiceCount": 0,
+    "billingStatus": "NeatNotes Deleted",
+    "historicalAccruedServiceCharge": "$2.12",
+    "historicalAccruedDiskCharge": "$0.08",
+    "historicalAccruedTotalStillPayable": "$2.20",
+    "projectedOctoberTotal": "$2.20",
+    "newServiceDiskChargesProjected": false,
+    "proofScreenshots": [
+      "/tmp/recallstride-render-retired.png",
+      "/tmp/recallstride-render-billing-retired.png",
+      "/tmp/recallstride-render-key-revoked.png"
+    ],
+    "postRetirementHealthStatus": 404,
+    "preRetirementRedirectConfigured": true
   },
+  "temporaryAccessCleanup": {
+    "transferWorkerRemoved": true,
+    "providerCheckWorkerRemoved": true,
+    "transferTokenRemoved": true,
+    "renderKeyRevoked": true,
+    "renderAuthorisedSshKeyCount": 0,
+    "generatedLocalPrivatePublicKeysRemoved": true,
+    "localGithubDeploymentTokenCopyRemoved": true,
+    "githubEncryptedDeploymentSecretRetained": true,
+    "status": "complete"
+  },
+  "remaining": [],
   "notPerformed": [
-    "Render SSH-key registration",
-    "source freeze or production database export",
-    "provider settings transfer",
-    "customer database import",
-    "Stripe webhook URL change",
-    "traffic cutover",
-    "domain purchase"
+    "recipient inbox delivery test",
+    "live payment lifecycle test",
+    "domain purchase or custom support email setup",
+    "full production backup restore"
   ],
-  "pendingAction": "Owner to submit prepared temporary Render SSH public key; new security-sensitive access requires confirmation."
+  "revisionPurpose": "Historical cutover code SHA; subsequent GitHub commits auto-deploy their own SHA. Read live /api/health for the current release.",
+  "ownerVerification": {
+    "existingAccountSignInConfirmed": true,
+    "renderServiceDiskDeletionExplicitlyAuthorised": true,
+    "temporaryRenderSshKeyRevocationExplicitlyAuthorised": true
+  }
 }
