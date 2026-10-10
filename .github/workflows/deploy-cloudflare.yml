@@ -1,0 +1,50 @@
+name: Deploy RecallStride to Cloudflare
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Finish a started deployment before publishing the next revision.
+concurrency:
+  group: recallstride-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: production
+      url: https://recallstride.breakellsystems.workers.dev
+    steps:
+      - name: Check out the committed revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Use Node.js 24
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install the locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Check source, content and deployment safeguards
+        run: |
+          npm run check
+          npm run validate:content
+          node --test scripts/cloudflare-deployment.test.mjs
+      - name: Build, deploy and confirm the live revision
+        run: node scripts/deploy-cloudflare-ci.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: 7656ff3b3eaa33f5eb0e17d1b026f7f0
+          CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: 'false'
+          CLOUDFLARE_INCLUDE_PROCESS_ENV: 'false'
+          WRANGLER_SEND_METRICS: 'false'
+          WRANGLER_WRITE_LOGS: 'false'
+          WRANGLER_LOG_SANITIZE: 'true'
