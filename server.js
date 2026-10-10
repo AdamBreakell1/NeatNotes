@@ -18,6 +18,7 @@ const { LABS, assessLab, getPublicLab, validateLabs } = require("./cs-labs");
 const { loadTopics, isReleased: isContentReleased, hasAvailableConcepts } = require("./backend/services/contentRepository");
 const { createAuthContinuationStore } = require("./backend/services/authContinuation");
 const { AuthEmailDeliveryError, smtpTransportOptions, sendAuthenticationEmail } = require("./backend/services/authEmail");
+const { verificationEmail, passwordResetEmail } = require("./backend/services/authEmailTemplates");
 const { registerPracticeRoutes } = require("./backend/services/pseudocodePractice");
 const { registerPilotRoutes } = require("./backend/services/pilotTelemetry");
 const { availableQuiz } = require("./component-one-quizzes");
@@ -3210,9 +3211,7 @@ async function createAndSendVerification(userId, email, name) {
       message: {
         from: getEmailFromAddress(),
         to: email,
-        subject: "Verify your RecallStride account",
-        text: `Hi ${name},\n\nVerify your RecallStride account here:\n${verificationUrl}\n\nThis link expires in 24 hours.`,
-        html: `<p>Hi ${escapeHtml(name)},</p><p>Verify your RecallStride account here:</p><p><a href="${verificationUrl}">Verify email</a></p><p>This link expires in 24 hours.</p>`,
+        ...verificationEmail({ name, url: verificationUrl }),
       },
     });
 
@@ -3233,9 +3232,7 @@ async function sendPasswordResetEmail(user, resetUrl) {
     message: {
       from: getEmailFromAddress(),
       to: user.email,
-      subject: "Reset your RecallStride password",
-      text: `Hi ${user.name},\n\nReset your RecallStride password here:\n${resetUrl}\n\nThis link expires in 30 minutes. If you did not request it, you can ignore this email.`,
-      html: `<p>Hi ${escapeHtml(user.name)},</p><p>Use the link below to reset your RecallStride password.</p><p><a href="${escapeHtml(resetUrl)}">Reset password</a></p><p>This link expires in 30 minutes. If you did not request it, you can ignore this email.</p>`,
+      ...passwordResetEmail({ name: user.name, url: resetUrl }),
     },
   });
 }

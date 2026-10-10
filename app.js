@@ -108,13 +108,12 @@ let mistakeJournal = loadLocalArray(MISTAKE_JOURNAL_KEY);
 let activeAdaptiveSession = null;
 let adaptivePlanPreview = null;
 let accountProfile = null;
-let focusBeforeGlobalSearch = null;
-let focusBeforeSettings = null;
-let focusBeforeLegal = null;
+const modalStack = [];
+const modalBackgroundState = new Map();
+const compactNotesMedia = window.matchMedia("(max-width: 820px)");
 let globalSearchSelection = 0;
 let globalSearchRequestId = 0;
 let onboardingStep = 1;
-let focusBeforeOnboarding = null;
 let activePracticeMode = "hub";
 let examPracticeState = null;
 let miniMockState = null;
@@ -237,6 +236,7 @@ const elements = {
   neatQuizPanel: document.querySelector("#neat-quiz-panel"),
   newButton: document.querySelector("#new-note-button"),
   notesSidebarContext: document.querySelector("#notes-sidebar-context"),
+  notesSidebar: document.querySelector("#notes-sidebar"),
   onboardingModal: document.querySelector("#onboarding-modal"),
   onboardingForm: document.querySelector("#onboarding-form"),
   onboardingBack: document.querySelector("#onboarding-back"),
@@ -271,6 +271,7 @@ const elements = {
   openBadgesButton: document.querySelector("#open-badges-button"),
   openPlansButton: document.querySelector("#open-plans-button"),
   pricingModal: document.querySelector("#pricing-modal"),
+  pricingMessage: document.querySelector("#pricing-message"),
   revisionCardGrid: document.querySelector("#revision-card-grid"),
   revisionContinueButton: document.querySelector("#revision-continue-button"),
   revisionMasteryCopy: document.querySelector("#revision-mastery-copy"),
@@ -389,13 +390,14 @@ const elements = {
 
 elements.showLogin.addEventListener("click", () => setAuthMode("login"));
 elements.showSignup.addEventListener("click", () => setAuthMode("signup"));
+document.querySelector(".auth-tabs").addEventListener("keydown", handleAuthTabsKeydown);
 elements.landingView.addEventListener("click", handleLandingClick);
 elements.loginForm.addEventListener("submit", login);
 elements.signupForm.addEventListener("submit", signup);
 elements.passwordRecoveryForm.addEventListener("submit", requestPasswordReset);
 elements.passwordResetForm.addEventListener("submit", completePasswordReset);
 document.querySelector("[data-auth-recovery]").addEventListener("click", openPasswordRecovery);
-document.querySelector("[data-auth-back-login]").addEventListener("click", () => setAuthMode("login"));
+document.querySelector("[data-auth-back-login]").addEventListener("click", () => setAuthMode("login", { focus: true }));
 document.querySelectorAll("[data-toggle-password]").forEach((button) => {
   button.addEventListener("click", togglePasswordVisibility);
 });
@@ -419,7 +421,6 @@ elements.globalSearchButton.addEventListener("click", (event) => {
 });
 elements.globalSearchInput.addEventListener("input", renderGlobalSearchResults);
 elements.globalSearchInput.addEventListener("keydown", handleGlobalSearchKeydown);
-elements.globalSearchModal.addEventListener("keydown", trapGlobalSearchFocus);
 elements.globalSearchModal.addEventListener("click", handleGlobalSearchClick);
 elements.mobileNotesButton.addEventListener("click", toggleMobileNotesSidebar);
 elements.mobileSidebarClose.addEventListener("click", closeMobileNotesSidebar);
@@ -445,10 +446,10 @@ elements.achievementModal.addEventListener("click", handleAchievementModalClick)
 elements.settingsButton.addEventListener("click", () => openSettingsModal());
 elements.closeSettingsButton.addEventListener("click", closeSettingsModal);
 elements.settingsModal.addEventListener("click", handleSettingsModalClick);
-elements.settingsModal.addEventListener("keydown", trapSettingsFocus);
 elements.legalModal.addEventListener("click", handleLegalModalClick);
 elements.siteFooter.addEventListener("click", handleFooterClick);
 elements.settingsTabs.addEventListener("click", switchSettingsTab);
+elements.settingsTabs.addEventListener("keydown", handleSettingsTabsKeydown);
 elements.themeChoiceGroup.addEventListener("click", chooseTheme);
 elements.avatarChoiceGroup.addEventListener("click", chooseProfileAvatar);
 elements.avatarChoiceGroup.addEventListener("keydown", handleAvatarChoiceKeydown);
@@ -458,7 +459,6 @@ elements.settingsDefaultTag.addEventListener("input", updateSettingsFromControls
 elements.onboardingBack.addEventListener("click", () => moveOnboardingStep(-1));
 elements.onboardingNext.addEventListener("click", () => moveOnboardingStep(1));
 elements.onboardingForm.addEventListener("submit", completeOnboarding);
-elements.onboardingModal.addEventListener("keydown", trapOnboardingFocus);
 elements.downloadDataButton.addEventListener("click", downloadWorkspaceData);
 elements.resetPreferencesButton.addEventListener("click", resetLocalPreferences);
 elements.revokeOtherSessionsButton.addEventListener("click", revokeOtherSessions);
@@ -472,6 +472,8 @@ elements.settingsDisplayName.addEventListener("input", () => {
   elements.settingsIdentityMessage.textContent = "";
 });
 document.addEventListener("keydown", handleGlobalKeydown);
+document.addEventListener("focusin", containModalFocus);
+compactNotesMedia.addEventListener("change", handleNotesDrawerViewport);
 elements.themeToggle.addEventListener("click", toggleTheme);
 elements.topbarSectionSwitch.addEventListener("click", switchAppSection);
 elements.topbarUtilities.addEventListener("click", switchAppSection);
@@ -518,7 +520,9 @@ elements.examPracticePanel.addEventListener("input", (event) => {
   if (csLabState && event.target.closest("[data-lab-form]")) csLabState.answer = event.target.value;
 });
 document.querySelectorAll("[data-global-action]").forEach((button) => button.addEventListener("click", () => {
-  button.closest("details").open = false;
+  const menu = button.closest("details");
+  menu.open = false;
+  menu.querySelector("summary").focus();
   const actions = { settings: () => openSettingsModal(), plans: openPlansModal, contact: () => setAppSection("contact"), website: exitDemoWorkspace, login: () => openAuthModal("login"), signup: () => openAuthModal("signup"), logout: () => elements.topbarLogoutButton.click(), theme: () => document.querySelector(".theme-toggle").click() };
   actions[button.dataset.globalAction]?.();
 }));
@@ -530,7 +534,7 @@ document.addEventListener("click", (event) => {
 });
 document.addEventListener("keydown", (event) => {
   const accountMenu = document.querySelector(".global-account-menu");
-  if (event.key === "Escape" && accountMenu.open) {
+  if (event.key === "Escape" && !event.defaultPrevented && accountMenu.open && !getActiveModal()) {
     accountMenu.open = false;
     accountMenu.querySelector("summary").focus();
   }
@@ -796,22 +800,39 @@ function renderPracticeMode() {
 }
 
 function toggleMobileNotesSidebar() {
-  const isOpen = elements.appView.classList.toggle("mobile-sidebar-open");
-  elements.mobileNotesButton.setAttribute("aria-expanded", String(isOpen));
-  if (isOpen) {
-    elements.mobileSidebarClose.focus();
-  }
+  if (elements.appView.classList.contains("mobile-sidebar-open")) return closeMobileNotesSidebar();
+  elements.appView.classList.add("mobile-sidebar-open");
+  elements.mobileNotesButton.setAttribute("aria-expanded", "true");
+  elements.notesSidebar.setAttribute("role", "dialog");
+  elements.notesSidebar.setAttribute("aria-modal", "true");
+  elements.mobileSidebarClose.focus();
 }
 
-function closeMobileNotesSidebar() {
+function closeMobileNotesSidebar({ restoreFocus = true } = {}) {
+  const wasOpen = elements.appView.classList.contains("mobile-sidebar-open");
   elements.appView.classList.remove("mobile-sidebar-open");
   elements.mobileNotesButton.setAttribute("aria-expanded", "false");
+  elements.notesSidebar.removeAttribute("role");
+  elements.notesSidebar.removeAttribute("aria-modal");
+  if (wasOpen && restoreFocus && isVisibleControl(elements.mobileNotesButton)) elements.mobileNotesButton.focus();
+}
+
+function handleNotesDrawerViewport(event) {
+  const focusedSidebar = elements.notesSidebar.contains(document.activeElement);
+  if (!event.matches) {
+    closeMobileNotesSidebar({ restoreFocus: false });
+    if (focusedSidebar && !isVisibleControl(document.activeElement)) elements.searchInput.focus();
+  } else if (focusedSidebar && !elements.appView.classList.contains("mobile-sidebar-open")) {
+    elements.mobileNotesButton.focus({ preventScroll: true });
+  }
 }
 
 function renderTopbarClock() {
   const now = new Date();
-  elements.topbarTime.textContent = TOPBAR_TIME_FORMATTER.format(now);
-  elements.topbarDate.textContent = TOPBAR_DATE_FORMATTER.format(now);
+  const time = TOPBAR_TIME_FORMATTER.format(now);
+  const date = TOPBAR_DATE_FORMATTER.format(now);
+  if (elements.topbarTime.textContent !== time) elements.topbarTime.textContent = time;
+  if (elements.topbarDate.textContent !== date) elements.topbarDate.textContent = date;
   elements.topbarTime.dateTime = now.toISOString();
   elements.topbarDate.dateTime = now.toISOString().slice(0, 10);
 }
@@ -1540,13 +1561,11 @@ function renderBadgeCollection() {
 function openBadgeModal() {
   renderAchievementSummary();
   renderBadgeCollection();
-  elements.badgeModal.hidden = false;
-  document.body.classList.add("modal-open");
+  openManagedModal(elements.badgeModal, { initialFocus: elements.closeBadgesButton, close: closeBadgeModal });
 }
 
 function closeBadgeModal() {
-  elements.badgeModal.hidden = true;
-  document.body.classList.remove("modal-open");
+  closeManagedModal(elements.badgeModal);
 }
 
 function handleBadgeModalClick(event) {
@@ -1561,13 +1580,11 @@ function showAchievementModal(topic) {
   elements.achievementBadge = document.querySelector("#achievement-badge");
   elements.achievementTitle.textContent = `${badge.name} badge unlocked`;
   elements.achievementText.textContent = `${topic.code} ${topic.title}: ${getRevisionTopicCardCount(topic)} cards completed. This badge celebrates completing the deck; delayed retrieval builds stronger evidence of recall.`;
-  elements.achievementModal.hidden = false;
-  document.body.classList.add("modal-open");
+  openManagedModal(elements.achievementModal, { initialFocus: elements.closeAchievementButton, close: closeAchievementModal });
 }
 
 function closeAchievementModal() {
-  elements.achievementModal.hidden = true;
-  document.body.classList.remove("modal-open");
+  closeManagedModal(elements.achievementModal);
 }
 
 function handleAchievementModalClick(event) {
@@ -1803,7 +1820,9 @@ function renderSettingsControls() {
   elements.usageAnalyticsConsent.disabled = isGuestMode || !currentUser;
   renderRevisionProfileSettings();
   document.querySelectorAll("[data-theme-choice]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.themeChoice === appSettings.theme);
+    const selected = button.dataset.themeChoice === appSettings.theme;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-pressed", String(selected));
   });
 }
 
@@ -2054,13 +2073,14 @@ function getCurrentPlanLabel() {
 
 function openSettingsModal(tab = "general") {
   if (typeof tab !== "string") tab = "general";
-  focusBeforeSettings = document.activeElement;
   renderSettingsControls();
   selectSettingsTab(tab);
-  elements.settingsModal.hidden = false;
-  document.body.classList.add("modal-open");
+  elements.settingsMessage.textContent = "";
+  openManagedModal(elements.settingsModal, {
+    initialFocus: () => document.querySelector(`[data-settings-tab="${tab}"]`),
+    close: closeSettingsModal,
+  });
   if (tab === "account" && currentUser && !isGuestMode) loadAccountSessions();
-  window.setTimeout(() => document.querySelector(`[data-settings-tab="${tab}"]`)?.focus(), 0);
 }
 
 async function loadAccountSessions() {
@@ -2087,6 +2107,7 @@ async function revokeOtherSessions() {
   } catch (error) {
     elements.settingsMessage.textContent = error.message;
     elements.settingsMessage.className = "status-message error";
+    elements.revokeOtherSessionsButton.disabled = false;
   }
 }
 
@@ -2115,26 +2136,7 @@ async function deleteAccount() {
 }
 
 function closeSettingsModal() {
-  elements.settingsModal.hidden = true;
-  document.body.classList.remove("modal-open");
-  focusBeforeSettings?.focus?.();
-}
-
-function trapSettingsFocus(event) {
-  if (event.key !== "Tab") return;
-  const focusable = [...elements.settingsModal.querySelectorAll(
-    'button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-  )].filter((control) => !control.closest("[hidden]"));
-  if (!focusable.length) return;
-  const first = focusable[0];
-  const last = focusable.at(-1);
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
+  closeManagedModal(elements.settingsModal);
 }
 
 function handleSettingsModalClick(event) {
@@ -2150,7 +2152,9 @@ function handleFooterClick(event) {
     return;
   }
 
-  if (event.target.closest("[data-open-pricing-footer]")) {
+  const pricingButton = event.target.closest("[data-open-pricing-footer]");
+  if (pricingButton) {
+    pricingButton.focus();
     openPlansModal();
     return;
   }
@@ -2171,21 +2175,18 @@ function handleLegalModalClick(event) {
 }
 
 function openLegalModal(page = "privacy") {
-  if (elements.legalModal.hidden) focusBeforeLegal = document.activeElement;
   const legalPage = getLegalPageContent(page);
   elements.legalTitle.textContent = legalPage.title;
   elements.legalContent.innerHTML = legalPage.html;
-  elements.legalModal.hidden = false;
-  document.body.classList.add("modal-open");
-  elements.legalModal.querySelector("button[data-close-legal]").focus();
+  openManagedModal(elements.legalModal, {
+    initialFocus: () => elements.legalModal.querySelector("button[data-close-legal]"),
+    close: closeLegalModal,
+  });
   trackEvent("legal_page_opened", { page });
 }
 
 function closeLegalModal() {
-  elements.legalModal.hidden = true;
-  document.body.classList.remove("modal-open");
-  focusBeforeLegal?.focus?.();
-  focusBeforeLegal = null;
+  closeManagedModal(elements.legalModal);
 }
 
 function getLegalPageContent(page) {
@@ -2198,6 +2199,35 @@ function switchSettingsTab(event) {
 
   selectSettingsTab(button.dataset.settingsTab);
   if (button.dataset.settingsTab === "account" && currentUser && !isGuestMode) loadAccountSessions();
+}
+
+function handleSettingsTabsKeydown(event) {
+  const tabs = [...elements.settingsTabs.querySelectorAll("[data-settings-tab]")];
+  const nextTab = getKeyboardTab(event, tabs);
+  if (!nextTab) return;
+  selectSettingsTab(nextTab.dataset.settingsTab);
+  nextTab.focus();
+  if (nextTab.dataset.settingsTab === "account" && currentUser && !isGuestMode) loadAccountSessions();
+}
+
+function getKeyboardTab(event, tabs) {
+  const currentIndex = tabs.indexOf(event.target);
+  if (currentIndex < 0) return null;
+  let nextIndex;
+  if (event.key === "Home") nextIndex = 0;
+  else if (event.key === "End") nextIndex = tabs.length - 1;
+  else if (["ArrowRight", "ArrowDown"].includes(event.key)) nextIndex = (currentIndex + 1) % tabs.length;
+  else if (["ArrowLeft", "ArrowUp"].includes(event.key)) nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+  else return null;
+  event.preventDefault();
+  return tabs[nextIndex];
+}
+
+function handleAuthTabsKeydown(event) {
+  const nextTab = getKeyboardTab(event, [elements.showLogin, elements.showSignup]);
+  if (!nextTab) return;
+  setAuthMode(nextTab === elements.showLogin ? "login" : "signup");
+  nextTab.focus();
 }
 
 function selectSettingsTab(tabName = "general") {
@@ -2303,7 +2333,7 @@ function handleLandingClick(event) {
 function showLandingPage() {
   elements.landingView.hidden = false;
   elements.appView.hidden = true;
-  elements.authView.hidden = true;
+  closeManagedModal(elements.authView, { restoreFocus: false });
   hideLaunchOverlay();
 }
 
@@ -2319,7 +2349,7 @@ function exitDemoWorkspace() {
   if (location.hash.startsWith("#/")) history.pushState({}, "", `${location.pathname}${location.search}`);
   lastRenderedRoute = location.hash;
   activeAppSection = "home";
-  elements.authView.hidden = true;
+  closeManagedModal(elements.authView, { restoreFocus: false });
   elements.appView.hidden = true;
   elements.landingView.hidden = false;
   hideLaunchOverlay();
@@ -2413,7 +2443,7 @@ async function signup(event) {
     const devLink = response.devVerificationUrl
       ? ` Local dev link: <a href="${response.devVerificationUrl}">verify now</a>.`
       : "";
-    setAuthMode("login");
+    setAuthMode("login", { focus: true });
     document.querySelector("#login-email").value = document.querySelector("#signup-email").value;
     showAuthMessage(`${response.message}${devLink}`, "success", true);
   } catch (error) {
@@ -2437,7 +2467,7 @@ function applyAuthenticatedSession(user, nextPlans = null) {
   selectAccountLearningState();
   plans = nextPlans || plans;
   isGuestMode = false;
-  elements.authView.hidden = true;
+  closeManagedModal(elements.authView, { restoreFocus: false });
   elements.landingView.hidden = true;
   elements.appView.hidden = false;
   elements.userName.textContent = currentUser?.name || "Account";
@@ -2453,8 +2483,9 @@ function handleAuthenticatedLoadError(error) {
   trackEvent("authenticated_workspace_load_failed", { reason: error.message });
 }
 
-function setAuthMode(mode) {
+function setAuthMode(mode, { focus = false } = {}) {
   const isLogin = mode === "login";
+  document.querySelector(".auth-tabs").hidden = false;
   elements.loginForm.hidden = !isLogin;
   elements.signupForm.hidden = isLogin;
   elements.passwordRecoveryForm.hidden = true;
@@ -2464,14 +2495,20 @@ function setAuthMode(mode) {
   elements.showSignup.classList.toggle("active", !isLogin);
   elements.showLogin.setAttribute("aria-selected", String(isLogin));
   elements.showSignup.setAttribute("aria-selected", String(!isLogin));
+  elements.showLogin.tabIndex = isLogin ? 0 : -1;
+  elements.showSignup.tabIndex = isLogin ? -1 : 0;
   elements.authCardTitle.textContent = isLogin ? "Welcome back" : "Create your study workspace";
   resetAuthFieldStates();
   setAuthLoading("login", false);
   setAuthLoading("signup", false);
   showAuthMessage("");
+  if (focus || (elements.authView.contains(document.activeElement) && document.activeElement.closest("[hidden]"))) {
+    getAuthInitialFocus()?.focus();
+  }
 }
 
 function openPasswordRecovery() {
+  document.querySelector(".auth-tabs").hidden = true;
   elements.loginForm.hidden = true;
   elements.signupForm.hidden = true;
   elements.passwordResetForm.hidden = true;
@@ -2485,6 +2522,7 @@ function openPasswordRecovery() {
 
 function openPasswordReset(token) {
   openAuthModal("login");
+  document.querySelector(".auth-tabs").hidden = true;
   elements.loginForm.hidden = true;
   elements.signupForm.hidden = true;
   elements.passwordRecoveryForm.hidden = true;
@@ -2532,7 +2570,7 @@ async function completePasswordReset(event) {
     });
     activePasswordResetToken = "";
     history.replaceState({}, "", "/");
-    setAuthMode("login");
+    setAuthMode("login", { focus: true });
     showAuthMessage(response.message, "success");
   } catch (error) {
     showAuthMessage(error.message, "error");
@@ -2551,15 +2589,15 @@ function openAuthModal(mode = "login", { captureTask = true } = {}) {
     ...(activeAppSection === "coding" ? { codingTaskId: document.querySelector("#coding-task-select")?.value || activeCodingTaskId } : {}),
   } : null;
   setAuthMode(mode);
-  elements.authView.hidden = false;
-  document.body.classList.add("modal-open");
-  const field = mode === "signup" ? document.querySelector("#signup-name") : document.querySelector("#login-email");
-  setTimeout(() => field?.focus(), 0);
+  openManagedModal(elements.authView, { initialFocus: getAuthInitialFocus, close: closeAuthModal });
 }
 
 function closeAuthModal() {
-  elements.authView.hidden = true;
-  document.body.classList.remove("modal-open");
+  closeManagedModal(elements.authView);
+}
+
+function getAuthInitialFocus() {
+  return elements.authView.querySelector("form:not([hidden]) input:not([disabled])");
 }
 
 function handleAuthModalClick(event) {
@@ -2623,7 +2661,7 @@ function validateSignupPassword(showMessage = true) {
 }
 
 function resetAuthFieldStates() {
-  [elements.loginPassword, elements.signupPassword].forEach((input) => {
+  [elements.loginPassword, elements.signupPassword, document.querySelector("#reset-password")].forEach((input) => {
     input.type = "password";
     input.removeAttribute("aria-invalid");
   });
@@ -2689,7 +2727,7 @@ function loadGuestApp(options = {}) {
     saveFreeRevisionTopicId(DEFAULT_GUEST_REVISION_DECK_ID);
     // Old sample records remain on disk but are excluded from learning evidence.
   }
-  elements.authView.hidden = true;
+  closeManagedModal(elements.authView, { restoreFocus: false });
   elements.appView.hidden = Boolean(options.showLanding);
   elements.landingView.hidden = !options.showLanding;
   render();
@@ -2702,7 +2740,7 @@ function loadGuestApp(options = {}) {
 
 async function loadApp() {
   isGuestMode = false;
-  elements.authView.hidden = true;
+  closeManagedModal(elements.authView, { restoreFocus: false });
   elements.landingView.hidden = true;
   elements.appView.hidden = false;
   elements.userName.textContent = currentUser.name;
@@ -2790,7 +2828,6 @@ function maybeOpenOnboarding() {
 
 function openOnboarding() {
   const profile = accountProfile?.studentProfile || {};
-  focusBeforeOnboarding = document.activeElement;
   onboardingStep = 1;
   elements.onboardingTopicGrid.innerHTML = REVISION_TOPICS.map((topic) => `
     <label>
@@ -2818,8 +2855,9 @@ function openOnboarding() {
   });
 
   elements.onboardingMessage.textContent = "";
-  elements.onboardingModal.hidden = false;
-  document.body.classList.add("modal-open");
+  openManagedModal(elements.onboardingModal, {
+    initialFocus: () => elements.onboardingForm.querySelector(`[data-onboarding-step="${onboardingStep}"] h3`),
+  });
   renderOnboardingStep();
 }
 
@@ -2879,11 +2917,10 @@ async function completeOnboarding(event) {
     });
     accountProfile = response;
     if (response.user) currentUser = response.user;
-    elements.onboardingModal.hidden = true;
-    document.body.classList.remove("modal-open");
+    closeManagedModal(elements.onboardingModal, { restoreFocus: false });
     setAppSection(action === "diagnostic" ? "home" : activeAppSection);
     renderRevisionPage();
-    focusBeforeOnboarding?.focus?.();
+    document.querySelector("#workspace-page-title")?.focus({ preventScroll: true });
     trackEvent("onboarding_completed", { action, learnerType: data.get("learner-type"), revisionGoal: data.get("revision-goal") });
     if (action === "diagnostic") startAdaptiveRevisionSession(5);
   } catch (error) {
@@ -2900,23 +2937,6 @@ function parseClientJson(value, fallback) {
     return JSON.parse(value || "") ?? fallback;
   } catch {
     return fallback;
-  }
-}
-
-function trapOnboardingFocus(event) {
-  if (event.key !== "Tab") return;
-  const focusable = [...elements.onboardingModal.querySelectorAll(
-    "button:not([disabled]):not([hidden]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex='0']",
-  )].filter((control) => !control.closest("[hidden]"));
-  if (!focusable.length) return;
-  const first = focusable[0];
-  const last = focusable.at(-1);
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
   }
 }
 
@@ -3021,6 +3041,7 @@ function createDemoGuestState() {
 }
 
 function ensureDemoWorkspace(options = {}) {
+  if (!isGuestMode || currentUser) return;
   if (options.reset) {
     const resetState = createDemoGuestState();
     saveGuestState(resetState);
@@ -3184,6 +3205,7 @@ async function addCollaborator(event) {
 
 async function createNote() {
   if (!activeWorkspaceId || isCreatingNote) return;
+  elements.searchInput.value = "";
 
   if (isGuestMode) {
     const now = new Date().toISOString();
@@ -3271,16 +3293,17 @@ async function handleBillingAction(event) {
       return;
     }
 
+    const originalLabel = portalButton.textContent;
+    elements.pricingMessage.textContent = "";
     try {
       portalButton.disabled = true;
       portalButton.textContent = "Opening...";
       const response = await api("/api/billing/customer-portal", { method: "POST" });
       window.location.href = response.url;
     } catch (error) {
-      elements.upgradeMessage.textContent = error.message;
-      elements.upgradeMessage.className = "topbar-plan-message error";
+      showPricingMessage(error.message, "error");
       portalButton.disabled = false;
-      portalButton.textContent = "Manage billing";
+      portalButton.textContent = originalLabel;
     }
     return;
   }
@@ -3297,6 +3320,8 @@ async function handleBillingAction(event) {
     return;
   }
 
+  const originalLabel = button.textContent;
+  elements.pricingMessage.textContent = "";
   try {
     button.disabled = true;
     button.textContent = "Opening checkout...";
@@ -3306,22 +3331,25 @@ async function handleBillingAction(event) {
     });
     window.location.href = response.url;
   } catch (error) {
-    elements.upgradeMessage.textContent = error.message;
-    elements.upgradeMessage.className = "topbar-plan-message error";
+    showPricingMessage(error.message, "error");
     button.disabled = false;
-    button.textContent = "Upgrade to Pro";
+    button.textContent = originalLabel;
   }
 }
 
+function showPricingMessage(message, type = "") {
+  elements.pricingMessage.className = `status-message pricing-contract-note ${type}`;
+  elements.pricingMessage.textContent = message;
+}
+
 function openPlansModal() {
-  elements.pricingModal.hidden = false;
-  document.body.classList.add("modal-open");
+  elements.pricingMessage.textContent = "";
+  openManagedModal(elements.pricingModal, { initialFocus: elements.closePlansButton, close: closePlansModal });
   trackEvent("pricing_opened", { section: activeAppSection });
 }
 
 function closePlansModal() {
-  elements.pricingModal.hidden = true;
-  document.body.classList.remove("modal-open");
+  closeManagedModal(elements.pricingModal);
 }
 
 function handlePricingModalClick(event) {
@@ -3338,14 +3366,129 @@ function handlePricingModalClick(event) {
   handleBillingAction(event);
 }
 
+function getActiveModal() {
+  return modalStack.at(-1)?.modal || null;
+}
+
+function isVisibleControl(control) {
+  return Boolean(control && control !== document.body && control !== document.documentElement
+    && !control.disabled && !control.closest("[hidden], [inert]") && control.getClientRects().length
+    && window.getComputedStyle(control).visibility !== "hidden");
+}
+
+function getModalControls(modal) {
+  return [...modal.querySelectorAll('button, input:not([type="hidden"]), select, textarea, a[href], summary, [tabindex]')]
+    .filter((control) => control.tabIndex >= 0 && isVisibleControl(control));
+}
+
+function syncModalEnvironment() {
+  const activeModal = getActiveModal();
+  if (activeModal) {
+    for (const child of document.body.children) {
+      if (!(child instanceof HTMLElement) || ["SCRIPT", "STYLE", "LINK"].includes(child.tagName)) continue;
+      if (!modalBackgroundState.has(child)) modalBackgroundState.set(child, child.inert);
+      child.inert = child !== activeModal;
+    }
+    modalStack.forEach((entry, index) => { entry.modal.style.zIndex = String(120 + index); });
+  } else {
+    for (const [child, wasInert] of modalBackgroundState) child.inert = wasInert;
+    modalBackgroundState.clear();
+  }
+  document.body.classList.toggle("modal-open", Boolean(activeModal));
+}
+
+function focusActiveModal(preferred = null) {
+  const modal = getActiveModal();
+  if (!modal) return;
+  const target = typeof preferred === "function" ? preferred() : preferred;
+  if (target && modal.contains(target) && isVisibleControl(target)) {
+    target.focus({ preventScroll: true });
+    return;
+  }
+  const first = getModalControls(modal)[0];
+  if (first) first.focus({ preventScroll: true });
+  else {
+    const dialog = modal.matches('[role="dialog"]') ? modal : modal.querySelector('[role="dialog"]');
+    dialog?.setAttribute("tabindex", "-1");
+    dialog?.focus({ preventScroll: true });
+  }
+}
+
+function openManagedModal(modal, { initialFocus = null, close = null } = {}) {
+  let entry = modalStack.find((item) => item.modal === modal);
+  if (!entry) {
+    const sidebarWasOpen = elements.appView.classList.contains("mobile-sidebar-open");
+    const focusedControl = document.activeElement;
+    const returnFocus = sidebarWasOpen ? elements.mobileNotesButton
+      : focusedControl === document.body || focusedControl === document.documentElement ? null : focusedControl;
+    if (sidebarWasOpen) closeMobileNotesSidebar({ restoreFocus: false });
+    entry = { modal, close, returnFocus, originalZIndex: modal.style.zIndex };
+    modalStack.push(entry);
+  }
+  entry.close = close;
+  modal.hidden = false;
+  syncModalEnvironment();
+  window.setTimeout(() => {
+    if (getActiveModal() === modal && !modal.hidden) focusActiveModal(initialFocus);
+  }, 0);
+}
+
+function closeManagedModal(modal, { restoreFocus = true } = {}) {
+  const index = modalStack.findIndex((item) => item.modal === modal);
+  const wasActive = getActiveModal() === modal;
+  const entry = index >= 0 ? modalStack.splice(index, 1)[0] : null;
+  modal.hidden = true;
+  if (entry) modal.style.zIndex = entry.originalZIndex;
+  syncModalEnvironment();
+  if (!entry || !wasActive || !restoreFocus) return;
+  if (isVisibleControl(entry.returnFocus)) entry.returnFocus.focus({ preventScroll: true });
+  else if (getActiveModal()) focusActiveModal();
+  else {
+    const fallback = elements.appView.hidden
+      ? elements.landingView.querySelector('[data-landing-action="login"]')
+      : document.querySelector("#workspace-page-title");
+    if (isVisibleControl(fallback)) fallback.focus({ preventScroll: true });
+  }
+}
+
+function containModalFocus(event) {
+  const modal = getActiveModal();
+  if (modal && !modal.contains(event.target)) focusActiveModal();
+  else if (!modal && compactNotesMedia.matches && elements.appView.classList.contains("mobile-sidebar-open")
+    && !elements.notesSidebar.contains(event.target)) elements.mobileSidebarClose.focus();
+}
+
+function trapModalFocus(event, modal) {
+  const controls = getModalControls(modal);
+  const first = controls[0];
+  const last = controls.at(-1);
+  if (!first) {
+    event.preventDefault();
+    focusActiveModal();
+  } else if (!modal.contains(document.activeElement) || (event.shiftKey && (document.activeElement === first || !controls.includes(document.activeElement)))) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (document.activeElement === last || !controls.includes(document.activeElement))) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 function handleGlobalKeydown(event) {
-  if (!elements.legalModal.hidden && event.key === "Tab") {
-    const controls = [...elements.legalModal.querySelectorAll("button, a[href], [tabindex='0']")].filter((node) => !node.disabled && node.getClientRects().length);
-    const first = controls[0], last = controls.at(-1);
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault(); last?.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault(); first?.focus();
+  const modal = getActiveModal();
+  if (modal) {
+    if (event.key === "Tab") trapModalFocus(event, modal);
+    else if (event.key === "Escape") {
+      event.preventDefault();
+      modalStack.at(-1)?.close?.();
+    } else if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") event.preventDefault();
+    return;
+  }
+  if (compactNotesMedia.matches && elements.appView.classList.contains("mobile-sidebar-open")) {
+    if (event.key === "Tab") trapModalFocus(event, elements.notesSidebar);
+    else if (event.key === "Escape") {
+      event.preventDefault();
+      closeMobileNotesSidebar();
     }
     return;
   }
@@ -3373,51 +3516,21 @@ function handleGlobalKeydown(event) {
       }
     }
   }
-  if (event.key === "Escape" && elements.appView.classList.contains("mobile-sidebar-open")) {
-    closeMobileNotesSidebar();
-    elements.mobileNotesButton.focus();
-  }
-  if (event.key === "Escape" && !elements.achievementModal.hidden) {
-    closeAchievementModal();
-  }
-  if (event.key === "Escape" && !elements.badgeModal.hidden) {
-    closeBadgeModal();
-  }
-  if (event.key === "Escape" && !elements.pricingModal.hidden) {
-    closePlansModal();
-  }
-  if (event.key === "Escape" && !elements.settingsModal.hidden) {
-    closeSettingsModal();
-  }
-  if (event.key === "Escape" && !elements.authView.hidden) {
-    closeAuthModal();
-  }
-  if (event.key === "Escape" && !elements.legalModal.hidden) {
-    closeLegalModal();
-  }
-  if (event.key === "Escape" && !elements.globalSearchModal.hidden) {
-    closeGlobalSearch();
-  }
   if (event.key === "Escape" && elements.appView.classList.contains("revision-focus-active")) {
     setRevisionFocusMode(false);
   }
 }
 
 function openGlobalSearch() {
-  if (!elements.globalSearchModal.hidden) return;
-  focusBeforeGlobalSearch = document.activeElement;
+  if (getActiveModal() || !elements.globalSearchModal.hidden) return;
   globalSearchSelection = 0;
-  elements.globalSearchModal.hidden = false;
-  document.body.classList.add("modal-open");
+  openManagedModal(elements.globalSearchModal, { initialFocus: elements.globalSearchInput, close: closeGlobalSearch });
   elements.globalSearchInput.value = "";
   renderGlobalSearchResults();
-  window.setTimeout(() => elements.globalSearchInput.focus(), 0);
 }
 
 function closeGlobalSearch() {
-  elements.globalSearchModal.hidden = true;
-  document.body.classList.remove("modal-open");
-  focusBeforeGlobalSearch?.focus?.();
+  closeManagedModal(elements.globalSearchModal);
 }
 
 async function renderGlobalSearchResults() {
@@ -3503,23 +3616,6 @@ function handleGlobalSearchKeydown(event) {
   if (event.key === "Enter" && results.length) {
     event.preventDefault();
     openGlobalSearchResult(results[globalSearchSelection]);
-  }
-}
-
-function trapGlobalSearchFocus(event) {
-  if (event.key !== "Tab") return;
-  const focusable = [...elements.globalSearchModal.querySelectorAll(
-    'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
-  )].filter((element) => !element.hidden && element.offsetParent !== null);
-  if (!focusable.length) return;
-  const first = focusable[0];
-  const last = focusable.at(-1);
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
   }
 }
 
@@ -3869,6 +3965,15 @@ function renderRevisionPage() {
   renderComponentContext();
   let topic = getActiveRevisionTopic();
   renderPracticeMode();
+  const sessionLabel = document.querySelector("#revision-session-label");
+  const sessionTopic = document.querySelector("#revision-session-topic");
+  const isAdaptiveReview = activeAdaptiveSession && revisionReviewMode?.mode === "adaptive";
+  sessionLabel.textContent = isAdaptiveReview
+    ? activeAdaptiveSession.completedAt ? `${activeAdaptiveSession.durationMinutes}-minute revision session` : `Current topic · ${activeAdaptiveSession.durationMinutes}-minute session`
+    : "Current deck session";
+  sessionTopic.textContent = isAdaptiveReview && activeAdaptiveSession.completedAt
+    ? `${activeAdaptiveSession.items.length} retrieval activities reviewed`
+    : topic ? `${topic.code} ${topic.title}` : "Choose a topic to begin";
 
   if (!topic) {
     elements.revisionTopicTitle.textContent = "Revision content is unavailable";
@@ -4234,7 +4339,11 @@ function renderStudentDashboard(topic) {
   const streak = getStudyStreak();
   const session = getAdaptiveSessionPlan(15);
   const recommended = session.items[0];
-  const dueItems = session.items.filter((item) => item.due);
+  const now = Date.now();
+  const dueItems = getAdaptiveLearningItems().filter((item) => {
+    const scheduledAt = Date.parse(item.nextReviewAt);
+    return Number.isFinite(scheduledAt) && scheduledAt <= now;
+  }).sort((a, b) => Date.parse(a.nextReviewAt) - Date.parse(b.nextReviewAt));
   const openMistakes = mistakeJournal.filter((entry) => !entry.correctedAt);
   const recentNote = [...notes].sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at))[0];
   const recentQuiz = getMostRecentQuizProgress();
@@ -4280,13 +4389,13 @@ function renderStudentDashboard(topic) {
     <section class="today-tools" aria-label="Continue and plan"><div class="student-home-sections">
       <section>
         <div class="section-title"><span>Due for review</span><span>${dueItems.length}</span></div>
-        ${dueItems.length ? `<p><strong>${escapeHtml(dueItems[0].code)} ${escapeHtml(dueItems[0].topicTitle)}</strong><br>${dueItems.length} concept${dueItems.length === 1 ? " is" : "s are"} ready for retrieval.</p>` : `<p>Nothing is overdue. New activity will be scheduled as you revise.</p>`}
-        <button type="button" data-session-duration="5">Review due knowledge</button>
+        ${dueItems.length ? `<p><strong>${escapeHtml(dueItems[0].code)} ${escapeHtml(dueItems[0].topicTitle)}</strong><br>${dueItems.length} scheduled concept${dueItems.length === 1 ? " is" : "s are"} ready for review.</p>` : `<p>No scheduled reviews are due. New learning will join your review schedule as you revise.</p>`}
+        <button type="button" data-session-duration="5">Start a short revision session</button>
       </section>
       <section>
         <div class="section-title"><span>Continue</span><span>${streak} day streak</span></div>
         <p><strong>${savedPractice ? `${escapeHtml(savedPractice.topic.code)} ${savedPractice.kind === "repair" ? "worked example" : "recall practice"}` : recentQuiz ? `${escapeHtml(recentQuiz.topic.code)} Quick Practice` : recentNote ? escapeHtml(recentNote.title || createTitle(recentNote.body)) : "Start your first activity"}</strong><br>${savedPractice ? "Your place is saved on this device." : `${today.cards} retrieval activities completed today.`}</p>
-        <button type="button" data-student-action="${savedPractice ? "saved-practice" : recentQuiz ? "quick" : recentNote ? "note" : "cards"}">${savedPractice ? "Resume saved practice" : recentQuiz ? "Continue practice" : recentNote ? "Open note" : "Choose a topic"}</button>
+        <button type="button" data-student-action="${savedPractice ? "saved-practice" : recentQuiz ? "quick" : recentNote ? "note" : "topics"}"${!savedPractice && !recentQuiz && recentNote ? ` data-note-id="${escapeHtml(recentNote.id)}"` : ""}>${savedPractice ? "Resume saved practice" : recentQuiz ? "Continue practice" : recentNote ? "Open note" : "Choose a topic"}</button>
       </section>
       <section>
         <div class="section-title"><span>Mistake repair</span><span>${openMistakes.length}</span></div>
@@ -4356,6 +4465,11 @@ async function handleStudentDashboardClick(event) {
     return;
   }
 
+  if (action === "topics") {
+    setAppSection("revise", { studyView: "topics" });
+    return;
+  }
+
   if (action === "cards") {
     const topic = getRecommendedRevisionTopic() || getActiveRevisionTopic();
     if (topic?.id) {
@@ -4377,12 +4491,15 @@ async function handleStudentDashboardClick(event) {
   }
 
   if (action === "note") {
+    const note = notes.find((item) => item.id === button.dataset.noteId);
+    if (!note) return;
+    activeTag = "all";
+    elements.searchInput.value = "";
+    selectedId = note.id;
     setAppSection("notes");
-    if (!selectedId) {
-      createNote();
-    } else {
-      elements.noteBody.focus();
-    }
+    renderNotesAndFolders();
+    renderEditor();
+    elements.noteBody.focus();
     return;
   }
 
@@ -5786,6 +5903,7 @@ function renderPlan() {
 }
 
 function renderWorkspaces() {
+  document.querySelector("#reset-demo-workspace-button").hidden = !isGuestMode || Boolean(currentUser);
   elements.workspaceCount.textContent = workspaces.length;
   elements.workspaceList.innerHTML = workspaces
     .map((workspace) => {
@@ -5874,18 +5992,22 @@ function renderFolders() {
 function renderNotes(visibleNotes) {
   if (!activeWorkspaceId) {
     elements.notesList.innerHTML = `<div class="empty-state">
-      <strong>Create a workspace or open the OCR demo.</strong>
-      <p>The demo shows notes, generated revision material, and progress tracking with real OCR Computer Science content.</p>
-      <button type="button" data-reset-demo>Open OCR demo</button>
+      <strong>Create a workspace for your notes.</strong>
+      <p>Keep related notes together in a workspace. Your existing work stays available in the workspace list.</p>
+      <button type="button" data-notes-create-workspace>Create workspace</button>
     </div>`;
     return;
   }
 
   if (!visibleNotes.length) {
+    const query = elements.searchInput.value.trim();
+    const filteredFolder = activeTag !== "all";
     elements.notesList.innerHTML = `<div class="empty-state">
-      <strong>No notes here yet.</strong>
-      <p>Create a note, change folder, or reset the OCR demo workspace to see the full study workflow.</p>
-      <button type="button" data-reset-demo>Load demo note</button>
+      <strong>${query ? `No notes match “${escapeHtml(query)}”.` : filteredFolder ? `No notes in #${escapeHtml(activeTag)}.` : "No notes here yet."}</strong>
+      <p>${query ? "Try another search or clear it to see your notes." : filteredFolder ? "Create a note in this folder or view all notes in the workspace." : "Create your first note to keep explanations, ideas and revision material together."}</p>
+      ${query ? '<button type="button" data-notes-clear-search>Clear search</button>' : ""}
+      ${filteredFolder ? '<button type="button" data-notes-show-all>Show all notes</button>' : ""}
+      <button type="button" data-notes-create-note>Create note</button>
     </div>`;
     return;
   }
@@ -6005,7 +6127,8 @@ function handleNotesSidebarClick(event) {
   }
 
   if (event.target.closest("[data-reset-demo]")) {
-    const shouldReset = window.confirm("Reset the OCR demo workspace? This refreshes the demo note and progress sample.");
+    if (!isGuestMode || currentUser) return;
+    const shouldReset = window.confirm("Reset the guest demo? This replaces all notes and workspaces saved for the guest in this browser. This cannot be undone.");
     if (!shouldReset) return;
     ensureDemoWorkspace({ reset: true });
     setAppSection("notes");
@@ -6015,12 +6138,26 @@ function handleNotesSidebarClick(event) {
 }
 
 function handleNotesListClick(event) {
-  if (!event.target.closest("[data-reset-demo]")) return;
-
-  ensureDemoWorkspace({ reset: true });
-  setAppSection("notes");
-  render();
-  showWorkspaceMessage("OCR demo workspace loaded.", "success");
+  if (event.target.closest("[data-notes-create-note]")) {
+    createNote();
+    return;
+  }
+  if (event.target.closest("[data-notes-create-workspace]")) {
+    if (compactNotesMedia.matches && !elements.appView.classList.contains("mobile-sidebar-open")) toggleMobileNotesSidebar();
+    elements.workspaceForm.closest("details").open = true;
+    elements.workspaceName.focus();
+    return;
+  }
+  const clearSearch = event.target.closest("[data-notes-clear-search]");
+  const showAll = event.target.closest("[data-notes-show-all]");
+  if (!clearSearch && !showAll) return;
+  elements.searchInput.value = "";
+  if (showAll) activeTag = "all";
+  renderNotesAndFolders();
+  renderEditor();
+  const searchIsVisible = elements.searchInput.getClientRects().length > 0 && getComputedStyle(elements.searchInput).visibility !== "hidden";
+  if (clearSearch && searchIsVisible) elements.searchInput.focus();
+  else elements.notesList.querySelector(".note-card, [data-notes-create-note]")?.focus();
 }
 
 function setSaveState(message) {

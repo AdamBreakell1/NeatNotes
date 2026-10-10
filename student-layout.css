@@ -424,6 +424,10 @@ body:has(#app-view:not([hidden])) > .site-footer { margin-left: var(--workspace-
 .progress-component-switch button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent); }
 .revision-progress-stack { display: grid; grid-template-columns: minmax(275px, .8fr) minmax(0, 1.7fr); gap: 22px; align-items: start; }
 .revision-progress-card { display: grid; grid-template-columns: 106px minmax(0, 1fr); padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.revision-session-context { grid-column: 1 / -1; display: grid; gap: 5px; padding: 2px 2px 12px; border-bottom: 1px solid var(--border); }
+.revision-session-context span { color: var(--text-muted); font-size: 11px; font-weight: 600; line-height: 1.5; }
+.revision-session-context strong { color: var(--text); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.revision-progress::before { content: none; }
 .revision-progress, .revision-course-progress { padding-block: 16px; }
 .revision-course-progress p { font-size: 12px; line-height: 1.6; }
 .revision-course-progress button { min-height: 38px; margin-top: 10px; font-size: 12px; }
@@ -590,8 +594,8 @@ button[aria-busy="true"]::before { content: ""; display: inline-block; width: .8
   .app-shell:not(.revision-mode):not(.contact-mode) #workspace-page-header { padding-right: 114px; }
   .app-shell:not(.revision-mode):not(.contact-mode) .workspace-page-actions { padding-top: 0; }
   .app-shell:not(.revision-mode):not(.contact-mode) #workspace-page-header { flex-wrap: wrap; }
-  .sidebar { width: min(320px, 92vw); max-width: 92vw; height: 100dvh; background: var(--surface); }
-  .app-shell.mobile-sidebar-open .sidebar { z-index: 80; }
+  .sidebar { width: min(320px, 92vw); max-width: 92vw; height: 100dvh; background: var(--surface); visibility: hidden; }
+  .app-shell.mobile-sidebar-open .sidebar { z-index: 80; visibility: visible; }
   .app-shell.mobile-sidebar-open::after { z-index: 75; }
   .mobile-sidebar-close { display: inline-flex; min-height: 40px; align-items: center; padding: 8px 12px; font-size: 12px; }
   .editor-masthead, .editor-actionbar, .writing-pane, .study-pane { padding-inline: var(--workspace-gutter); }
@@ -663,3 +667,8 @@ button[aria-busy="true"]::before { content: ""; display: inline-block; width: .8
   .ui-switch input:checked + svg .ui-switch-track { fill: Highlight; }
   .ui-switch-symbol, .ui-switch input:checked + svg .ui-switch-symbol { stroke: ButtonText; }
 }
+
+.settings-dialog { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.settings-body { min-height: 0; overflow: hidden; }
+#settings-message:not(:empty) { margin: 12px 24px; }
+#settings-message:empty { display: none; }

@@ -1,0 +1,75 @@
+{
+  "audit_date": "2026-10-10",
+  "base_revision": "32272263be405a928999d01cd1c19c2832e77b74",
+  "selected_ux_changes": [
+    "UX01",
+    "UX02",
+    "UX03",
+    "UX04",
+    "UX05",
+    "UX06",
+    "UX07",
+    "UX08",
+    "UX09",
+    "UX10",
+    "UX11",
+    "UX12",
+    "UX13",
+    "UX14",
+    "UX15",
+    "UX16",
+    "UX17"
+  ],
+  "additional_request": "Branded verification and password-reset emails",
+  "syntax_files": 93,
+  "content": {
+    "topics": 24,
+    "concepts": 474,
+    "passed": true
+  },
+  "backend_tests": {
+    "passed": 114,
+    "failed": 0
+  },
+  "deployment_safeguards": {
+    "passed": 5,
+    "failed": 0
+  },
+  "browser_checks": [
+    {
+      "name": "student-journeys",
+      "passed": true,
+      "checks": 48,
+      "local_artifact": "test-results/student-relaunch/results.json"
+    },
+    {
+      "name": "navigation",
+      "passed": true,
+      "checks": 18,
+      "local_artifact": "test-results/navigation-redesign/browser-results.json"
+    },
+    {
+      "name": "code-studio",
+      "passed": true,
+      "checks": 28,
+      "local_artifact": "test-results/pseudocode/browser-results.json"
+    },
+    {
+      "name": "learning-notes",
+      "passed": true,
+      "checks": 11,
+      "local_artifact": "test-results/ux-learning/browser-results.json"
+    },
+    {
+      "name": "account-keyboard",
+      "passed": true,
+      "checks": 10,
+      "local_artifact": "test-results/ux-account/report.json"
+    }
+  ],
+  "browser_check_groups": 115,
+  "production_test_data_used": false,
+  "live_email_sent": false,
+  "payment_actions": 0,
+  "delivery": "Push main through the existing Cloudflare deployment workflow; exact deployment receipt retained in local test-results/ux-audit/deployment.json."
+}

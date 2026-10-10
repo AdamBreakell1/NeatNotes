@@ -63,9 +63,11 @@
   }
   function disposeWorker() { if (worker) worker.terminate(); worker = null; clearTimeout(watchdog); watchdog = null; }
   function stop(text = 'Stopped. Your code and files are preserved.') {
+    const restoreFocus = Boolean(text && ($('coding-terminal-form')?.contains(document.activeElement) || document.activeElement === $('coding-stop') || (session?.restoreTerminalFocus && document.activeElement === document.body)));
     job++; disposeWorker(); clearTimeout(playback); playback = null; session = null;
     if ($('coding-terminal-form')) $('coding-terminal-form').hidden = true;
     controls(); if (text) message(text);
+    if (restoreFocus) $('coding-run')?.focus();
   }
   function controls() {
     if (!draft || !$('coding-run')) return;
@@ -101,6 +103,7 @@
     revision++; latestResult = null; draft.completed = false; trace = [];
     $('coding-results')?.replaceChildren(); $('coding-diagnostics')?.replaceChildren();
     $('coding-source')?.removeAttribute('aria-invalid');
+    renderTrace('Code or files changed. Run again to inspect current variables.');
     controls();
   }
   function edit(value, start, end, remember = true) {
@@ -179,10 +182,12 @@
             $('coding-terminal-input').value=''; $('coding-terminal-input').focus();
             message('Waiting for input — enter a value below, or Stop.'); controls();
           } else {
+            const finishedSession = session;
             const successfulFiles = result.files || {};
             // Even a runtime error can leave useful files to inspect.
             draft.files={...successfulFiles}; session=null; renderFiles(); save(); controls();
             if(result.diagnostic)diagnostic(result.diagnostic);else message(`Run finished · ${result.output.length} output lines`);
+            if(finishedSession?.restoreTerminalFocus && (document.activeElement === document.body || $('coding-terminal-form').contains(document.activeElement))) $('coding-output').focus();
             event('coding_run');
           }
         });
@@ -218,12 +223,18 @@
   function renderChecks(result) {
     $('coding-results').innerHTML=`<p class="coding-check-summary">${result.cases.filter(c=>c.passed).length} of ${result.cases.length} checks passed</p><p>Task checks use the supplied starter data. Your edited files and draft remain intact.</p>`+result.cases.map(c=>{
       const fixture=active.cases.find(x=>x.id===c.id);
-      return `<details><summary><span class="coding-result-${c.passed?'pass':'fail'}">${c.passed?'Pass':'Check'}</span> ${escape(c.label)}</summary><p>Inputs: ${escape(JSON.stringify(fixture.inputs))}</p>${fixture.validator?'<p>This case validates random output against the actual generated data.</p>':''}<div class="coding-comparison"><div><strong>Expected</strong><pre>${escape(c.expected.join('\n')||'(No output)')}</pre></div><div><strong>Your output</strong><pre>${escape(c.output.join('\n')||'(No output)')}</pre></div></div>${c.expectedFiles?`<p>Created-file contents are also checked.</p>`:''}${fixture.expectedTimings?'<p>One-second gaps between verses are also checked.</p>':''}${c.diagnostic?`<button type="button" data-coding-line="${c.diagnostic.line}" data-coding-column="${c.diagnostic.column}">Line ${c.diagnostic.line}: ${escape(c.diagnostic.message)}</button>`:''}</details>`;
+      const checkedFiles = Object.entries(c.expectedFiles || {}).map(([name, expected]) => {
+        const exists = Object.hasOwn(c.files || {}, name);
+        return `<div class="coding-checked-file"><h4>File: ${escape(name)}</h4><div class="coding-comparison"><div><strong>Expected contents</strong><pre>${escape(expected || '(Empty file)')}</pre></div><div><strong>Your file</strong><pre>${escape(exists ? c.files[name] || '(Empty file)' : '(File not created)')}</pre></div></div></div>`;
+      }).join('');
+      return `<details><summary><span class="coding-result-${c.passed?'pass':'fail'}">${c.passed?'Pass':'Check'}</span> ${escape(c.label)}</summary><p>Inputs: ${escape(JSON.stringify(fixture.inputs))}</p>${fixture.validator?'<p>This case validates random output against the actual generated data.</p>':''}<div class="coding-comparison"><div><strong>Expected</strong><pre>${escape(c.expected.join('\n')||'(No output)')}</pre></div><div><strong>Your output</strong><pre>${escape(c.output.join('\n')||'(No output)')}</pre></div></div>${checkedFiles}${fixture.expectedTimings?'<p>One-second gaps between verses are also checked.</p>':''}${c.diagnostic?`<button type="button" data-coding-line="${c.diagnostic.line}" data-coding-column="${c.diagnostic.column}">Line ${c.diagnostic.line}: ${escape(c.diagnostic.message)}</button>`:''}</details>`;
     }).join('');
   }
-  function renderTrace() {
+  function renderTrace(emptyNote = 'Run a program to inspect its variables here.') {
     $('coding-trace-select').innerHTML=trace.map((t,i)=>`<option value="${i}">${i+1} · line ${t.line}</option>`).join('');
-    $('coding-trace-note').textContent=trace.length?'Select a recorded step to inspect variables. Trace keeps the first 120 events.':'Run a program to inspect its variables here.';
+    $('coding-trace-select').disabled = !trace.length;
+    panel.querySelector('[data-code-action="trace-line"]').disabled = !trace.length;
+    $('coding-trace-note').textContent=trace.length?'Select a recorded step to inspect variables. Trace keeps the first 120 events.':emptyNote;
     showTrace();
   }
   function showTrace() {
@@ -236,11 +247,12 @@
     for(const [name,text] of Object.entries(files)){if(!/^[A-Za-z0-9_-][A-Za-z0-9_. -]{0,63}$/.test(name)||name.includes('..')||typeof text!=='string')return false;size+=text.length;}
     return size<=65536;
   }
-  function renderFiles() {
+  function renderFiles({ focus = false } = {}) {
     if(!$('coding-files'))return;
     const names=Object.keys(draft.files); if($('coding-file-count'))$('coding-file-count').textContent=names.length; if(!names.includes(selectedFile))selectedFile=names[0]||null;
     $('coding-files').innerHTML=`<p>Text files belong to this task and stay on your device. Programs can read, create and write them.</p><div class="coding-file-list">${names.map(name=>`<button type="button" data-coding-file="${escape(name)}" aria-pressed="${name===selectedFile}">${escape(name)}</button>`).join('')}</div><form id="coding-file-create"><label for="coding-file-name">New filename</label><div class="coding-field-row"><input id="coding-file-name" maxlength="64" placeholder="data.txt" required><button type="submit" data-code-action="new-file">Add</button></div></form>${selectedFile?`<label for="coding-file-text">${escape(selectedFile)}</label><textarea id="coding-file-text" rows="12" maxlength="65536" spellcheck="false">${escape(draft.files[selectedFile])}</textarea><button type="button" data-code-action="delete-file">Delete file</button>`:'<p>No files yet. Add one above or create one in your program.</p>'}<button type="button" data-code-action="reset-files">Restore task files</button>`;
     controls();
+    if (focus) ($('coding-file-text') || $('coding-file-name')).focus();
   }
   function renderLibrary() {
     const category=$('coding-category').value,term=$('coding-search').value.toLowerCase().trim();
@@ -317,9 +329,9 @@ greet("Ada")</pre><p>Arguments are copied by value; routine variables are local.
     <p>Programs run in a worker: 16,384 source characters, 1,000,000 work units per run, 4,096 array cells, 1,000 output lines, 20 virtual files/65,536 characters and 30 seconds of timed output. Use Stop at any time.</p>`;
   function renderTask() {
     $('coding-task-select').value=active.id;
-    $('coding-workspace').innerHTML=`<header class="coding-task-head"><div><p class="eyebrow">${escape(active.worksheet||active.category)} · ${escape(active.kind)} · ${escape(active.difficulty)}</p><h2>${escape(active.title)}</h2><p class="coding-task-summary">${escape(active.prompt.split('\n')[0].slice(0, 180))}${active.prompt.split('\n')[0].length > 180 ? '…' : ''}</p></div><button type="button" data-code-action="next">Next task →</button></header>
+    $('coding-workspace').innerHTML=`<header class="coding-task-head"><div><p class="eyebrow">${escape(active.worksheet||active.category)} · ${escape(active.kind)} · ${escape(active.difficulty)}</p><h2 id="coding-task-title" tabindex="-1">${escape(active.title)}</h2><p class="coding-task-summary">${escape(active.prompt.split('\n')[0].slice(0, 180))}${active.prompt.split('\n')[0].length > 180 ? '…' : ''}</p></div><button type="button" data-code-action="next">Next task →</button></header>
       <div class="coding-workbench"><details id="coding-guidance" class="coding-guide-disclosure" ${compactWorkspace.matches?'':'open'}><summary>Instructions, files &amp; language</summary><aside class="coding-guide" aria-label="Task instructions and files"><div class="coding-tabs" aria-label="Workspace guidance"><button type="button" data-coding-guide="task" aria-pressed="true">Task</button><button type="button" data-coding-guide="files" aria-pressed="false">Files <span id="coding-file-count">${Object.keys(draft.files).length}</span></button><button type="button" data-coding-guide="language" aria-pressed="false">Language</button></div>
-      <div data-coding-guide-view="task"><p class="coding-task-prompt">${escape(active.prompt)}</p>${active.fixtureNote?`<p class="coding-fixture-note">${escape(active.fixtureNote)}</p>`:''}<details open><summary>Example</summary><p>Input</p><pre>${escape(active.example.inputs.join('\n')||'(No input)')}</pre><p>Expected output</p><pre>${escape(active.example.output.join('\n')||'(No output)')}</pre><button type="button" data-code-action="example-input">Run with these inputs</button></details>
+      <div data-coding-guide-view="task"><p class="coding-task-prompt">${escape(active.prompt)}</p>${active.fixtureNote?`<p class="coding-fixture-note">${escape(active.fixtureNote)}</p>`:''}<details open><summary>Example</summary><p>Input</p><pre>${escape(active.example.inputs.join('\n')||'(No input)')}</pre><p>Expected output</p><pre>${escape(active.example.output.join('\n')||'(No output)')}</pre><button type="button" data-code-action="example-input">Load example inputs</button></details>
       <details><summary>Plan your approach</summary><label for="coding-plan">Notes or prediction</label><textarea id="coding-plan" rows="3" maxlength="2000">${escape(draft.plan)}</textarea><label for="coding-mode">Attempt label</label><select id="coding-mode"><option value="learn">Practice</option><option value="independent">First attempt</option></select><p>Your runs and help use are recorded with checks.</p></details>
       ${active.hints.length?`<details><summary>Hints and worked solution</summary><ol id="coding-hints">${active.hints.slice(0,draft.assistance.hints).map(h=>`<li>${escape(h)}</li>`).join('')}</ol><button id="coding-hint" type="button" data-code-action="hint">Next hint</button><button id="coding-solution" type="button" data-code-action="solution">Show solution</button><pre id="coding-solution-source" hidden></pre><button id="coding-solution-use" type="button" data-code-action="solution-use" hidden>Use solution in editor</button></details>`:''}
       ${active.rubric.length?`<details><summary>Review your work</summary>${active.rubric.map((r,i)=>`<label class="coding-checkbox"><input type="checkbox" data-coding-rubric="${i}" ${draft.rubric[i]?'checked':''}>${escape(r)}</label>`).join('')}<button id="coding-finish" type="button" data-code-action="finish" disabled>Mark reviewed</button><p>Task checks are practice feedback; they do not award exam marks.</p></details>`:''}</div>
@@ -336,7 +348,7 @@ greet("Ada")</pre><p>Arguments are copied by value; routine variables are local.
       </section></div><footer class="coding-data"><details><summary>Saving and privacy</summary><p>Code, files and planning notes are saved on this device for 30 days after editing. Signed-in accounts can also keep check outcome metadata. Your source and file contents are never uploaded. Download a project to move it between devices. Export before signing out on a shared computer.</p><p id="coding-sync">${owner?'Checking pending outcomes…':'Guest drafts stay on this device.'}</p><button type="button" data-code-action="export">Export coding data</button><button type="button" data-code-action="sync">Retry outcome sync</button><button type="button" data-code-action="clear">Clear saved coding data</button></details></footer>`;
     $('coding-mode').value=draft.mode;renderFiles();highlight();renderTrace();controls();save();sync();
   }
-  function choose(id, { notify = true } = {}) {
+  function choose(id, { notify = true, focus = notify } = {}) {
     if (!validTaskId(id)) return false;
     const previousId = active?.id;
     stop(null); loadId++; active=id==='scratch'?scratch:tasks.find(t=>t.id===id);
@@ -351,6 +363,7 @@ greet("Ada")</pre><p>Arguments are copied by value; routine variables are local.
     libraryOpen=false;$('coding-library').hidden=true;event('coding_task_opened');
     panel.querySelector('[data-code-action="browse"]')?.setAttribute('aria-expanded', 'false');
     if (notify && previousId !== id && typeof context.onTaskChange === 'function') context.onTaskChange(id);
+    if (focus) $('coding-task-title').focus();
     return true;
   }
   async function sync(myOwner=owner) {
@@ -413,10 +426,20 @@ greet("Ada")</pre><p>Arguments are copied by value; routine variables are local.
       const file=e.target.files[0];if(!file)return;const importingOwner=owner,importingLoad=loadId;
       try{
         if(file.size>120000)throw Error('Project is too large. Use up to 16,384 source characters and 65,536 file characters.');
-        const text=await file.text();if(owner!==importingOwner||loadId!==importingLoad)return;let source=text,files=null;
-        if(file.name.toLowerCase().endsWith('.json')){const project=JSON.parse(text);source=project.source;files=project.files;if(project.format!=='recallstride-code-project'||project.version!==1)throw Error('Choose a RecallStride project JSON, or a plain .erl/.txt source file.');}
-        if(typeof source!=='string'||source.length>16384||(files&&!validFiles(files)))throw Error('Project source or files exceed the workspace limits.');
-        stop(null);edit(source);if(files){draft.files={...files};renderFiles();save();}message('Project opened. Task checks still use the current task’s original data.');
+        const text=await file.text();if(owner!==importingOwner||loadId!==importingLoad)return;let source=text,files=null,taskId=null;
+        if(file.name.toLowerCase().endsWith('.json')){
+          const project=JSON.parse(text);
+          if(!project || project.format!=='recallstride-code-project'||project.version!==1)throw Error('Choose a RecallStride project JSON, or a plain .erl/.txt source file.');
+          source=project.source;files=project.files;taskId=project.taskId;
+          if(typeof taskId!=='string'||!taskId.length||taskId.length>100)throw Error('The project is missing a valid task ID. Open its code as a plain .erl/.txt file instead.');
+          if(!validFiles(files))throw Error('Project source or files exceed the workspace limits.');
+        }
+        if(typeof source!=='string'||source.length>16384)throw Error('Project source or files exceed the workspace limits.');
+        const unknownTask = taskId && !validTaskId(taskId);
+        if(taskId)choose(unknownTask?'scratch':taskId,{focus:false});
+        stop(null);edit(source);if(files){draft.files={...files};renderFiles();save();}
+        $('coding-source').focus();
+        message(unknownTask?'Project opened in Scratchpad because its original task is no longer available. Your code and files are preserved.':taskId?'Project opened for '+active.title+'. Task checks use this task’s original data.':'Source opened in the current task. Task checks use this task’s original data.');
       }catch(error){message(error.message);}e.target.value='';
     }
   });
@@ -425,13 +448,14 @@ greet("Ada")</pre><p>Arguments are copied by value; routine variables are local.
       e.preventDefault();if(!session||worker)return;
       const value=$('coding-terminal-input').value;
       if(session.inputs.length>=100||session.inputs.reduce((n,v)=>n+v.length,0)+value.length>8192){message('Input limit reached. Stop and use a smaller dataset.');return;}
+      session.restoreTerminalFocus = e.target.contains(document.activeElement);
       session.inputs.push(value);$('coding-terminal-form').hidden=true;dispatch('run');
     }
     if(e.target.id==='coding-file-create'){
       e.preventDefault();if(worker||session)return;const name=$('coding-file-name').value.trim();
       if(Object.hasOwn(draft.files,name)){message('That file already exists. Select it to edit.');return;}
       const files={...draft.files,[name]:''};if(!validFiles(files)){message('Use a simple filename without folders; at most 20 files.');return;}
-      draft.files=files;selectedFile=name;invalidate();renderFiles();save();$('coding-file-count').textContent=Object.keys(files).length;
+      draft.files=files;selectedFile=name;invalidate();renderFiles({focus:true});save();$('coding-file-count').textContent=Object.keys(files).length;
     }
   });
   panel.addEventListener('scroll',e=>{if(e.target.id==='coding-source')scrollSync();},true);
@@ -447,7 +471,7 @@ greet("Ada")</pre><p>Arguments are copied by value; routine variables are local.
   panel.addEventListener('click',async e=>{
     const line=e.target.closest('[data-coding-line]');if(line){sourcePosition(Number(line.dataset.codingLine),Number(line.dataset.codingColumn));return;}
     const task=e.target.closest('[data-coding-task]');if(task){choose(task.dataset.codingTask);return;}
-    const file=e.target.closest('[data-coding-file]');if(file){selectedFile=file.dataset.codingFile;renderFiles();return;}
+    const file=e.target.closest('[data-coding-file]');if(file){selectedFile=file.dataset.codingFile;renderFiles({focus:true});return;}
     const guide=e.target.closest('[data-coding-guide]');if(guide){guideTab(guide.dataset.codingGuide);return;}
     const bottom=e.target.closest('[data-coding-bottom]');if(bottom){bottomTab(bottom.dataset.codingBottom);return;}
     const button=e.target.closest('[data-code-action]');if(!button||button.disabled||button.type==='submit')return;
@@ -467,8 +491,16 @@ greet("Ada")</pre><p>Arguments are copied by value; routine variables are local.
     if(action==='reset'){edit(active.starter);message('Task starter restored. Undo recovers your previous code.');return;}
     if(action==='download'){download({format:'recallstride-code-project',version:1,taskId:active.id,source:draft.source,files:draft.files},`recallstride-${active.id}.json`);return;}
     if(action==='import'){$('coding-project-import').click();return;}
-    if(action==='reset-files'){draft.files={...active.files};invalidate();renderFiles();save();$('coding-file-count').textContent=Object.keys(draft.files).length;message('Task files restored.');return;}
-    if(action==='delete-file'){delete draft.files[selectedFile];selectedFile=null;invalidate();renderFiles();save();$('coding-file-count').textContent=Object.keys(draft.files).length;return;}
+    if(action==='reset-files'){
+      const changed=Object.keys(draft.files).filter(name=>!Object.hasOwn(active.files,name)||draft.files[name]!==active.files[name]);
+      if(changed.length&&!window.confirm('Restore the original task files? This replaces or removes your changes to '+changed.map(name=>'"'+name+'"').join(', ')+'. Download your project first if you want to keep them.'))return;
+      draft.files={...active.files};invalidate();renderFiles({focus:true});save();$('coding-file-count').textContent=Object.keys(draft.files).length;message('Task files restored.');return;
+    }
+    if(action==='delete-file'){
+      if(!selectedFile)return;
+      if(draft.files[selectedFile].length&&!window.confirm('Delete "'+selectedFile+'" and its contents? This cannot be undone. Download your project first if you want to keep it.'))return;
+      delete draft.files[selectedFile];selectedFile=null;invalidate();renderFiles({focus:true});save();$('coding-file-count').textContent=Object.keys(draft.files).length;message('File deleted.');return;
+    }
     if(action==='hint'){
       if(draft.assistance.hints<active.hints.length){draft.assistance.hints++;$('coding-hints').innerHTML=active.hints.slice(0,draft.assistance.hints).map(h=>`<li>${escape(h)}</li>`).join('');save();controls();event('coding_hint');}return;
     }

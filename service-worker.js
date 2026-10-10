@@ -1,8 +1,8 @@
-const CACHE_NAME = "neat-notes-shell-20261008-navigation-r1";
+const CACHE_NAME = "neat-notes-shell-20261010-ux-r1";
 const APP_SHELL = [
   "/",
   "/styles-relaunch.css?v=20260907-student-r1",
-  "/student-layout.css?v=20261008-navigation-r1",
+  "/student-layout.css?v=20261010-ux-r1",
   "/theme-init.js?v=20260824-relaunch",
   "/learning-model.js?v=20260911-student-only",
   "/revision-generator.js?v=20260907-student-r1",
@@ -10,11 +10,11 @@ const APP_SHELL = [
   "/neat-questions.js?v=20260824-relaunch",
   "/practice-drafts.js?v=20260911-resume-r1",
   "/workspace-navigation.js?v=20261008-navigation-r1",
-  "/app-relaunch.js?v=20261008-navigation-r1",
+  "/app-relaunch.js?v=20261010-ux-r1",
   "/policy-content.js?v=20261007-code-studio-r2",
   "/pseudocode-drafts.js?v=20261007-code-studio-r2",
-  "/pseudocode-practice.js?v=20261008-navigation-r1",
-  "/pseudocode.css?v=20261008-navigation-r1",
+  "/pseudocode-practice.js?v=20261010-ux-r1",
+  "/pseudocode.css?v=20261010-ux-r1",
   "/pseudocode-engine.js?v=rs-h446-2.0.0",
   "/pseudocode-worker.js?v=rs-h446-2.0.0",
   "/favicon.svg"
